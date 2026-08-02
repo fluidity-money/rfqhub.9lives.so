@@ -52,14 +52,18 @@ macro_rules! storage {
         @impl
         params: []
     ) => {
-        #[inline]
         pub fn get() -> U {
             storage_load(&SLOT)
         }
 
-        #[inline]
         pub fn set(value: &U) {
             storage_store(&SLOT, value);
+        }
+
+        pub fn checked_add(value: &U) {
+            let current = get();
+            let next = bobcat_sdk::maths::checked_add(&current, value);
+            set(&next);
         }
     };
 
@@ -85,9 +89,15 @@ macro_rules! storage {
             storage_store(&slot, value);
         }
 
+        pub fn checked_add($($param: &U,)+ value: &U) {
+            let slot = storage_slot($($param),+);
+            let current = storage_load(&slot);
+            let next = bobcat_sdk::maths::checked_add(&current, value);
+            storage_store(&slot, &next);
+        }
+
         pub fn exchange($($param: &U),+) {
             let slot = storage_slot($($param),+);
-
             assert!(
                 storage_exchange_bool(&slot, false),
                 "exchange failed"
@@ -121,6 +131,8 @@ macro_rules! storage {
 storage! {
     // The version number of this contract release.
     version(),
+    // Global deposits from users.
+    global_bal(),
     // Onramped balance of the account address given. Should be possible
     // to spend by the account address given here.
     onramped_bal(account)

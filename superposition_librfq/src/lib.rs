@@ -8,13 +8,18 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 pub mod immutables;
 
+pub mod entry_balance;
 pub mod entry_onramping;
 pub mod entry_submit;
 
 pub mod call_accounts;
 pub mod call_eip20;
+pub mod call_aave_v3;
+
+pub mod storage;
 
 use entry_onramping::entry_onramping;
+use entry_balance::entry_balance;
 
 pub use immutables::Imm;
 
@@ -45,6 +50,8 @@ pub enum Args {
     Version,
     /// Dumps the source code of the contract using the bobcat-create harness.
     Source,
+    /// Get the available to spend onramping balance from the user:
+    Balance { addr: [u8; 20] },
     /// When a user is onramping, they have a pot of assets that we add into here.
     Onramping {
         owner_passport: [u8; 20],
@@ -54,6 +61,7 @@ pub enum Args {
 
 pub fn entry(imm: &Imm, op: Args) -> usize {
     match op {
+        Args::Balance { addr } => entry_balance(addr),
         Args::Onramping {
             owner_passport,
             amt,

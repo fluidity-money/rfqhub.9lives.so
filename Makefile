@@ -1,7 +1,7 @@
 
 .DELETE_ON_ERROR:
 
-rfqhub.9lives.so.wasm: $(shell find Cargo.* src -type f)
+rfqhub.9lives.so.wasm: $(shell find Cargo.* superposition_librfq contract -type f)
 	@cargo build --release --target wasm32-unknown-unknown
 	@./wasm-post.sh \
 		target/wasm32-unknown-unknown/release/contract.wasm \
