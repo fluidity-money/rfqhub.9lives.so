@@ -1,0 +1,20 @@
+[workspace]
+members = ["superposition_librfq", "contract"]
+resolver = "3"
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+panic = "abort"
+strip = true
+lto = "fat"
+debug = false
+rpath = false
+debug-assertions = false
+incremental = false
+
+[profile.dev]
+codegen-units = 16
+panic = "unwind"
+opt-level = "z"
+incremental = true

@@ -1,0 +1,9 @@
+[package]
+name = "contract"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "contract"

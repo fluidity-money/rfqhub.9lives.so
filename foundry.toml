@@ -1,0 +1,5 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["forge-lib"]
+fs_permissions = [{ access = "read", path = "rfqhub_9lives.wasm"}]
