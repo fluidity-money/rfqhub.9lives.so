@@ -311,6 +311,10 @@ dependencies = [
 [[package]]
 name = "contract"
 version = "0.1.0"
+dependencies = [
+ "bobcat-sdk",
+ "superposition_librfq",
+]
 
 [[package]]
 name = "convert_case"

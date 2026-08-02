@@ -1,18 +1,22 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use bobcat_sdk::{storage::flush_guard, entry::read_args_vec, alloc::bobcat_allocator};
+use bobcat_sdk::{alloc::bobcat_allocator, entry::read_args_vec, storage::flush_guard};
 
 bobcat_allocator!();
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
+pub mod immutables;
+
 pub mod entry_onramping;
 pub mod entry_submit;
 
 pub mod call_accounts;
+pub mod call_eip20;
 
 use entry_onramping::entry_onramping;
-use entry_submit::entry_submit;
+
+use immutables::Imm;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct FillerArgs {
@@ -48,18 +52,12 @@ pub enum Args {
     },
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn user_entrypoint(len: usize) -> usize {
-    let args = read_args_vec(len);
-    flush_guard(|| entry(Args::deserialize(&mut args.as_slice()).unwrap()))
-}
-
-pub fn entry(op: Args) -> usize {
+pub fn entry(imm: &Imm, op: Args) -> usize {
     match op {
         Args::Onramping {
             owner_passport,
             amt,
-        } => entry_onramping(owner_passport, amt),
-        _ => panic!("bad argument")
+        } => entry_onramping(&imm, owner_passport, amt),
+        _ => panic!("bad argument"),
     }
 }

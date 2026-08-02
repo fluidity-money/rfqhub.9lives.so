@@ -7,3 +7,7 @@ publish = false
 
 [[bin]]
 name = "contract"
+
+[dependencies]
+bobcat-sdk.workspace = true
+superposition_librfq = { version = "0.1.0", path = "../superposition_librfq" }

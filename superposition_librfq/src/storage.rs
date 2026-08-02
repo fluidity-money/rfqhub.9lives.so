@@ -121,6 +121,7 @@ macro_rules! storage {
 storage! {
     // The version number of this contract release.
     version(),
-    // Balance of the account address given.
-    balance(account, amt)
+    // Onramped balance of the account address given. Should be possible
+    // to spend by the account address given here.
+    onramped_bal(account)
 }

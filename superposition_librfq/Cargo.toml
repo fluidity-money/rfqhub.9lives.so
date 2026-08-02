@@ -8,7 +8,7 @@ name = "rfqhub_9lives"
 crate-type   = ["rlib", "cdylib"]
 
 [dependencies]
-bobcat-sdk = { version = "0.7.47", features = ["panic", "alloc"] }
+bobcat-sdk.workspace = true
 borsh = { version = "1.8.0", default-features = false, features = ["derive"] }
 superposition_libaccounts = "0.1.2"
 
