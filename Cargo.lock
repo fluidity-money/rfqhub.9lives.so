@@ -313,6 +313,8 @@ name = "contract"
 version = "0.1.0"
 dependencies = [
  "bobcat-sdk",
+ "borsh",
+ "const-hex",
  "superposition_librfq",
 ]
 

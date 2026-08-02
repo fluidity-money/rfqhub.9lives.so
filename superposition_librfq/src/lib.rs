@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use bobcat_sdk::{alloc::bobcat_allocator, entry::read_args_vec, storage::flush_guard};
+use bobcat_sdk::{alloc::bobcat_allocator};
 
 bobcat_allocator!();
 
@@ -16,7 +16,7 @@ pub mod call_eip20;
 
 use entry_onramping::entry_onramping;
 
-use immutables::Imm;
+pub use immutables::Imm;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct FillerArgs {

@@ -1,4 +1,4 @@
-rfqhub-9lives.wasm
+rfqhub.9lives.so.wasm
 *.wat
 *.wasm1
 target

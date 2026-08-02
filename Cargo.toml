@@ -4,6 +4,7 @@ resolver = "3"
 
 [workspace.dependencies]
 bobcat-sdk = { version = "0.7.47", features = ["alloc", "panic-revert"] }
+borsh = { version = "1.8.0", default-features = false, features = ["derive"] }
 
 [profile.release]
 codegen-units = 1

@@ -18,4 +18,4 @@ wasm-opt \
 
 wasm2wat -o $f.wat $f.wasm1
 
-wat2wasm -o rfqhub-9lives.wasm $f.wat
+wat2wasm -o $2 $f.wat

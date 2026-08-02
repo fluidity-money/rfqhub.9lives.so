@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "rfqhub_9lives"
+name = "superposition_librfq"
 crate-type   = ["rlib", "cdylib"]
 
 [dependencies]
 bobcat-sdk.workspace = true
-borsh = { version = "1.8.0", default-features = false, features = ["derive"] }
+borsh.workspace = true
 superposition_libaccounts = "0.1.2"
 
 [features]
