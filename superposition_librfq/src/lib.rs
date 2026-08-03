@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use bobcat_sdk::{alloc::bobcat_allocator};
+use bobcat_sdk::{alloc::bobcat_allocator, maths::U, cd::const_keccak256};
 
 bobcat_allocator!();
 
@@ -31,6 +31,10 @@ pub struct FillerArgs {
     /// and needs to have its assets parked already in the contract.
     pub acc_sender: [u8; 20],
 }
+
+/// Onramping topic that's emitted on the underlying balance changing
+/// due to onrampind and offramping.
+pub const TOPIC_BALANCE_CHANGED: U = const_keccak256(b"BalanceChanged(address,uint256)");
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct PlayerArgs {}

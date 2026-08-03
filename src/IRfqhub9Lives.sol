@@ -1,6 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
 interface IRfqhub9Lives {
-    function hello() external pure returns (uint256);
+    event BalanceChanged(
+        address indexed recipient,
+        uint256 indexed amount
+    );
 }

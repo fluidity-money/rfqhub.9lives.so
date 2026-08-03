@@ -1,8 +1,9 @@
-use crate::{storage, call_eip20, immutables::Imm, call_aave_v3};
+use crate::{storage, call_eip20, immutables::Imm, call_aave_v3, TOPIC_BALANCE_CHANGED};
 
 use bobcat_sdk::{
     entry::{contract_address, msg_sender},
     maths::U,
+    events::emit
 };
 
 pub fn entry_onramping(
@@ -30,10 +31,11 @@ pub fn entry_onramping(
         "aave supply failed"
     );
     // The cTokens from this function would be the same as what we supplied:
-    storage::onramped_bal::checked_add(&U::from(sender), &amt_u);
+    let owner_passport_u = U::from(owner_passport);
+    storage::onramped_bal::checked_add(&owner_passport_u, &amt_u);
     storage::global_bal::checked_add(&amt_u);
     // Now that we've taken their deposit, we just need to count this for
-    // when someone requests it from the entrypoint. We don't emit any events
-    // here for the sake of keeping it simple.
+    // when someone requests it from the entrypoint.
+    emit!(TOPIC_BALANCE_CHANGED, sender, storage::onramped_bal::get(&owner_passport_u));
     0
 }

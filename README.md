@@ -15,8 +15,8 @@ centralised server's blessing.
 The blobs to aggregate trades are actually signed blobs from Superposition Passport's
 "Statement" feature, which can be verified using the passport engine itself.
 
-The UTXO-like on-chain state looks like the following. The UTXOs cannot be manipulated with
-subtraction or addition in the rollup like Passport:
+The UTXO-like on-chain state looks like the following. The UTXOs cannot be manipulated
+with subtraction or addition in the rollup like Passport:
 
 ```ocaml
 type state_onramping
