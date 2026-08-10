@@ -1,4 +1,4 @@
-use bobcat_sdk::{maths::U, entry::write_result_word};
+use bobcat_sdk::{entry::write_result_word, maths::U};
 
 use crate::storage;
 

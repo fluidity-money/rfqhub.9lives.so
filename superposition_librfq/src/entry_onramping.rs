@@ -1,9 +1,9 @@
-use crate::{storage, call_eip20, immutables::Imm, call_aave_v3, TOPIC_BALANCE_CHANGED};
+use crate::{TOPIC_BALANCE_CHANGED, call_aave_v3, call_eip20, immutables::Imm, storage};
 
 use bobcat_sdk::{
     entry::{contract_address, msg_sender},
+    events::emit,
     maths::U,
-    events::emit
 };
 
 pub fn entry_onramping(
@@ -36,6 +36,10 @@ pub fn entry_onramping(
     storage::global_bal::checked_add(&amt_u);
     // Now that we've taken their deposit, we just need to count this for
     // when someone requests it from the entrypoint.
-    emit!(TOPIC_BALANCE_CHANGED, sender, storage::onramped_bal::get(&owner_passport_u));
+    emit!(
+        TOPIC_BALANCE_CHANGED,
+        sender,
+        storage::onramped_bal::get(&owner_passport_u)
+    );
     0
 }

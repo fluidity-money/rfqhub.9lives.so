@@ -805,6 +805,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "superposition-assets"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "753f56371fcad6bd1182acbb5ef77885a48c765769a376a979c4174301ae9de2"
+dependencies = [
+ "borsh",
+ "const-hex",
+]
+
+[[package]]
 name = "superposition_libaccounts"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -825,6 +835,7 @@ version = "0.1.0"
 dependencies = [
  "bobcat-sdk",
  "borsh",
+ "superposition-assets",
  "superposition_libaccounts",
 ]
 

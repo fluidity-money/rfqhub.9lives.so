@@ -11,6 +11,7 @@ crate-type   = ["rlib", "cdylib"]
 bobcat-sdk.workspace = true
 borsh.workspace = true
 superposition_libaccounts = "0.1.2"
+superposition-assets.workspace = true
 
 [features]
 std = []
