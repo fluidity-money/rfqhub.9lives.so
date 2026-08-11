@@ -8,9 +8,12 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 pub mod immutables;
 
+pub mod entry_aggregate_to_offramp;
 pub mod entry_balance;
-pub mod entry_onramping;
-pub mod entry_submit;
+pub mod entry_offramp;
+pub mod entry_onramping_from_bal;
+pub mod entry_version;
+pub mod entry_source;
 
 pub mod call_aave_v3;
 pub mod call_accounts;
@@ -19,11 +22,17 @@ pub mod call_eip20;
 pub mod storage;
 
 use entry_balance::entry_balance;
-use entry_onramping::entry_onramping;
+use entry_onramping_from_bal::entry_onramping_from_bal;
+use entry_aggregate_to_offramp::entry_aggregate_to_offramp;
+use entry_source::entry_source;
+use entry_version::entry_version;
+use entry_offramp::entry_offramp;
 
 pub use immutables::Imm;
 
 pub use superposition_assets::Asset;
+
+use alloc::boxed::Box;
 
 pub type Sig = [u8; 64];
 
@@ -38,12 +47,22 @@ pub struct FillerArgs {
 
 /// Onramping topic that's emitted on the underlying balance changing
 /// due to onrampind and offramping.
-pub const TOPIC_BALANCE_CHANGED: U = const_keccak256(b"BalanceChanged(address,uint256)");
+pub const TOPIC_BALANCE_CHANGED: U = const_keccak256(b"BalanceChanged(address,address,uint256)");
+
+/// Global balance for the asset given has changed.
+pub const TOPIC_GLOBAL_BALANCE_CHANGED: U =
+    const_keccak256(b"GlobalBalanceChanged(address,uint256)");
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+pub struct OnchainPotArgs {
+    pub acc_addr: [u8; 20],
+    pub amt: u64,
+}
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum OnrampingSource {
     /// Take the liquidity from the pot that the user already sent to the contract.
-    OnchainPot(u64),
+    OnchainPot(OnchainPotArgs),
     /// Take the liquidity from the result that we have here.
     AggregatedResult(Box<AggregateEnum>),
 }
@@ -51,42 +70,39 @@ pub enum OnrampingSource {
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct BundleTakerArgs {
     /// Onramping source that we're using
-    src: OnrampingSource,
+    pub src: OnrampingSource,
     /// The timestamp for when this RFQ market has expired.
-    expiry: u64,
+    pub expiry: u64,
     /// The nonce that we use here.
-    ms_ts: u16,
+    pub ms_ts: u16,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum BundleTakerEnum {
     Args(BundleTakerArgs),
-    Enum([u8; 32]),
+    Hash([u8; 32]),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct BundleMakerArgs {
     /// The compensation for when this market is correct.
-    taker: BundleTaker,
+    pub taker: BundleTakerEnum,
     /// The nonce that we use here.
-    ms_ts: u16,
+    pub ms_ts: u16,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct OnrampingFromBalArgs {
     /// The asset being provided for the onramping as this
     /// collateral. The "key" of the asset that's being used here.
-    asset: Asset,
-    /// The owner's Superposition Account server for verification.
-    owner_acc: [u8; 20],
+    pub asset: Asset,
     /// The amount of collateral being provided for the
-    amt: u64,
+    pub amt: u64,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
-pub enum OnrampingFromBalEnum {
-    Args(OnrampingFromBalArgs),
-    Hash([u8; 32]),
+pub struct OfframpArgs {
+    pub amt: u64,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
@@ -102,13 +118,6 @@ pub enum AggregateEnum {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
-pub struct Aggregate {
-    args: AggregateEnum,
-    /// For the aggregation here, we need to use the server signature to prevent abuse.
-    server_sig: Sig,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum Args {
     Version,
     /// Dumps the source code of the contract using the bobcat-create harness.
@@ -120,8 +129,14 @@ pub enum Args {
     /// When a user is onramping here, we're adding funds from their
     /// account to the pot that they can spend.
     OnrampingFromBal {
-        args: OnrampingFromBalEnum,
+        args: OnrampingFromBalArgs,
         sig: Sig,
+    },
+    /// Simply offramp the amount in the pot that hasn't been spent.
+    /// Requires a blessing from the server to make the offramping happen.
+    Offramp {
+        args: OfframpArgs,
+        server_sig: Sig,
     },
     /// Aggregate a pair of bundles together, with a signature from the
     /// Superposition aggregator. Moves the end result of the pot to the
@@ -129,16 +144,20 @@ pub enum Args {
     /// so that later we can reuse the input if we want without needing to
     /// supply the entire calldata. It will revert any users of the entrypoint
     /// here.
-    AggregateToOfframp(Aggregate),
+    AggregateToOfframp {
+        args: AggregateArgs,
+        /// For the aggregation here, we need to use the server signature to prevent abuse.
+        server_sig: Sig,
+    },
 }
 
 pub fn entry(imm: &Imm, op: Args) -> usize {
     match op {
+        Args::Version => entry_version(),
+        Args::Source => entry_source(),
         Args::Balance { addr } => entry_balance(addr),
-        Args::Onramping {
-            owner_passport,
-            amt,
-        } => entry_onramping(&imm, owner_passport, amt),
-        _ => panic!("bad argument"),
+        Args::OnrampingFromBal { args, sig } => entry_onramping_from_bal(args, sig),
+        Args::Offramp { args, server_sig } => entry_offramp(&imm, args, server_sig),
+        Args::AggregateToOfframp { args, server_sig } => entry_aggregate_to_offramp(args, server_sig),
     }
 }
