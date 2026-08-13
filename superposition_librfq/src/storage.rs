@@ -1,3 +1,9 @@
+use crate::Outcome;
+
+use superposition_assets::Asset;
+
+use bobcat_sdk::maths::U;
+
 macro_rules! storage {
     (
         $(
@@ -129,6 +135,42 @@ macro_rules! storage {
     };
 }
 
+#[derive(Debug, Clone)]
+pub struct WordBundleTakerDetails {
+    pub amt: u64,
+    pub expiry: [u8; 6],
+    pub ms_ts: [u8; 6],
+    pub asset: Asset,
+    pub price_target: u64,
+    pub is_up: bool,
+    pub outcome: Outcome,
+}
+
+pub struct BadAsset;
+
+impl TryFrom<U> for WordBundleTakerDetails {
+    type Error = BadAsset;
+
+    fn try_from(U(bytes): U) -> Result<Self, Self::Error> {
+        let amt = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
+        let expiry: [u8; 6] = bytes[8..14].try_into().unwrap();
+        let ms_ts: [u8; 6] = bytes[14..20].try_into().unwrap();
+        let asset = Asset::try_from(bytes[20]).map_err(|_| BadAsset)?;
+        let price_target = u64::from_le_bytes(bytes[21..29].try_into().unwrap());
+        let is_up = bytes[29] != 0;
+        let outcome = Outcome::from(bytes[30]);
+        Ok(WordBundleTakerDetails {
+            amt,
+            expiry,
+            ms_ts,
+            asset,
+            price_target,
+            is_up,
+            outcome,
+        })
+    }
+}
+
 storage! {
     // The version number of this contract release.
     version(),
@@ -141,4 +183,6 @@ storage! {
     hash_taker_leftover(hash),
     // Address of the taker for the hash given.
     hash_taker_addr(hash),
+    // Taker details from the hash given.
+    hash_taker_details(hash)
 }

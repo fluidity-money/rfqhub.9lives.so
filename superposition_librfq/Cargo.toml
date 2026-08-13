@@ -12,6 +12,7 @@ bobcat-sdk.workspace = true
 borsh.workspace = true
 superposition_libaccounts = "0.1.2"
 superposition-assets.workspace = true
+array-concat = "0.5.5"
 
 [features]
 std = []

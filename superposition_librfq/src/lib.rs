@@ -12,8 +12,12 @@ pub mod entry_aggregate_to_offramp;
 pub mod entry_balance;
 pub mod entry_offramp;
 pub mod entry_onramping_from_bal;
-pub mod entry_version;
 pub mod entry_source;
+pub mod entry_version;
+
+pub mod signable;
+
+pub mod outcome;
 
 pub mod call_aave_v3;
 pub mod call_accounts;
@@ -21,16 +25,20 @@ pub mod call_eip20;
 
 pub mod storage;
 
-use entry_balance::entry_balance;
-use entry_onramping_from_bal::entry_onramping_from_bal;
 use entry_aggregate_to_offramp::entry_aggregate_to_offramp;
+use entry_balance::entry_balance;
+use entry_offramp::entry_offramp;
+use entry_onramping_from_bal::entry_onramping_from_bal;
 use entry_source::entry_source;
 use entry_version::entry_version;
-use entry_offramp::entry_offramp;
+
+pub mod error;
 
 pub use immutables::Imm;
 
 pub use superposition_assets::Asset;
+
+use outcome::Outcome;
 
 use alloc::boxed::Box;
 
@@ -69,18 +77,26 @@ pub enum OnrampingSource {
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct BundleTakerArgs {
-    /// Onramping source that we're using
+    /// Onramping source that we're using for loading the user in.
     pub src: OnrampingSource,
     /// The timestamp for when this RFQ market has expired.
-    pub expiry: u64,
-    /// The nonce that we use here.
-    pub ms_ts: u16,
+    pub expiry: [u8; 6],
+    /// The nonce that we use here. A millisecond timestamp.
+    pub ms_ts: [u8; 6],
+    /// The desired asset that the user is denominating this trade for.
+    pub asset: Asset,
+    /// Whether the taker wants the asset to go up or down.
+    pub is_up: bool,
+    /// The target of the price, which should be exceeded or lower than:
+    pub price_target: u64,
+    /// The outcome that's being speculated on here.
+    pub outcome: Outcome,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum BundleTakerEnum {
     Args(BundleTakerArgs),
-    Hash([u8; 32]),
+    Hash(U),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
@@ -88,7 +104,9 @@ pub struct BundleMakerArgs {
     /// The compensation for when this market is correct.
     pub taker: BundleTakerEnum,
     /// The nonce that we use here.
-    pub ms_ts: u16,
+    pub ms_ts: [u8; 6],
+    /// The account of the maker.
+    pub acc: [u8; 20],
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
@@ -106,15 +124,34 @@ pub struct OfframpArgs {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+pub struct Timestamplet {
+    /// The timestamp for the value of this asset at the time given.
+    pub timestamplet_time: [u8; 6],
+    /// The outcome in use at the timestamplet.
+    pub timestamplet_outcome: Outcome,
+    /// The value of the asset at the time given.
+    pub timestamplet_val: u64,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct AggregateArgs {
     /// The maker bundle that we need to roll up here.
     pub maker: BundleMakerArgs,
+    /// "Timestamplet" (signature from us that a timestamp for an asset
+    /// is valid) for the time given.
+    pub timestamplet: Timestamplet,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+pub struct Aggregate {
+    pub args: AggregateArgs,
+    pub server_sig: Sig,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum AggregateEnum {
-    Args(AggregateArgs),
-    Hash([u8; 32]),
+    Args(Aggregate),
+    Hash(U),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
@@ -158,6 +195,8 @@ pub fn entry(imm: &Imm, op: Args) -> usize {
         Args::Balance { addr } => entry_balance(addr),
         Args::OnrampingFromBal { args, sig } => entry_onramping_from_bal(args, sig),
         Args::Offramp { args, server_sig } => entry_offramp(&imm, args, server_sig),
-        Args::AggregateToOfframp { args, server_sig } => entry_aggregate_to_offramp(args, server_sig),
+        Args::AggregateToOfframp { args, server_sig } => {
+            entry_aggregate_to_offramp(imm, args, server_sig)
+        }
     }
 }
