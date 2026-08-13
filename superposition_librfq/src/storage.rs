@@ -184,5 +184,5 @@ storage! {
     // Address of the taker for the hash given.
     hash_taker_addr(hash),
     // Taker details from the hash given.
-    hash_taker_details(hash)
+    hash_taker_details(hash),
 }

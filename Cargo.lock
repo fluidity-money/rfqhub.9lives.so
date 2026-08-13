@@ -19,6 +19,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "anstream"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d"
+dependencies = [
+ "anstyle",
+ "anstyle-parse",
+ "anstyle-query",
+ "anstyle-wincon",
+ "colorchoice",
+ "is_terminal_polyfill",
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+
+[[package]]
+name = "anstyle-parse"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52ce7f38b242319f7cabaa6813055467063ecdc9d355bbb4ce0c68908cd8130e"
+dependencies = [
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle-query"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
+name = "anstyle-wincon"
+version = "3.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
+dependencies = [
+ "anstyle",
+ "once_cell_polyfill",
+ "windows-sys",
+]
+
+[[package]]
 name = "array-concat"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -56,18 +106,18 @@ dependencies = [
 
 [[package]]
 name = "bobcat-alloc"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "902c94dcb6d4f4c6ac7150bec9f571379b463addbeb5fcf58e0637ff7a1c6bf3"
+checksum = "6c9e695ea58338c9c749e328c54e8d4b1b3f90a1a2bcc4ea6b1c8b6ce6602697"
 dependencies = [
  "mini-alloc",
 ]
 
 [[package]]
 name = "bobcat-call"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1905f3b0b998ec9d05dcbf599f7e896ceefad9a987585e0b6c23c5becb22d9a"
+checksum = "55f61a8805691d1769d3ee1e4998e5ea2ed77ba924799f1b7374832a0ff57049"
 dependencies = [
  "bobcat-entry",
  "bobcat-host",
@@ -79,9 +129,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-cd"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea27a3a277a9e30fec67dcbd13396700521a03f1fca23ed0b39bc6fd3830e3fc"
+checksum = "e6bd69df433392b49a1f1e1e8aaf0dd513f02a7400ff62df3304020d3cb79e51"
 dependencies = [
  "array-concat",
  "bobcat-maths",
@@ -91,9 +141,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-create"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfd1507638336933edd191f5582f73ce5a7e600dcee85e1a490ba345fe98c550"
+checksum = "f3534f15eeaf423aa7818806d71d94bf58eabcaaa5c0884623b0558e85a60dd1"
 dependencies = [
  "array-concat",
  "bobcat-host",
@@ -104,9 +154,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-entry"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2e868cfdc7b51d20b461fdb74a3e340a9b5844694e2d050a3255a31541239b2"
+checksum = "ad588e176aa936de3bb2d40b456a6accab605879725f5f76575b6fff0737bf0b"
 dependencies = [
  "bobcat-cd",
  "bobcat-host",
@@ -117,9 +167,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-events"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b8ca475f00492142cf1d9a868d393c64b240aefbf81de6257deed5811f76483"
+checksum = "00951fbd2ee70dbb5a1f46bc27cce6c3eec9cfa7473c127cea9809df31a0670a"
 dependencies = [
  "array-concat",
  "bobcat-host",
@@ -128,9 +178,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-features"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ef0de032dc255a0e9c50e76066e715ba2db1fdbfcd1fe7185cf1f7b6b9bfb7d"
+checksum = "b480e4c5175e97eccbcceb7ab02ae118968bb8f3cf35b6b8e2e94c07e196c5f2"
 dependencies = [
  "bobcat-call",
  "bobcat-entry",
@@ -142,9 +192,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-host"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ba3ae5c28b14e20c44376950465026ef67678e0f9f613294ee9fa627881974"
+checksum = "552cab2c9c2f693f22fdb6980f26b191ee7fbfe918e44f6cf50dd9ff69d58a7c"
 dependencies = [
  "const-hex",
  "keccak-const",
@@ -152,9 +202,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-interfaces"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6abe16f97e87897ae64f172b1400043afd886a844807bc930750ca7854b945b"
+checksum = "3912883b31b78a63efb75f14fb9d59d9c0240eecf3ac2aabb16ddab62803df71"
 dependencies = [
  "array-concat",
  "bobcat-cd",
@@ -165,9 +215,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-maths"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c844a69779ceeb2e6c58c79ab330e930f99cb72d25bc61c185348bc8bfef25f"
+checksum = "163c8b7e67c75169c3904fee485b68531716f13d79e7d7d0a8109a6483fbb6ac"
 dependencies = [
  "alloy-primitives",
  "array-concat",
@@ -175,6 +225,7 @@ dependencies = [
  "bobcat-panic",
  "borsh",
  "cfg-if",
+ "clap",
  "const-hex",
  "mutants",
  "num-traits",
@@ -184,9 +235,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-panic"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64895f36f22bc2db883c32f44508747c30f5acaa2c7458cba7308b5685a8a088"
+checksum = "5ce440dcb7ef03c470e50dab95be8c207a4b896f0728b4a5e77dd20218fe47c4"
 dependencies = [
  "bobcat-host",
  "const-hex",
@@ -195,9 +246,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-precompiles"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "126f63cbf1254e158d5c28c7260ecdb2fbf377e57a0a81e49e7338bf177d337e"
+checksum = "1f157f3751fcfb544f298b68b4cd8580bbc03b74dec448abb5188304504ea771"
 dependencies = [
  "array-concat",
  "bobcat-call",
@@ -210,9 +261,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-proxy"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10d59f4ed2f62d6633df390a67d712e654d9dd9629e2e09375a88481a9324c5e"
+checksum = "aff55fc226197b627e745d54ac03d5da0556db152a7979a5ce908e9e69237b4a"
 dependencies = [
  "array-concat",
  "bobcat-interfaces",
@@ -222,9 +273,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-sdk"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f83b1bae4b066f7ba178e83ee9848ecade60e753077b83f8560c76f365daab1"
+checksum = "7ea536d834e8198783ee32bedd714c3551e80afa1afc21bb1b3b73d68bad14cc"
 dependencies = [
  "bobcat-alloc",
  "bobcat-call",
@@ -244,9 +295,9 @@ dependencies = [
 
 [[package]]
 name = "bobcat-storage"
-version = "0.7.48"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d266a75f3a14c515a84596517c60ff27a94f373d332c5a945da24bf273d6d51d"
+checksum = "1ca77f28c2f32bad4c63d91daaef3581e167ba30f6536a8a68796a218ed965ef"
 dependencies = [
  "array-concat",
  "bobcat-host",
@@ -295,6 +346,39 @@ name = "cfg_aliases"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
+
+[[package]]
+name = "clap"
+version = "4.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
+dependencies = [
+ "clap_builder",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "clap_lex",
+ "strsim",
+]
+
+[[package]]
+name = "clap_lex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+
+[[package]]
+name = "colorchoice"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "const-hex"
@@ -478,6 +562,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "getrandom"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "r-efi",
+ "wasip2",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -503,6 +599,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "is_terminal_polyfill"
+version = "1.70.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -510,9 +612,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "keccak"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e24a010dd405bd7ed803e5253182815b41bf2e6a80cc3bfc066658e03a198aa"
+checksum = "ffd9697dc4a9a62e2da93389f34400b77a28f0287711263cabb203b3ccb9c0e4"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
@@ -574,6 +676,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "once_cell_polyfill"
+version = "1.70.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,6 +725,7 @@ dependencies = [
  "rand 0.9.5",
  "rand_chacha",
  "rand_xorshift",
+ "regex-syntax",
  "unarray",
 ]
 
@@ -628,6 +737,12 @@ checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "r-efi"
+version = "5.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
 name = "rand"
@@ -644,6 +759,7 @@ version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41"
 dependencies = [
+ "rand_chacha",
  "rand_core 0.9.5",
 ]
 
@@ -668,6 +784,9 @@ name = "rand_core"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "rand_xorshift"
@@ -677,6 +796,12 @@ checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core 0.9.5",
 ]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "ruint"
@@ -797,6 +922,12 @@ checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
  "digest 0.10.7",
 ]
+
+[[package]]
+name = "strsim"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "subtle"
@@ -923,6 +1054,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+name = "utf8parse"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
 name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -935,6 +1072,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "wasip2"
+version = "1.0.4+wasi-0.2.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487"
+dependencies = [
+ "wit-bindgen",
+]
+
+[[package]]
+name = "windows-link"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
+]
+
+[[package]]
 name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -944,19 +1105,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "zerocopy"
-version = "0.8.55"
+name = "wit-bindgen"
+version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5a105cd7b140f6eeec8acff2ea38135d3cab283ada58540f629fe51e46696eb"
+checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "zerocopy"
+version = "0.8.56"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556764e583adb45a9f8d413c2a147fa7e8d821e48e12b14fd560b607998b75eb"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.55"
+version = "0.8.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fe976fb70c78cd64cccfe3a6fc142244e8a77b70959b30faf9d0ac37ee228eb"
+checksum = "f2ab42fc20575779bd240faa45f94a74256f755c0fa9e89f0ede20d91d0cdfc1"
 dependencies = [
  "proc-macro2",
  "quote",

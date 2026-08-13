@@ -3,10 +3,12 @@
 /// value part of the signing, with the Signable structures being used
 /// to recurse through to retrieve hashes. Hashed structures work like this:
 /// [DISCRIMINT | CONTENT HASHED WITH INNER | CONTENT BEFORE THIS ITEM* ]
+use borsh::BorshSerialize;
 
-use borsh::{BorshSerialize};
-
-use crate::{Asset, Outcome, AggregateEnum, Timestamplet, BundleMakerArgs, BundleTakerArgs, OnrampingSource, Aggregate, AggregateArgs, BundleTakerEnum};
+use crate::{
+    Aggregate, AggregateArgs, AggregateEnum, Asset, BundleMakerArgs, BundleTakerArgs,
+    BundleTakerEnum, OnrampingSource, Outcome, Timestamplet,
+};
 
 use array_concat::concat_arrays;
 
@@ -73,7 +75,8 @@ impl From<AggregateEnum> for SignableAggregate {
                         maker,
                         timestamplet,
                     },
-            .. }) => {
+                ..
+            }) => {
                 let maker = SignableBundleMakerArgs::from(maker);
                 let timestamplet = SignableTimestamplet::from(timestamplet);
                 let pre: [u8; 1 + 32 * 2] = concat_arrays!(
@@ -128,7 +131,17 @@ impl From<BundleMakerArgs> for SignableBundleMakerArgs {
 }
 
 impl From<BundleTakerArgs> for SignableBundleTakerArgs {
-    fn from(BundleTakerArgs { src, expiry, ms_ts, asset, is_up, price_target, outcome }: BundleTakerArgs) -> Self {
+    fn from(
+        BundleTakerArgs {
+            src,
+            expiry,
+            ms_ts,
+            asset,
+            is_up,
+            price_target,
+            outcome,
+        }: BundleTakerArgs,
+    ) -> Self {
         let (onramping_pre, onramping_hash) = match src {
             OnrampingSource::OnchainPot(args) => (None, keccak256(&borsh::to_vec(&args).unwrap())),
             OnrampingSource::AggregatedResult(res) => {
@@ -137,14 +150,17 @@ impl From<BundleTakerArgs> for SignableBundleTakerArgs {
                 (Some(Box::new(pre)), hash)
             }
         };
-        let content = keccak256(&borsh::to_vec(&InnerBundleTakerArgs {
-            expiry,
-            ms_ts,
-            asset,
-            is_up,
-            price_target,
-            outcome
-        }).unwrap());
+        let content = keccak256(
+            &borsh::to_vec(&InnerBundleTakerArgs {
+                expiry,
+                ms_ts,
+                asset,
+                is_up,
+                price_target,
+                outcome,
+            })
+            .unwrap(),
+        );
         let pre: [u8; 1 + 32 * 2] = concat_arrays!(
             [PreDiscriminant::BundleTakerArgs as u8],
             *content,
@@ -152,7 +168,7 @@ impl From<BundleTakerArgs> for SignableBundleTakerArgs {
         );
         Self {
             aggregated_res: onramping_pre,
-            hash: keccak256(&pre)
+            hash: keccak256(&pre),
         }
     }
 }

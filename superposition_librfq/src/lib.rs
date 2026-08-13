@@ -94,14 +94,20 @@ pub struct BundleTakerArgs {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+pub struct BundleTaker {
+    pub args: BundleTakerArgs,
+    pub sig: Sig,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum BundleTakerEnum {
-    Args(BundleTakerArgs),
+    Args(BundleTaker),
     Hash(U),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct BundleMakerArgs {
-    /// The compensation for when this market is correct.
+    /// The compensation for when this market is correct:
     pub taker: BundleTakerEnum,
     /// The nonce that we use here.
     pub ms_ts: [u8; 6],

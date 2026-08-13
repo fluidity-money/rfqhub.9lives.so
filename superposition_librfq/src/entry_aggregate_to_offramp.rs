@@ -1,11 +1,12 @@
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, Asset, BundleMakerArgs, BundleTakerArgs,
+    Aggregate, AggregateArgs, AggregateEnum, Asset, BundleMakerArgs, BundleTaker, BundleTakerArgs,
     BundleTakerEnum, Imm, OnchainPotArgs, OnrampingSource, Outcome, Sig, Timestamplet,
     error::{Dis, Error},
+    signable::{SignableAggregate, SignableBundleTakerArgs},
     storage,
 };
 
-use bobcat_sdk::{maths::U, precompiles::superposition::edphverify_pre};
+use bobcat_sdk::maths::U;
 
 #[derive(Debug, Clone)]
 struct BundleTakerDetails {
@@ -50,41 +51,66 @@ fn taker_details_from_hash(h: &U) -> Result<BundleTakerDetails, Error> {
 unsafe fn taker_addr_amt_bundle_taker(
     imm: &Imm,
     x: &BundleTakerEnum,
+    signable: &SignableBundleTakerArgs,
 ) -> Result<BundleTakerDetails, Error> {
     match x {
         // We have everything in hand, this is a simple case of a single RFQ then offramp:
-        BundleTakerEnum::Args(BundleTakerArgs {
-            src:
-                OnrampingSource::OnchainPot(OnchainPotArgs {
-                    acc_addr: taker_acc,
-                    amt,
-                }),
-            expiry,
-            ms_ts,
-            asset,
-            is_up,
-            price_target,
-            outcome,
-        }) => Ok(BundleTakerDetails {
-            taker_acc: *taker_acc,
-            amt: *amt,
-            expiry: *expiry,
-            ms_ts: *ms_ts,
-            asset: *asset,
-            is_up: *is_up,
-            price_target: *price_target,
-            outcome: *outcome,
-        }),
-        // We need to recurse again before bubbling up the state of the user:
-        BundleTakerEnum::Args(BundleTakerArgs {
-            src: OnrampingSource::AggregatedResult(r),
-            ..
-        }) => match r.as_ref() {
-            AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
-                recurse_aggregate(imm, args, *server_sig)
-            },
-            AggregateEnum::Hash(h) => taker_details_from_hash(h),
-        },
+        BundleTakerEnum::Args(BundleTaker {
+            args:
+                BundleTakerArgs {
+                    src:
+                        OnrampingSource::OnchainPot(OnchainPotArgs {
+                            acc_addr: taker_acc,
+                            amt,
+                        }),
+                    expiry,
+                    ms_ts,
+                    asset,
+                    is_up,
+                    price_target,
+                    outcome,
+                },
+            sig: taker_sig,
+        }) => {
+            if imm.should_user_sig_validate {
+                check_statement(taker_acc, signable.hash.into(), ms_ts, taker_sig)?;
+            }
+            Ok(BundleTakerDetails {
+                taker_acc: *taker_acc,
+                amt: *amt,
+                expiry: *expiry,
+                ms_ts: *ms_ts,
+                asset: *asset,
+                is_up: *is_up,
+                price_target: *price_target,
+                outcome: *outcome,
+            })
+        }
+        // We need to recurse again before bubbling up the state of the
+        // user. The next level needs to validate the signature.
+        BundleTakerEnum::Args(BundleTaker {
+            args:
+                BundleTakerArgs {
+                    src: OnrampingSource::AggregatedResult(r),
+                    ms_ts,
+                },
+            sig: taker_sig,
+        }) => {
+	    // We need to get the hash after creating some side effects
+	    // here so we can safely look up the user's taker address
+	    // from the hash:
+            let hash = match r.as_ref() {
+                AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
+                    recurse_aggregate(imm, args, *server_sig)
+                },
+                AggregateEnum::Hash(h) => taker_details_from_hash(h),
+            }?;
+            if imm.should_user_sig_validate {
+                check_statement(taker_acc, signable.hash.into(), ms_ts, taker_sig)?;
+            }
+            todo!();
+            hash
+        }
         // We've already seen all of this and we need to just get the information in the hash:
         BundleTakerEnum::Hash(h) => taker_details_from_hash(h),
     }
@@ -99,14 +125,11 @@ unsafe fn taker_addr_amt_bundle_taker(
 unsafe fn recurse_aggregate(
     imm: &Imm,
     args: &AggregateArgs,
+    signable: &SignableAggregate,
     server_sig: Sig,
 ) -> Result<BundleTakerDetails, Error> {
     if imm.should_server_sig_validate {
-        assert!(edphverify_pre(
-            &borsh::to_vec(&args).unwrap(),
-            imm.server_key,
-            server_sig,
-        ));
+        edphverify_post(&signable.hash, &imm.server_key, server_sig)?;
     }
     let AggregateArgs {
         maker:
@@ -131,7 +154,7 @@ unsafe fn recurse_aggregate(
         is_up,
         price_target,
         outcome,
-    } = unsafe { taker_addr_amt_bundle_taker(imm, &taker)? };
+    } = unsafe { taker_addr_amt_bundle_taker(imm, &taker, signable)? };
     // Let's perform some validation here to make sure that everything has
     // worked okay:
     if timestamplet_outcome != &outcome {
@@ -190,4 +213,20 @@ fn basic_example() {
             timestamplet_outcome: Outcome::Bitcoin,
         },
     };
+}
+
+fn edphverify_post(hash: &U, key: &U, sig: [u8; 64]) -> Result<(), Error> {
+    if bobcat_sdk::precompiles::superposition::edphverify_post(hash, key, sig) {
+        Ok(())
+    } else {
+        Err(Dis::BadSignature.into())
+    }
+}
+
+fn check_statement(addr: [u8; 20], msg: Vec<u8>, ms_ts: [u8; 6], sig: Sig) -> Result<(), Error> {
+    if call_accounts::check_statement(addr, msg, ms_ts, sig) {
+        Ok(())
+    } else {
+        Err(Dis::StatementCheckFailed.into())
+    }
 }

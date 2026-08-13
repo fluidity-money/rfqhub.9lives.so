@@ -5,6 +5,8 @@ pub enum Dis {
     TimestampletInconsistentOutcome,
     TimestampletInconsistentTime,
     BadAssetNumber,
+    InconsistentSignable,
+    StatementCheckFailed,
 }
 
 #[derive(Debug, Clone, PartialEq)]
