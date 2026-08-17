@@ -123,15 +123,6 @@ pub struct BundleMaker {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
-pub struct OnrampingFromBalArgs {
-    /// The asset being provided for the onramping as this
-    /// collateral. The "key" of the asset that's being used here.
-    pub asset: Asset,
-    /// The amount of collateral being provided for the
-    pub amt: u64,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct OfframpArgs {
     pub amt: u64,
 }
@@ -174,13 +165,17 @@ pub enum Args {
     Source,
     /// Get the available to spend onramping balance from the user:
     Balance {
+        asset: [u8; 20],
         addr: [u8; 20],
     },
     /// When a user is onramping here, we're adding funds from their
     /// account to the pot that they can spend.
     OnrampingFromBal {
-        args: OnrampingFromBalArgs,
-        sig: Sig,
+        /// The asset being provided for the onramping as this
+        /// collateral. The "key" of the asset that's being used here.
+        asset: Asset,
+        /// The amount of collateral being provided for the
+        amt: u64,
     },
     /// Simply offramp the amount in the pot that hasn't been spent.
     /// Requires a blessing from the server to make the offramping happen.
@@ -205,8 +200,8 @@ pub fn entry(imm: &Imm, op: Args) -> usize {
     match op {
         Args::Version => entry_version(),
         Args::Source => entry_source(),
-        Args::Balance { addr } => entry_balance(addr),
-        Args::OnrampingFromBal { args, sig } => entry_onramping_from_bal(args, sig),
+        Args::Balance { asset, addr } => entry_balance(asset, addr),
+        Args::OnrampingFromBal { asset, amt } => entry_onramping_from_bal(asset, amt),
         Args::Offramp { args, server_sig } => entry_offramp(&imm, args, server_sig),
         Args::AggregateToOfframp { args, server_sig } => {
             entry_aggregate_to_offramp(imm, args, server_sig)

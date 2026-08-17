@@ -937,10 +937,11 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "superposition-assets"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc5ae6f8577e17bab4a09f0319ce8a2fe1aab44f33db8dab9ad34fde47c49bbe"
+checksum = "580ae563f4ff9c92c202f56b22656ff18c2aba26f7ee44b092692bd33e6902c7"
 dependencies = [
+ "bobcat-maths",
  "borsh",
  "const-hex",
  "serde",

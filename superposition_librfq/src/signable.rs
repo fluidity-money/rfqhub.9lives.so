@@ -14,8 +14,8 @@
 use borsh::BorshSerialize;
 
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, Asset, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, BundleTakerEnum, OnrampingSource, Outcome,
+    AggregateArgs, AggregateEnum, Asset, BundleMaker, BundleMakerArgs, BundleTaker,
+    BundleTakerArgs, BundleTakerEnum, OnrampingSource, Outcome, Aggregate,
 };
 
 use array_concat::concat_arrays;
@@ -98,10 +98,9 @@ impl From<&AggregateArgs> for SignableAggregateArgs {
         }: &AggregateArgs,
     ) -> Self {
         let maker = SignableBundleMakerArgs::from(maker_args);
-        let pre: [u8; 1 + 32] = concat_arrays!(
-            [PreDiscriminant::AggregateEnum as u8],
-            maker.hash.clone().into()
-        );
+        let timestamplet = sha512(&borsh::to_vec(&timestamplet).unwrap());
+        let pre: [u8; 1 + 32 + 64] =
+            concat_arrays!([PreDiscriminant::AggregateEnum as u8], maker.hash.clone().into(), timestamplet);
         Self {
             maker,
             hash: Hash::JustInTime(sha512(&pre)),
@@ -119,13 +118,7 @@ impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
             }
             BundleTakerEnum::Hash(h) => (None, Hash::Onchain(h.clone())),
         };
-        let content = sha512(
-            &borsh::to_vec(&InnerBundleMaker {
-                ms_ts: *ms_ts,
-                acc: *acc,
-            })
-            .unwrap(),
-        );
+        let content = sha512(&borsh::to_vec(&InnerBundleMaker { ms_ts: *ms_ts, acc: *acc }).unwrap());
         let pre: [u8; 1 + 64 + 32] = concat_arrays!(
             [PreDiscriminant::BundleMakerArgs as u8],
             content,
@@ -161,7 +154,9 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
                     let hash = pre.hash.clone();
                     (Some(Box::new(pre)), hash)
                 }
-                AggregateEnum::Hash(u) => (None, Hash::Onchain(u)),
+                AggregateEnum::Hash(u) => {
+                    (None, Hash::Onchain(u))
+                }
             },
         };
         let content = sha512(

@@ -12,9 +12,12 @@ use bobcat_sdk::maths::U;
 #[derive(Debug, Clone)]
 struct BundleTakerDetails {
     taker_acc: [u8; 20],
-    amt: u64,
+    taker_amt: u64,
+    maker_acc: [u8; 20],
+    maker_amt: u64,
     expiry: [u8; 6],
-    ms_ts: [u8; 6],
+    taker_ms_ts: Option<[u8; 6]>,
+    maker_ms_ts: Option<[u8; 6]>,
     asset: Asset,
     is_up: bool,
     price_target: u64,
@@ -22,26 +25,41 @@ struct BundleTakerDetails {
 }
 
 fn taker_details_from_hash(h: &U) -> Result<BundleTakerDetails, Error> {
+    // To get the details of the maker from the taker information, we
+    // spider the next location by using it as a pointer:
     let taker_acc: [u8; 20] = storage::hash_taker_addr::get(&h).into();
     let storage::WordBundleTakerDetails {
-        amt,
+        amt: taker_amt,
         expiry,
-        ms_ts,
         asset,
         price_target,
         is_up,
         outcome,
     } = storage::hash_taker_details::get(h).try_into()?;
+    let maker_hash_ptr = storage::hash_ptr_maker_from_taker::get(h);
+    let storage::WordBundleMakerDetails {
+        amt: maker_amt,
+        acc: maker_acc,
+    } = storage::hash_maker_details::get(&maker_hash_ptr).try_into()?;
     Ok(BundleTakerDetails {
         taker_acc,
-        amt,
+        maker_acc,
+        taker_amt,
+        maker_amt,
         expiry,
-        ms_ts,
+        taker_ms_ts: None,
+        maker_ms_ts: None,
         asset,
         is_up,
         price_target,
         outcome,
     })
+}
+
+struct BundleMakerDetails {
+    maker_acc: [u8; 20],
+    amt: u64,
+    ms_ts: [u8; 6]
 }
 
 // This code recurses into the structure to get the taker's address and
@@ -51,7 +69,7 @@ fn taker_details_from_hash(h: &U) -> Result<BundleTakerDetails, Error> {
 // SAFETY: This code will mutate local storage to move around amounts,
 // making it unsafe to be invoked more than once. Corecursive with
 // recurse_aggregate.
-unsafe fn taker_addr_amt_bundle_taker(
+unsafe fn addr_amt_bundle_taker(
     imm: &Imm,
     x: &BundleTakerEnum,
     signable: &SignableAggregateArgs,
@@ -155,17 +173,22 @@ unsafe fn recurse_aggregate(
             },
     } = args;
     // This function also performs some validation of the signature that
-    // we use for the server aggregation:
+    // we use for the server aggregation, and it also sets the hash fields
+    // so that we can't have a replay:
+    let bundle_taker_deets = unsafe { addr_amt_bundle_taker(imm, &taker, signable)? };
     let BundleTakerDetails {
         taker_acc,
-        amt,
+        maker_acc,
+        maker_amt,
+        taker_amt,
         expiry,
-        ms_ts: taker_ms_ts,
+        taker_ms_ts,
+        maker_ms_ts,
         asset,
         is_up,
         price_target,
         outcome,
-    } = unsafe { taker_addr_amt_bundle_taker(imm, &taker, signable)? };
+    } = bundle_taker_deets;
     // Let's perform some validation here to make sure that everything has
     // worked okay:
     if timestamplet_outcome != &outcome {
@@ -183,9 +206,17 @@ unsafe fn recurse_aggregate(
         (true, true) | (false, false) => true,
         _ => false,
     };
-    // Now we need to set the fields for the field here:
-    panic!("agg: {signable:?}");
-    unimplemented!()
+    let asset_u: U = asset.into();
+    let taker_acc_u: U = taker_acc.into();
+    let maker_acc_u: U = maker_acc.into();
+    if did_taker_win {
+        storage::onramped_bal::checked_sub_res(&asset_u, &taker_acc_u, &taker_amt.into())?;
+        storage::onramped_bal::checked_add_res(&asset_u, &maker_acc_u, &taker_amt.into())?;
+    } else {
+        storage::onramped_bal::checked_sub_res(&asset_u, &maker_acc_u, &maker_amt.into())?;
+        storage::onramped_bal::checked_add_res(&asset_u, &taker_acc_u, &maker_amt.into())?;
+    }
+    Ok(bundle_taker_deets)
 }
 
 pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateArgs, server_sig: Sig) -> usize {
@@ -229,7 +260,7 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Timestamplet, entry_aggregate_to_offramp, signable::SignableAggregateArgs};
+    use crate::{entry_aggregate_to_offramp, Timestamplet};
 
     #[test]
     fn test_erik_alex() {
@@ -271,9 +302,6 @@ mod test {
                 timestamplet_val: 101,
             },
         };
-        assert_eq!(
-            0,
-            entry_aggregate_to_offramp(&Imm::default(), agg, [0u8; 64])
-        );
+        assert_eq!(0, entry_aggregate_to_offramp(&Imm::default(), agg, [0u8; 64]));
     }
 }
