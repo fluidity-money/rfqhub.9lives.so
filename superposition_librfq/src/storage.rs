@@ -34,6 +34,7 @@ macro_rules! storage {
     ) => {
         pub mod $name {
             pub(crate) use bobcat_sdk::storage::*;
+            pub use crate::error::{Dis, Error};
             use bobcat_sdk::maths::{u, U};
 
             const SLOT: U = u!($counter);
@@ -65,11 +66,22 @@ macro_rules! storage {
             storage_store(&SLOT, value);
         }
 
-        pub fn checked_add(value: &U) -> U {
+        pub fn checked_add_res(value: &U) -> Result<U, Error> {
             let current = get();
-            let next = bobcat_sdk::maths::checked_add(&current, value);
+            let next =
+                bobcat_sdk::maths::checked_add_opt(&current, value)
+                    .ok_or(Dis::CheckedAddOverflow)?;
             set(&next);
-            next
+            Ok(next)
+        }
+
+        pub fn checked_sub_res(value: &U) -> Result<U, Error> {
+            let current = get();
+            let next =
+                bobcat_sdk::maths::checked_sub_opt(&current, value)
+                    .ok_or(Dis::CheckedSubUnderflow)?;
+            set(&next);
+            Ok(next)
         }
     };
 
@@ -95,12 +107,24 @@ macro_rules! storage {
             storage_store(&slot, value);
         }
 
-        pub fn checked_add($($param: &U,)+ value: &U) -> U {
+        pub fn checked_add_res($($param: &U,)+ value: &U) -> Result<U, Error> {
             let slot = storage_slot($($param),+);
             let current = storage_load(&slot);
-            let next = bobcat_sdk::maths::checked_add(&current, value);
+            let next =
+                bobcat_sdk::maths::checked_add_opt(&current, value)
+                    .ok_or(Error::from(Dis::CheckedAddOverflow))?;
             storage_store(&slot, &next);
-            next
+            Ok(next)
+        }
+
+        pub fn checked_sub_res($($param: &U,)+ value: &U) -> Result<U, Error> {
+            let slot = storage_slot($($param),+);
+            let current = storage_load(&slot);
+            let next =
+                bobcat_sdk::maths::checked_sub_opt(&current, value)
+                    .ok_or(Error::from(Dis::CheckedSubUnderflow))?;
+            storage_store(&slot, &next);
+            Ok(next)
         }
 
         pub fn exchange($($param: &U),+) {

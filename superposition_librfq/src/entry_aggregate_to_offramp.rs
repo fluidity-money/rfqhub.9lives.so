@@ -184,6 +184,7 @@ unsafe fn recurse_aggregate(
         _ => false,
     };
     // Now we need to set the fields for the field here:
+    panic!("agg: {signable:?}");
     unimplemented!()
 }
 
@@ -222,5 +223,57 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
     } else {
         // The hash is already on-chain, we don't need to verify it.
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{Timestamplet, entry_aggregate_to_offramp, signable::SignableAggregateArgs};
+
+    #[test]
+    fn test_erik_alex() {
+        // Erik is expecting that the price of Bitcoin will go up above $100 by
+        // timestamp 1. Alex bets that it won't, providing $200 as the
+        // compensation if Erik is correct. As Alex has provided the highest
+        // offer at the conclusion of the sealed bid auction, he is chosen. At
+        // timestamp 1, Erik is correct.
+        let expiry: [u8; 6] = [0, 0, 0, 0, 0, 1];
+        let outcome = Outcome::BitcoinPrice;
+        let erik = BundleTaker {
+            args: BundleTakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: [0u8; 20],
+                    amt: 500,
+                }),
+                expiry,
+                ms_ts: [0u8; 6],
+                asset: Asset::USDC,
+                is_up: true,
+                price_target: 100,
+                outcome,
+            },
+            sig: [0u8; 64],
+        };
+        let alex = BundleMaker {
+            args: BundleMakerArgs {
+                taker: BundleTakerEnum::Args(erik),
+                ms_ts: [0u8; 6],
+                acc: [0u8; 20],
+            },
+            sig: [0u8; 64],
+        };
+        let agg = AggregateArgs {
+            maker: alex,
+            timestamplet: Timestamplet {
+                timestamplet_time: [0, 0, 0, 0, 0, 1],
+                timestamplet_outcome: outcome,
+                timestamplet_val: 101,
+            },
+        };
+        assert_eq!(
+            0,
+            entry_aggregate_to_offramp(&Imm::default(), agg, [0u8; 64])
+        );
     }
 }

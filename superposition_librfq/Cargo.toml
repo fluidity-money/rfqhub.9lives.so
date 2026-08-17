@@ -17,3 +17,6 @@ const-hex = { version = "1.19.1", default-features = false }
 
 [features]
 std = []
+
+[target.'cfg(not(target_arch = "wasm32"))']
+bobcat-sdk = { workspace = true, features = ["ed25519-dalek"] }

@@ -8,6 +8,8 @@ pub enum Dis {
     InconsistentSignable,
     StatementCheckFailed,
     BadSignature,
+    CheckedAddOverflow,
+    CheckedSubUnderflow,
 }
 
 #[derive(Debug, Clone, PartialEq)]
