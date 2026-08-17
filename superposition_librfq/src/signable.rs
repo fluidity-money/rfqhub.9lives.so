@@ -3,20 +3,47 @@
 /// value part of the signing, with the Signable structures being used
 /// to recurse through to retrieve hashes. Hashed structures work like this:
 /// [DISCRIMINT | CONTENT HASHED WITH INNER | CONTENT BEFORE THIS ITEM* ]
+/// The signatures are compressed using keccak256 when they are
+/// aggregated, but when they are signed, they are used in their original
+/// [u8; 64] form. If they are used in the context where a signer tries to
+/// sign something that is on-chain, this is an error. The content is
+/// signed as a sha512. End users signing the eventual blob that must
+/// be checked with the accounts engine need to prefix their blob with
+/// "Accounts statement", and the address of the account doing the
+/// verifying, then the content, in a hex form without a 0x prefix.
 use borsh::BorshSerialize;
 
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, Asset, BundleMakerArgs, BundleTakerArgs,
-    BundleTakerEnum, OnrampingSource, Outcome, Timestamplet,
+    AggregateArgs, Asset, BundleMaker, BundleMakerArgs, BundleTaker, BundleTakerArgs,
+    BundleTakerEnum, OnrampingSource, Outcome,
 };
 
 use array_concat::concat_arrays;
 
-use bobcat_sdk::{maths::U, storage::keccak256};
+use bobcat_sdk::{maths::U, precompiles::superposition::sha512, storage::keccak256};
 
 use alloc::boxed::Box;
 
-pub type Hash = U;
+#[derive(BorshSerialize, Clone, PartialEq, Debug)]
+pub enum Hash {
+    Onchain(U),
+    JustInTime([u8; 64]),
+}
+
+impl From<Hash> for [u8; 32] {
+    fn from(x: Hash) -> Self {
+        match x {
+            Hash::Onchain(U(u)) => u,
+            Hash::JustInTime(x) => *keccak256(&x),
+        }
+    }
+}
+
+impl From<Hash> for U {
+    fn from(x: Hash) -> Self {
+        U(x.into())
+    }
+}
 
 #[repr(u8)]
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
@@ -28,7 +55,7 @@ pub enum PreDiscriminant {
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct SignableBundleTakerArgs {
-    pub aggregated_res: Option<Box<SignableAggregate>>,
+    pub aggregated_res: Option<Box<SignableAggregateArgs>>,
     pub hash: Hash,
 }
 
@@ -55,54 +82,27 @@ pub struct SignableBundleMakerArgs {
 }
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
-pub struct SignableTimestamplet {
+pub struct SignableAggregateArgs {
+    pub maker: SignableBundleMakerArgs,
     pub hash: Hash,
 }
 
-#[derive(BorshSerialize, Clone, PartialEq, Debug)]
-pub struct SignableAggregate {
-    pub maker: Option<SignableBundleMakerArgs>,
-    pub timestamplet: Option<SignableTimestamplet>,
-    pub hash: Hash,
-}
-
-impl From<AggregateEnum> for SignableAggregate {
-    fn from(x: AggregateEnum) -> Self {
-        match x {
-            AggregateEnum::Args(Aggregate {
-                args:
-                    AggregateArgs {
-                        maker,
-                        timestamplet,
-                    },
-                ..
-            }) => {
-                let maker = SignableBundleMakerArgs::from(maker);
-                let timestamplet = SignableTimestamplet::from(timestamplet);
-                let pre: [u8; 1 + 32 * 2] = concat_arrays!(
-                    [PreDiscriminant::AggregateEnum as u8],
-                    *maker.hash,
-                    *timestamplet.hash
-                );
-                Self {
-                    maker: Some(maker),
-                    timestamplet: Some(timestamplet),
-                    hash: keccak256(&pre),
-                }
-            }
-            AggregateEnum::Hash(h) => Self {
-                maker: None,
-                timestamplet: None,
-                hash: h,
+impl From<AggregateArgs> for SignableAggregateArgs {
+    fn from(
+        AggregateArgs {
+            maker: BundleMaker {
+                args: maker_args, ..
             },
-        }
-    }
-}
-
-impl From<Timestamplet> for SignableTimestamplet {
-    fn from(x: Timestamplet) -> Self {
+            timestamplet,
+            ..
+        }: AggregateArgs,
+    ) -> Self {
+        let maker = SignableBundleMakerArgs::from(maker_args);
+        let pre: [u8; 1 + 32] =
+            concat_arrays!([PreDiscriminant::AggregateEnum as u8], maker.hash.into());
         Self {
-            hash: keccak256(&borsh::to_vec(&x).unwrap()),
+            maker,
+            hash: Hash::JustInTime(sha512(&pre)),
         }
     }
 }
@@ -110,22 +110,22 @@ impl From<Timestamplet> for SignableTimestamplet {
 impl From<BundleMakerArgs> for SignableBundleMakerArgs {
     fn from(BundleMakerArgs { taker, ms_ts, acc }: BundleMakerArgs) -> Self {
         let (taker_pre, taker_hash) = match taker {
-            BundleTakerEnum::Args(args) => {
+            BundleTakerEnum::Args(BundleTaker { args, .. }) => {
                 let taker = SignableBundleTakerArgs::from(args);
                 let hash = taker.hash.clone();
                 (Some(taker), hash)
             }
-            BundleTakerEnum::Hash(h) => (None, h),
+            BundleTakerEnum::Hash(h) => (None, Hash::Onchain(h)),
         };
-        let content = keccak256(&borsh::to_vec(&InnerBundleMaker { ms_ts, acc }).unwrap());
+        let content = sha512(&borsh::to_vec(&InnerBundleMaker { ms_ts, acc }).unwrap());
         let pre: [u8; 1 + 32 + 32] = concat_arrays!(
             [PreDiscriminant::BundleMakerArgs as u8],
-            *content,
-            *taker_hash
+            content,
+            taker_hash.into()
         );
         Self {
             taker_args: taker_pre,
-            hash: keccak256(&pre),
+            hash: Hash::JustInTime(sha512(&pre)),
         }
     }
 }
@@ -143,14 +143,17 @@ impl From<BundleTakerArgs> for SignableBundleTakerArgs {
         }: BundleTakerArgs,
     ) -> Self {
         let (onramping_pre, onramping_hash) = match src {
-            OnrampingSource::OnchainPot(args) => (None, keccak256(&borsh::to_vec(&args).unwrap())),
+            OnrampingSource::OnchainPot(args) => (
+                None,
+                Hash::JustInTime(sha512(&borsh::to_vec(&args).unwrap())),
+            ),
             OnrampingSource::AggregatedResult(res) => {
-                let pre = SignableAggregate::from(*res);
+                let pre = SignableAggregateArgs::from(*res);
                 let hash = pre.hash.clone();
                 (Some(Box::new(pre)), hash)
             }
         };
-        let content = keccak256(
+        let content = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
                 expiry,
                 ms_ts,
@@ -161,14 +164,14 @@ impl From<BundleTakerArgs> for SignableBundleTakerArgs {
             })
             .unwrap(),
         );
-        let pre: [u8; 1 + 32 * 2] = concat_arrays!(
+        let pre: [u8; 1 + 64 + 32] = concat_arrays!(
             [PreDiscriminant::BundleTakerArgs as u8],
-            *content,
-            *onramping_hash
+            content,
+            onramping_hash.into()
         );
         Self {
             aggregated_res: onramping_pre,
-            hash: keccak256(&pre),
+            hash: Hash::JustInTime(sha512(&pre)),
         }
     }
 }

@@ -116,6 +116,13 @@ pub struct BundleMakerArgs {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+pub struct BundleMaker {
+    pub args: BundleMakerArgs,
+    /// User signature for this maker bundle.
+    pub sig: Sig,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct OnrampingFromBalArgs {
     /// The asset being provided for the onramping as this
     /// collateral. The "key" of the asset that's being used here.
@@ -142,7 +149,7 @@ pub struct Timestamplet {
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct AggregateArgs {
     /// The maker bundle that we need to roll up here.
-    pub maker: BundleMakerArgs,
+    pub maker: BundleMaker,
     /// "Timestamplet" (signature from us that a timestamp for an asset
     /// is valid) for the time given.
     pub timestamplet: Timestamplet,

@@ -7,6 +7,7 @@ pub enum Dis {
     BadAssetNumber,
     InconsistentSignable,
     StatementCheckFailed,
+    BadSignature,
 }
 
 #[derive(Debug, Clone, PartialEq)]
