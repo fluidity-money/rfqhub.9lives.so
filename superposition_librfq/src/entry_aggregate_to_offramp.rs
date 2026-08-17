@@ -107,8 +107,8 @@ unsafe fn taker_addr_amt_bundle_taker(
             match r.as_ref() {
                 AggregateEnum::Args(Aggregate { args, server_sig }) => {
                     if imm.should_user_sig_validate {
-                        let hash = signable.hash.into();
-                        let taker_acc: [u8; 20] = get_hash_taker(hash);
+                        let hash = signable.hash.clone();
+                        let taker_acc: [u8; 20] = get_hash_taker(hash.clone());
                         check_hash_signer(taker_acc, hash, *ms_ts, *taker_sig)?;
                     }
                     unsafe { recurse_aggregate(imm, args, &signable, *server_sig) }
@@ -192,8 +192,9 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateArgs, server_sig: Si
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
     // First, we need to validate that this combination is legitimate:
+    let signable = SignableAggregateArgs::from(&args);
     unsafe {
-        recurse_aggregate(imm, &args, server_sig).unwrap();
+        recurse_aggregate(imm, &args, &signable, server_sig).unwrap();
     }
     0
 }

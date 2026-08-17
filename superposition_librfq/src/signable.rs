@@ -14,8 +14,8 @@
 use borsh::BorshSerialize;
 
 use crate::{
-    AggregateArgs, Asset, BundleMaker, BundleMakerArgs, BundleTaker, BundleTakerArgs,
-    BundleTakerEnum, OnrampingSource, Outcome,
+    AggregateArgs, AggregateEnum, Asset, BundleMaker, BundleMakerArgs, BundleTaker,
+    BundleTakerArgs, BundleTakerEnum, OnrampingSource, Outcome, Aggregate,
 };
 
 use array_concat::concat_arrays;
@@ -87,7 +87,7 @@ pub struct SignableAggregateArgs {
     pub hash: Hash,
 }
 
-impl From<AggregateArgs> for SignableAggregateArgs {
+impl From<&AggregateArgs> for SignableAggregateArgs {
     fn from(
         AggregateArgs {
             maker: BundleMaker {
@@ -95,11 +95,11 @@ impl From<AggregateArgs> for SignableAggregateArgs {
             },
             timestamplet,
             ..
-        }: AggregateArgs,
+        }: &AggregateArgs,
     ) -> Self {
         let maker = SignableBundleMakerArgs::from(maker_args);
         let pre: [u8; 1 + 32] =
-            concat_arrays!([PreDiscriminant::AggregateEnum as u8], maker.hash.into());
+            concat_arrays!([PreDiscriminant::AggregateEnum as u8], maker.hash.clone().into());
         Self {
             maker,
             hash: Hash::JustInTime(sha512(&pre)),
@@ -107,18 +107,18 @@ impl From<AggregateArgs> for SignableAggregateArgs {
     }
 }
 
-impl From<BundleMakerArgs> for SignableBundleMakerArgs {
-    fn from(BundleMakerArgs { taker, ms_ts, acc }: BundleMakerArgs) -> Self {
+impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
+    fn from(BundleMakerArgs { taker, ms_ts, acc }: &BundleMakerArgs) -> Self {
         let (taker_pre, taker_hash) = match taker {
             BundleTakerEnum::Args(BundleTaker { args, .. }) => {
                 let taker = SignableBundleTakerArgs::from(args);
                 let hash = taker.hash.clone();
                 (Some(taker), hash)
             }
-            BundleTakerEnum::Hash(h) => (None, Hash::Onchain(h)),
+            BundleTakerEnum::Hash(h) => (None, Hash::Onchain(h.clone())),
         };
-        let content = sha512(&borsh::to_vec(&InnerBundleMaker { ms_ts, acc }).unwrap());
-        let pre: [u8; 1 + 32 + 32] = concat_arrays!(
+        let content = sha512(&borsh::to_vec(&InnerBundleMaker { ms_ts: *ms_ts, acc: *acc }).unwrap());
+        let pre: [u8; 1 + 64 + 32] = concat_arrays!(
             [PreDiscriminant::BundleMakerArgs as u8],
             content,
             taker_hash.into()
@@ -130,7 +130,7 @@ impl From<BundleMakerArgs> for SignableBundleMakerArgs {
     }
 }
 
-impl From<BundleTakerArgs> for SignableBundleTakerArgs {
+impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
     fn from(
         BundleTakerArgs {
             src,
@@ -140,27 +140,32 @@ impl From<BundleTakerArgs> for SignableBundleTakerArgs {
             is_up,
             price_target,
             outcome,
-        }: BundleTakerArgs,
+        }: &BundleTakerArgs,
     ) -> Self {
         let (onramping_pre, onramping_hash) = match src {
             OnrampingSource::OnchainPot(args) => (
                 None,
                 Hash::JustInTime(sha512(&borsh::to_vec(&args).unwrap())),
             ),
-            OnrampingSource::AggregatedResult(res) => {
-                let pre = SignableAggregateArgs::from(*res);
-                let hash = pre.hash.clone();
-                (Some(Box::new(pre)), hash)
-            }
+            OnrampingSource::AggregatedResult(args) => match *args.clone() {
+                AggregateEnum::Args(Aggregate { args, .. }) => {
+                    let pre = SignableAggregateArgs::from(&args);
+                    let hash = pre.hash.clone();
+                    (Some(Box::new(pre)), hash)
+                }
+                AggregateEnum::Hash(u) => {
+                    (None, Hash::Onchain(u))
+                }
+            },
         };
         let content = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
-                expiry,
-                ms_ts,
-                asset,
-                is_up,
-                price_target,
-                outcome,
+                expiry: *expiry,
+                ms_ts: *ms_ts,
+                asset: *asset,
+                is_up: *is_up,
+                price_target: *price_target,
+                outcome: *outcome,
             })
             .unwrap(),
         );
