@@ -1,9 +1,3 @@
-use crate::Outcome;
-
-use superposition_assets::Asset;
-
-use bobcat_sdk::maths::U;
-
 macro_rules! storage {
     (
         $(
@@ -159,55 +153,6 @@ macro_rules! storage {
     };
 }
 
-#[derive(Debug, Clone)]
-pub struct WordBundleTakerDetails {
-    pub amt: u64,
-    pub expiry: [u8; 6],
-    pub asset: Asset,
-    pub price_target: u64,
-    pub is_up: bool,
-    pub outcome: Outcome,
-}
-
-pub struct BadAsset;
-
-impl TryFrom<U> for WordBundleTakerDetails {
-    type Error = BadAsset;
-
-    fn try_from(U(bytes): U) -> Result<Self, Self::Error> {
-        let amt = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
-        let expiry: [u8; 6] = bytes[8..14].try_into().unwrap();
-        let asset = Asset::try_from(bytes[20]).map_err(|_| BadAsset)?;
-        let price_target = u64::from_le_bytes(bytes[21..29].try_into().unwrap());
-        let is_up = bytes[29] != 0;
-        let outcome = Outcome::from(bytes[30]);
-        Ok(WordBundleTakerDetails {
-            amt,
-            expiry,
-            asset,
-            price_target,
-            is_up,
-            outcome,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct WordBundleMakerDetails {
-    pub amt: u64,
-    pub acc: [u8; 20],
-}
-
-impl TryFrom<U> for WordBundleMakerDetails {
-    type Error = BadAsset;
-
-    fn try_from(U(bytes): U) -> Result<Self, Self::Error> {
-        let amt = u64::from_le_bytes(bytes[0..8].try_into().unwrap());
-        let acc: [u8; 20] = bytes[8..28].try_into().unwrap();
-        Ok(WordBundleMakerDetails { amt, acc })
-    }
-}
-
 storage! {
     // The version number of this contract release.
     version(),
@@ -217,13 +162,11 @@ storage! {
     // to spend by the account address given here.
     onramped_bal(asset, account),
     // Taker amount that is available from the hash given.
-    hash_taker_leftover(hash),
+    hash_taker_leftover(hash, asset),
+    // Maker amount that is available from the hash given.
+    hash_maker_leftover(hash, asset),
     // Address of the taker for the hash given.
     hash_taker_addr(hash),
-    // Taker details from the hash given.
-    hash_taker_details(hash),
-    // The hash of the maker information that's associated with this taker.
-    hash_ptr_maker_from_taker(hash),
-    // The details of the hash for the maker.
-    hash_maker_details(hash)
+    // The asset in use for the hash given.
+    hash_asset(hash)
 }

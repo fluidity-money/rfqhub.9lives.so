@@ -1,7 +1,6 @@
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, Asset, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, BundleTakerEnum, Imm, OnchainPotArgs, OnrampingSource, Outcome, Sig,
-    Timestamplet, call_accounts,
+    Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
+    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_accounts,
     error::{Dis, Error},
     signable::{Hash, SignableAggregateArgs},
     storage,
@@ -9,161 +8,87 @@ use crate::{
 
 use bobcat_sdk::maths::U;
 
-#[derive(Debug, Clone)]
-struct BundleTakerDetails {
-    taker_acc: [u8; 20],
-    taker_amt: u64,
-    maker_acc: [u8; 20],
-    maker_amt: u64,
-    expiry: [u8; 6],
-    taker_ms_ts: Option<[u8; 6]>,
-    maker_ms_ts: Option<[u8; 6]>,
-    asset: Asset,
-    is_up: bool,
-    price_target: u64,
-    outcome: Outcome,
-}
-
-fn taker_details_from_hash(h: &U) -> Result<BundleTakerDetails, Error> {
-    // To get the details of the maker from the taker information, we
-    // spider the next location by using it as a pointer:
-    let taker_acc: [u8; 20] = storage::hash_taker_addr::get(&h).into();
-    let storage::WordBundleTakerDetails {
-        amt: taker_amt,
-        expiry,
-        asset,
-        price_target,
-        is_up,
-        outcome,
-    } = storage::hash_taker_details::get(h).try_into()?;
-    let maker_hash_ptr = storage::hash_ptr_maker_from_taker::get(h);
-    let storage::WordBundleMakerDetails {
-        amt: maker_amt,
-        acc: maker_acc,
-    } = storage::hash_maker_details::get(&maker_hash_ptr).try_into()?;
-    Ok(BundleTakerDetails {
-        taker_acc,
-        maker_acc,
-        taker_amt,
-        maker_amt,
-        expiry,
-        taker_ms_ts: None,
-        maker_ms_ts: None,
-        asset,
-        is_up,
-        price_target,
-        outcome,
-    })
-}
-
-struct BundleMakerDetails {
-    maker_acc: [u8; 20],
-    amt: u64,
-    ms_ts: [u8; 6]
-}
-
-// This code recurses into the structure to get the taker's address and
-// the taker's details. It will also validate the signature in the signable
-// blob that we use for the aggregation function that will be invoking
-// this function.
-// SAFETY: This code will mutate local storage to move around amounts,
-// making it unsafe to be invoked more than once. Corecursive with
-// recurse_aggregate.
-unsafe fn addr_amt_bundle_taker(
+// Recursively descend into the aggregated bundle, returning the address
+// of the taker, and the amount they provided.
+unsafe fn recurse_aggregate_src(
     imm: &Imm,
-    x: &BundleTakerEnum,
+    src: &OnrampingSource,
     signable: &SignableAggregateArgs,
-) -> Result<BundleTakerDetails, Error> {
-    match x {
-        // We have everything in hand, this is a simple case of a single RFQ then offramp:
-        BundleTakerEnum::Args(BundleTaker {
-            args:
-                BundleTakerArgs {
-                    src:
-                        OnrampingSource::OnchainPot(OnchainPotArgs {
-                            acc_addr: taker_acc,
-                            amt,
-                        }),
-                    expiry,
-                    ms_ts,
-                    asset,
-                    is_up,
-                    price_target,
-                    outcome,
-                },
-            sig: taker_sig,
+) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
+    match src {
+        OnrampingSource::OnchainPot(OnchainPotArgs {
+            acc_addr,
+            amt,
+            asset,
         }) => {
-            if imm.should_user_sig_validate {
-                let hash: Hash = signable.hash.clone();
-                check_hash_signer(*taker_acc, hash, *ms_ts, *taker_sig)?;
-            }
-            Ok(BundleTakerDetails {
-                taker_acc: *taker_acc,
-                amt: *amt,
-                expiry: *expiry,
-                ms_ts: *ms_ts,
-                asset: *asset,
-                is_up: *is_up,
-                price_target: *price_target,
-                outcome: *outcome,
-            })
-        }
-        // We need to recurse again before bubbling up the state of the
-        // user. The next level needs to validate the signature.
-        BundleTakerEnum::Args(BundleTaker {
-            args:
-                BundleTakerArgs {
-                    src: OnrampingSource::AggregatedResult(r),
-                    ms_ts,
-                    ..
+	    // TODO: check one last time if we're able to use this by
+	    // checking if the hash is onchain:
+            Ok((*amt, *acc_addr, asset.addr()))
+        },
+        OnrampingSource::AggregatedResult(r) => {
+            match &**r {
+                AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
+                    recurse_aggregate_args(imm, args, signable, *server_sig)
                 },
-            sig: taker_sig,
-        }) => {
-            // We need to get the hash after creating some side effects
-            // here so we can safely look up the user's taker address
-            // from the hash:
-            match r.as_ref() {
-                AggregateEnum::Args(Aggregate { args, server_sig }) => {
-                    if imm.should_user_sig_validate {
-                        let hash = signable.hash.clone();
-                        let taker_acc: [u8; 20] = get_hash_taker(hash.clone());
-                        check_hash_signer(taker_acc, hash, *ms_ts, *taker_sig)?;
-                    }
-                    unsafe { recurse_aggregate(imm, args, &signable, *server_sig) }
+                // Since we use the storage to get info on what's available to be
+                // spent, this is a noop, and we just return what's there:
+                AggregateEnum::Hash(h) => {
+                    // We need to zero out the taker's position here, so
+                    // that the next code can assume it's unset. The offramp function
+                    // for the maker can adjust this itself, since we're not going to assume
+                    // that the maker wants to get their money out this way:
+                    let asset = storage::hash_asset::get(h);
+                    storage::hash_taker_leftover::set(
+                        &signable.hash.clone().into(),
+                        &asset.into(),
+                        &U::ZERO,
+                    );
+                    Ok((
+                        storage::hash_taker_leftover::get(h, &asset).into(),
+                        storage::hash_taker_addr::get(h).into(),
+                        asset.into(),
+                    ))
                 }
-                AggregateEnum::Hash(h) => taker_details_from_hash(h),
             }
         }
-        // We've already seen all of this and we need to just get the information in the hash:
-        BundleTakerEnum::Hash(h) => taker_details_from_hash(h),
     }
 }
 
 // Recursively descend into the aggregated bundle, updating the storage
 // amounts as we go. The caller should check the storage of the users
 // they're draining the liquidity from. This function will zero out the
-// amounts left over in the slots as it goes.
-// Safety: Uses the contract storage to move amounts around, taking
-// advantage of the memory performing caching at places.
-unsafe fn recurse_aggregate(
+// amounts left over in the previous slot hash as it goes, if any. There is
+// an internal concept of the hashes stored at different aggregate points
+// to tolerate market makers taking their funds out as they're participating
+// in different markets.
+// SAFETY: Uses the contract storage to move amounts around, taking
+// advantage of the memory performing caching at places. Uses the storage
+// to look up the funds involved.
+unsafe fn recurse_aggregate_args(
     imm: &Imm,
-    args: &AggregateArgs,
-    signable: &SignableAggregateArgs,
-    server_sig: Sig,
-) -> Result<BundleTakerDetails, Error> {
-    if imm.should_server_sig_validate {
-        check_server_sig(&signable.hash, &imm.server_key, server_sig)?;
-    }
-    let AggregateArgs {
+    &AggregateArgs {
         maker:
             BundleMaker {
                 args:
                     BundleMakerArgs {
-                        taker,
+                        amt: maker_amt,
+                        taker:
+                            BundleTaker {
+                                args:
+                                    BundleTakerArgs {
+                                        ref src,
+                                        expiry,
+                                        ms_ts,
+                                        is_up,
+                                        price_target,
+                                        outcome,
+                                    },
+                                sig: taker_sig,
+                            },
                         ms_ts: maker_ms_ts,
                         acc: maker_acc,
                     },
-                sig: maker_sig,
+                sig: bundle_sig,
             },
         timestamplet:
             Timestamplet {
@@ -171,52 +96,42 @@ unsafe fn recurse_aggregate(
                 timestamplet_outcome,
                 timestamplet_val,
             },
-    } = args;
-    // This function also performs some validation of the signature that
-    // we use for the server aggregation, and it also sets the hash fields
-    // so that we can't have a replay:
-    let bundle_taker_deets = unsafe { addr_amt_bundle_taker(imm, &taker, signable)? };
-    let BundleTakerDetails {
-        taker_acc,
-        maker_acc,
-        maker_amt,
-        taker_amt,
-        expiry,
-        taker_ms_ts,
-        maker_ms_ts,
-        asset,
-        is_up,
-        price_target,
-        outcome,
-    } = bundle_taker_deets;
-    // Let's perform some validation here to make sure that everything has
-    // worked okay:
-    if timestamplet_outcome != &outcome {
+    }: &AggregateArgs,
+    signable: &SignableAggregateArgs,
+    server_sig: Sig,
+) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
+    if timestamplet_outcome != outcome {
         return Err(Dis::TimestampletInconsistentOutcome.into());
     }
-    if timestamplet_time != &expiry {
+    if timestamplet_time != expiry {
         return Err(Dis::TimestampletInconsistentTime.into());
     }
-    // We don't need to validate the Timestamplet, since the
-    // AggregateArgs bundle includes it, and we validated the signature
-    // there. The taker won if the asset exceeded the price target and
-    // they were taking the up position. If it didn't, and it was down,
-    // then they lost:
-    let did_taker_win = match (timestamplet_val > &price_target, is_up) {
+    // TODO: descend into the signable here.
+    let (taker_amt, taker_acc, asset) = unsafe { recurse_aggregate_src(imm, &src, signable)? };
+    let did_taker_win = match (is_up, timestamplet_val > price_target) {
         (true, true) | (false, false) => true,
         _ => false,
     };
-    let asset_u: U = asset.into();
-    let taker_acc_u: U = taker_acc.into();
-    let maker_acc_u: U = maker_acc.into();
+    let asset_u = U::from(asset);
+    let maker_amt_u = U::from(maker_amt);
+    let taker_amt_u = U::from(taker_amt);
+    let signable_hash_u = U::from(signable.hash.clone());
     if did_taker_win {
-        storage::onramped_bal::checked_sub_res(&asset_u, &taker_acc_u, &taker_amt.into())?;
-        storage::onramped_bal::checked_add_res(&asset_u, &maker_acc_u, &taker_amt.into())?;
+        storage::hash_taker_leftover::checked_add_res(&signable_hash_u, &asset_u, &maker_amt_u)?;
     } else {
-        storage::onramped_bal::checked_sub_res(&asset_u, &maker_acc_u, &maker_amt.into())?;
-        storage::onramped_bal::checked_add_res(&asset_u, &taker_acc_u, &maker_amt.into())?;
+        storage::hash_maker_leftover::checked_add_res(&signable_hash_u, &asset_u, &taker_amt_u)?;
     }
-    Ok(bundle_taker_deets)
+    storage::hash_asset::set(&signable_hash_u, &asset_u);
+    let taker_leftover = if did_taker_win {
+        taker_amt
+            .checked_add(maker_amt)
+            .ok_or(Dis::CheckedAddOverflow)
+    } else {
+        taker_amt
+            .checked_sub(taker_amt)
+            .ok_or(Dis::CheckedSubUnderflow)
+    }?;
+    Ok((taker_leftover, taker_acc, asset))
 }
 
 pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateArgs, server_sig: Sig) -> usize {
@@ -226,7 +141,7 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateArgs, server_sig: Si
     // First, we need to validate that this combination is legitimate:
     let signable = SignableAggregateArgs::from(&args);
     unsafe {
-        recurse_aggregate(imm, &args, &signable, server_sig).unwrap();
+        recurse_aggregate_args(imm, &args, &signable, server_sig).unwrap();
     }
     0
 }
@@ -260,7 +175,8 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{entry_aggregate_to_offramp, Timestamplet};
+    use crate::{Asset, Outcome, Timestamplet};
+    use alloc::boxed::Box;
 
     #[test]
     fn test_erik_alex() {
@@ -268,18 +184,21 @@ mod test {
         // timestamp 1. Alex bets that it won't, providing $200 as the
         // compensation if Erik is correct. As Alex has provided the highest
         // offer at the conclusion of the sealed bid auction, he is chosen. At
-        // timestamp 1, Erik is correct.
+        // timestamp 1, Erik is correct. Erik provided $500 for his prediction,
+        // so he ends up with $700.
         let expiry: [u8; 6] = [0, 0, 0, 0, 0, 1];
         let outcome = Outcome::BitcoinPrice;
+        let alex_addr = [0u8; 20];
+        let erik_addr = [1u8; 20];
         let erik = BundleTaker {
             args: BundleTakerArgs {
                 src: OnrampingSource::OnchainPot(OnchainPotArgs {
-                    acc_addr: [0u8; 20],
+                    acc_addr: erik_addr,
                     amt: 500,
+                    asset: Asset::USDC,
                 }),
                 expiry,
                 ms_ts: [0u8; 6],
-                asset: Asset::USDC,
                 is_up: true,
                 price_target: 100,
                 outcome,
@@ -288,9 +207,10 @@ mod test {
         };
         let alex = BundleMaker {
             args: BundleMakerArgs {
-                taker: BundleTakerEnum::Args(erik),
+                taker: erik,
                 ms_ts: [0u8; 6],
-                acc: [0u8; 20],
+                acc: alex_addr,
+                amt: 200,
             },
             sig: [0u8; 64],
         };
@@ -302,6 +222,92 @@ mod test {
                 timestamplet_val: 101,
             },
         };
-        assert_eq!(0, entry_aggregate_to_offramp(&Imm::default(), agg, [0u8; 64]));
+        let signable = SignableAggregateArgs::from(&agg);
+        assert_eq!(
+            (700, erik_addr, Asset::USDC.addr()),
+            unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg, &signable, [0u8; 64]).unwrap()
+            }
+        );
+    }
+
+    #[test]
+    fn test_erik_alex_after_already() {
+        // In this example, Erik is reinvesting his profits to play the game with Alex again.
+        let expiry_1 = [0, 0, 0, 0, 0, 1];
+        let expiry_2 =[0, 0, 0, 0, 0, 2];
+        let outcome = Outcome::BitcoinPrice;
+        let alex_addr = [0u8; 20];
+        let erik_addr = [1u8; 20];
+        let erik_1 = BundleTaker {
+            args: BundleTakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: erik_addr,
+                    amt: 500,
+                    asset: Asset::USDC,
+                }),
+                expiry: expiry_1,
+                ms_ts: [0u8; 6],
+                is_up: true,
+                price_target: 100,
+                outcome,
+            },
+            sig: [0u8; 64],
+        };
+        let alex_1 = BundleMaker {
+            args: BundleMakerArgs {
+                taker: erik_1,
+                ms_ts: [0u8; 6],
+                acc: alex_addr,
+                amt: 200,
+            },
+            sig: [0u8; 64],
+        };
+        let agg_1 = AggregateArgs {
+            maker: alex_1,
+            timestamplet: Timestamplet {
+                timestamplet_time: [0, 0, 0, 0, 0, 1],
+                timestamplet_outcome: outcome,
+                timestamplet_val: 101,
+            },
+        };
+        let erik_2 = BundleTaker {
+            args: BundleTakerArgs {
+                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Aggregate {
+                    args: agg_1,
+                    server_sig: [0u8; 64],
+                }))),
+                expiry: expiry_2,
+                ms_ts: [1u8; 6],
+                is_up: false,
+                price_target: 50,
+                outcome,
+            },
+            sig: [0u8; 64],
+        };
+        let alex_2 = BundleMaker {
+            args: BundleMakerArgs {
+                taker: erik_2,
+                ms_ts: [1u8; 6],
+                acc: alex_addr,
+                amt: 300,
+            },
+            sig: [0u8; 64],
+        };
+        let agg_2 = AggregateArgs {
+            maker: alex_2,
+            timestamplet: Timestamplet {
+                timestamplet_time: [0, 0, 0, 0, 0, 2],
+                timestamplet_outcome: outcome,
+                timestamplet_val: 40,
+            }
+        };
+        let signable = SignableAggregateArgs::from(&agg_2);
+        assert_eq!(
+            (1000, erik_addr, Asset::USDC.addr()),
+            unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg_2, &signable, [0u8; 64]).unwrap()
+            }
+        );
     }
 }

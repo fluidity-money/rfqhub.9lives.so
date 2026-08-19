@@ -65,6 +65,7 @@ pub const TOPIC_GLOBAL_BALANCE_CHANGED: U =
 pub struct OnchainPotArgs {
     pub acc_addr: [u8; 20],
     pub amt: u64,
+    pub asset: Asset,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
@@ -83,8 +84,6 @@ pub struct BundleTakerArgs {
     pub expiry: [u8; 6],
     /// The nonce that we use here. A millisecond timestamp.
     pub ms_ts: [u8; 6],
-    /// The desired asset that the user is denominating this trade for.
-    pub asset: Asset,
     /// Whether the taker wants the asset to go up or down.
     pub is_up: bool,
     /// The target of the price, which should be exceeded or lower than:
@@ -100,15 +99,11 @@ pub struct BundleTaker {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
-pub enum BundleTakerEnum {
-    Args(BundleTaker),
-    Hash(U),
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub struct BundleMakerArgs {
-    /// The compensation for when this market is correct:
-    pub taker: BundleTakerEnum,
+    /// The compensation for if the taker is correct:
+    pub amt: u64,
+    /// The taker this is a part of:
+    pub taker: BundleTaker,
     /// The nonce that we use here.
     pub ms_ts: [u8; 6],
     /// The account of the maker.

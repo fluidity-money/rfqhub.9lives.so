@@ -14,8 +14,8 @@
 use borsh::BorshSerialize;
 
 use crate::{
-    AggregateArgs, AggregateEnum, Asset, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, BundleTakerEnum, OnrampingSource, Outcome, Aggregate,
+    Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
+    BundleTakerArgs, OnrampingSource, Outcome,
 };
 
 use array_concat::concat_arrays;
@@ -63,7 +63,6 @@ pub struct SignableBundleTakerArgs {
 pub struct InnerBundleTakerArgs {
     pub expiry: [u8; 6],
     pub ms_ts: [u8; 6],
-    pub asset: Asset,
     pub is_up: bool,
     pub price_target: u64,
     pub outcome: Outcome,
@@ -73,11 +72,12 @@ pub struct InnerBundleTakerArgs {
 pub struct InnerBundleMaker {
     pub ms_ts: [u8; 6],
     pub acc: [u8; 20],
+    pub amt: u64,
 }
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct SignableBundleMakerArgs {
-    pub taker_args: Option<SignableBundleTakerArgs>,
+    pub taker_args: SignableBundleTakerArgs,
     pub hash: Hash,
 }
 
@@ -99,8 +99,11 @@ impl From<&AggregateArgs> for SignableAggregateArgs {
     ) -> Self {
         let maker = SignableBundleMakerArgs::from(maker_args);
         let timestamplet = sha512(&borsh::to_vec(&timestamplet).unwrap());
-        let pre: [u8; 1 + 32 + 64] =
-            concat_arrays!([PreDiscriminant::AggregateEnum as u8], maker.hash.clone().into(), timestamplet);
+        let pre: [u8; 1 + 32 + 64] = concat_arrays!(
+            [PreDiscriminant::AggregateEnum as u8],
+            maker.hash.clone().into(),
+            timestamplet
+        );
         Self {
             maker,
             hash: Hash::JustInTime(sha512(&pre)),
@@ -109,20 +112,27 @@ impl From<&AggregateArgs> for SignableAggregateArgs {
 }
 
 impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
-    fn from(BundleMakerArgs { taker, ms_ts, acc }: &BundleMakerArgs) -> Self {
-        let (taker_pre, taker_hash) = match taker {
-            BundleTakerEnum::Args(BundleTaker { args, .. }) => {
-                let taker = SignableBundleTakerArgs::from(args);
-                let hash = taker.hash.clone();
-                (Some(taker), hash)
-            }
-            BundleTakerEnum::Hash(h) => (None, Hash::Onchain(h.clone())),
-        };
-        let content = sha512(&borsh::to_vec(&InnerBundleMaker { ms_ts: *ms_ts, acc: *acc }).unwrap());
+    fn from(
+        BundleMakerArgs {
+            taker: BundleTaker { args, .. },
+            ms_ts,
+            acc,
+            amt,
+        }: &BundleMakerArgs,
+    ) -> Self {
+        let taker_pre = SignableBundleTakerArgs::from(args);
+        let content = sha512(
+            &borsh::to_vec(&InnerBundleMaker {
+                ms_ts: *ms_ts,
+                acc: *acc,
+                amt: *amt,
+            })
+            .unwrap(),
+        );
         let pre: [u8; 1 + 64 + 32] = concat_arrays!(
             [PreDiscriminant::BundleMakerArgs as u8],
             content,
-            taker_hash.into()
+            taker_pre.hash.clone().into()
         );
         Self {
             taker_args: taker_pre,
@@ -137,7 +147,6 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             src,
             expiry,
             ms_ts,
-            asset,
             is_up,
             price_target,
             outcome,
@@ -154,16 +163,13 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
                     let hash = pre.hash.clone();
                     (Some(Box::new(pre)), hash)
                 }
-                AggregateEnum::Hash(u) => {
-                    (None, Hash::Onchain(u))
-                }
+                AggregateEnum::Hash(u) => (None, Hash::Onchain(u)),
             },
         };
         let content = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
                 expiry: *expiry,
                 ms_ts: *ms_ts,
-                asset: *asset,
                 is_up: *is_up,
                 price_target: *price_target,
                 outcome: *outcome,

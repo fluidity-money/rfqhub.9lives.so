@@ -1,7 +1,4 @@
-use crate::{
-     TOPIC_BALANCE_CHANGED, TOPIC_GLOBAL_BALANCE_CHANGED, call_eip20,
-    storage,
-};
+use crate::{TOPIC_BALANCE_CHANGED, TOPIC_GLOBAL_BALANCE_CHANGED, call_eip20, storage};
 
 use bobcat_sdk::{
     entry::{contract_address, msg_sender},
