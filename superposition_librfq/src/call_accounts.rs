@@ -1,11 +1,14 @@
-use bobcat_sdk::{call::call_unit, maths::U};
+use bobcat_sdk::{
+    call::{call_slice, call_unit},
+    maths::U,
+};
 
 use superposition_libaccounts::{Args, Sig, StatementArgs};
 
 use crate::signable::Hash;
 
 pub fn get_owner(addr: [u8; 20]) -> [u8; 20] {
-    let (rc, _, o) = call_slice::<[u8; 20]>(
+    let (rc, _, o) = call_slice::<20>(
         addr,
         &borsh::to_vec(&Args::Owner).unwrap(),
         &U::ZERO,

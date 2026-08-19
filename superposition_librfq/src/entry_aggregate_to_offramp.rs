@@ -141,7 +141,7 @@ unsafe fn recurse_aggregate_args(
 
 // Entry the aggregate recursive function, returning the amount that's
 // able to be withdrawn by the party given.
-pub fn entry_aggregate_enum(
+pub fn recurse_aggregate_enum(
     imm: &Imm,
     args: &AggregateEnum,
     is_taker: bool,
@@ -151,7 +151,7 @@ pub fn entry_aggregate_enum(
         AggregateEnum::Args(Aggregate { args, server_sig }) => {
             let signable = SignableAggregateArgs::from(args);
             let (taker_leftover, taker_acc, asset) =
-                recurse_aggregate_args(imm, args, &signable, server_sig)?;
+                unsafe { recurse_aggregate_args(imm, args, &signable, server_sig)? };
             let sender = msg_sender();
             if is_taker {
                 let recipient = call_accounts::get_owner(taker_acc);
@@ -173,6 +173,19 @@ pub fn entry_aggregate_enum(
                 Ok(maker_leftover.into())
             }
         }
+        AggregateEnum::Hash(h) => {
+            let asset = storage::hash_asset::get(h);
+            Ok(if is_taker {
+                let amt = storage::hash_taker_leftover::get(&h, &asset.into());
+                storage::hash_taker_leftover::set(&h, &asset.into(), &U::ZERO);
+                amt
+            } else {
+                let amt = storage::hash_maker_leftover::get(&h, &asset.into());
+                storage::hash_maker_leftover::set(&h, &asset.into(), &U::ZERO);
+                amt
+            }
+            .into())
+        }
     }
 }
 
@@ -184,10 +197,7 @@ pub fn entry_aggregate_to_offramp(
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
-    let signable = SignableAggregateArgs::from(&args);
-    unsafe {
-        recurse_aggregate_args(imm, &args, &signable, server_sig).unwrap();
-    }
+    recurse_aggregate_enum(imm, &args, is_taker, server_sig).unwrap();
     0
 }
 
@@ -264,7 +274,7 @@ mod test {
         };
         let signable = SignableAggregateArgs::from(&agg);
         assert_eq!((700, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg, &signable, [0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg, &signable, &[0u8; 64]).unwrap()
         });
     }
 
@@ -342,7 +352,7 @@ mod test {
         };
         let signable = SignableAggregateArgs::from(&agg_2);
         assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, [0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
         });
     }
 
@@ -421,7 +431,7 @@ mod test {
         };
         let signable = SignableAggregateArgs::from(&agg_2);
         assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, [0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
         });
     }
 }
