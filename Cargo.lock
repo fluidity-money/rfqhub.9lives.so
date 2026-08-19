@@ -399,6 +399,7 @@ dependencies = [
  "bobcat-sdk",
  "borsh",
  "const-hex",
+ "paste",
  "superposition_librfq",
 ]
 

@@ -13,3 +13,7 @@ bobcat-sdk.workspace = true
 const-hex = { version = "1.19.1", default-features = false }
 superposition_librfq = { version = "0.1.0", path = "../superposition_librfq" }
 borsh.workspace = true
+paste = "1.0.15"
+
+[features]
+testing = ["superposition_librfq/std"]

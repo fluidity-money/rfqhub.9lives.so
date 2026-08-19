@@ -154,12 +154,6 @@ pub enum AggregateEnum {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
-pub struct AggregateToOfframpArgs {
-    pub args: AggregateEnum,
-    pub is_taker: bool,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum Args {
     Version,
     /// Dumps the source code of the contract using the bobcat-create harness.
@@ -188,9 +182,8 @@ pub enum Args {
     /// Superposition aggregator. Offramps the taker that was involved
     /// in the submission of the data.
     AggregateToOfframp {
-        args: AggregateToOfframpArgs,
-        /// For the aggregation here, we need to use the server signature to prevent abuse:
-        server_sig: Sig,
+        args: AggregateEnum,
+        is_taker: bool,
     },
 }
 
@@ -201,8 +194,8 @@ pub fn entry(imm: &Imm, op: Args) -> usize {
         Args::Balance { asset, addr } => entry_balance(asset, addr),
         Args::OnrampingFromBal { asset, amt } => entry_onramping_from_bal(asset, amt),
         Args::Offramp { args, server_sig } => entry_offramp(&imm, args, server_sig),
-        Args::AggregateToOfframp { args, server_sig } => {
-            entry_aggregate_to_offramp(imm, args, server_sig)
+        Args::AggregateToOfframp { args, is_taker } => {
+            entry_aggregate_to_offramp(imm, args, is_taker)
         }
     }
 }

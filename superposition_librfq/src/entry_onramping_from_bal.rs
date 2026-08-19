@@ -21,9 +21,16 @@ pub fn entry_onramping_from_bal(asset: Asset, amt: u64) -> usize {
         call_eip20::safe_transfer_from(asset_addr, sender, our_addr, &amt_u),
         "transfer from failed"
     );
-    let user_bal =
-        storage::onramped_bal::checked_add_res(&asset_addr_u, &sender_u, &amt_u).unwrap();
-    let global_bal = storage::global_bal::checked_add_res(&asset_addr_u, &amt_u).unwrap();
+    let user_bal = storage::onramped_bal::checked_add_res(
+        &asset_addr_u,
+        &sender_u,
+        &amt_u,
+        "onramping from bal",
+    )
+    .unwrap();
+    let global_bal =
+        storage::global_bal::checked_add_res(&asset_addr_u, &amt_u, "incresaing global bal")
+            .unwrap();
     emit!(TOPIC_BALANCE_CHANGED, sender, asset_addr, user_bal);
     emit!(TOPIC_GLOBAL_BALANCE_CHANGED, asset_addr, global_bal);
     0

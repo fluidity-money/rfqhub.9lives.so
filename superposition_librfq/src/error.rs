@@ -18,10 +18,19 @@ pub enum Dis {
 pub struct Error {
     pub dis: Dis,
     pub hash: Option<U>,
+    pub storage: Option<&'static str>,
+    pub prev_amt: Option<U>,
+    pub hint: Option<&'static str>,
 }
 
 impl From<Dis> for Error {
     fn from(dis: Dis) -> Error {
-        Error { dis, hash: None }
+        Error {
+            dis,
+            hash: None,
+            storage: None,
+            prev_amt: None,
+            hint: None,
+        }
     }
 }

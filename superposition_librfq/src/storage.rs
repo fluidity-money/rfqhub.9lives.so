@@ -11,13 +11,11 @@ macro_rules! storage {
             items: [$($name($($param),*)),*]
         }
     };
-
     (
         @internal
         counter: $counter:expr,
         items: []
     ) => {};
-
     (
         @internal
         counter: $counter:expr,
@@ -30,15 +28,26 @@ macro_rules! storage {
             pub(crate) use bobcat_sdk::storage::*;
             pub use crate::error::{Dis, Error};
             use bobcat_sdk::maths::{u, U};
-
             const SLOT: U = u!($counter);
-
+            #[inline]
+            fn storage_error(
+                dis: Dis,
+                prev_amt: U,
+                hint: &'static str,
+            ) -> Error {
+                Error {
+                    dis,
+                    hash: None,
+                    storage: Some(stringify!($name)),
+                    prev_amt: Some(prev_amt),
+                    hint: Some(hint),
+                }
+            }
             storage! {
                 @impl
                 params: [$($param),*]
             }
         }
-
         $(
             storage! {
                 @internal
@@ -47,7 +56,6 @@ macro_rules! storage {
             }
         )?
     };
-
     (
         @impl
         params: []
@@ -55,95 +63,161 @@ macro_rules! storage {
         pub fn get() -> U {
             storage_load(&SLOT)
         }
-
         pub fn set(value: &U) {
             storage_store(&SLOT, value);
         }
-
-        pub fn checked_add_res(value: &U) -> Result<U, Error> {
+        pub fn checked_add_res(
+            value: &U,
+            hint: &'static str,
+        ) -> Result<U, Error> {
             let current = get();
             let next =
-                bobcat_sdk::maths::checked_add_opt(&current, value)
-                    .ok_or(Dis::CheckedAddOverflow)?;
+                bobcat_sdk::maths::checked_add_opt(
+                    &current,
+                    value,
+                )
+                .ok_or_else(|| {
+                    storage_error(
+                        Dis::CheckedAddOverflow,
+                        current,
+                        hint,
+                    )
+                })?;
             set(&next);
             Ok(next)
         }
-
-        pub fn checked_sub_res(value: &U) -> Result<U, Error> {
+        pub fn checked_sub_res(
+            value: &U,
+            hint: &'static str,
+        ) -> Result<U, Error> {
             let current = get();
             let next =
-                bobcat_sdk::maths::checked_sub_opt(&current, value)
-                    .ok_or(Dis::CheckedSubUnderflow)?;
+                bobcat_sdk::maths::checked_sub_opt(
+                    &current,
+                    value,
+                )
+                .ok_or_else(|| {
+                    storage_error(
+                        Dis::CheckedSubUnderflow,
+                        current,
+                        hint,
+                    )
+                })?;
             set(&next);
             Ok(next)
         }
     };
-
     (
         @impl
         params: [$($param:ident),+]
     ) => {
-        fn storage_slot($($param: &U),+) -> U {
+        fn storage_slot(
+            $($param: &U),+
+        ) -> U {
             storage! {
                 @derive_slot
                 slot: SLOT,
                 keys: [$($param),+]
             }
         }
-
-        pub fn get($($param: &U),+) -> U {
+        pub fn get(
+            $($param: &U),+
+        ) -> U {
             let slot = storage_slot($($param),+);
             storage_load(&slot)
         }
-
-        pub fn set($($param: &U,)+ value: &U) {
+        pub fn set(
+            $($param: &U,)+
+            value: &U
+        ) {
             let slot = storage_slot($($param),+);
-            storage_store(&slot, value);
+            storage_store(
+                &slot,
+                value,
+            );
         }
-
-        pub fn checked_add_res($($param: &U,)+ value: &U) -> Result<U, Error> {
-            let slot = storage_slot($($param),+);
-            let current = storage_load(&slot);
-            let next =
-                bobcat_sdk::maths::checked_add_opt(&current, value)
-                    .ok_or(Error::from(Dis::CheckedAddOverflow))?;
-            storage_store(&slot, &next);
-            Ok(next)
-        }
-
-        pub fn checked_sub_res($($param: &U,)+ value: &U) -> Result<U, Error> {
+        pub fn checked_add_res(
+            $($param: &U,)+
+            value: &U,
+            hint: &'static str,
+        ) -> Result<U, Error> {
             let slot = storage_slot($($param),+);
             let current = storage_load(&slot);
             let next =
-                bobcat_sdk::maths::checked_sub_opt(&current, value)
-                    .ok_or(Error::from(Dis::CheckedSubUnderflow))?;
-            storage_store(&slot, &next);
+                bobcat_sdk::maths::checked_add_opt(
+                    &current,
+                    value,
+                )
+                .ok_or_else(|| {
+                    storage_error(
+                        Dis::CheckedAddOverflow,
+                        current,
+                        hint,
+                    )
+                })?;
+            storage_store(
+                &slot,
+                &next,
+            );
             Ok(next)
         }
-
-        pub fn exchange($($param: &U),+) {
+        pub fn checked_sub_res(
+            $($param: &U,)+
+            value: &U,
+            hint: &'static str,
+        ) -> Result<U, Error> {
+            let slot = storage_slot($($param),+);
+            let current = storage_load(&slot);
+            let next =
+                bobcat_sdk::maths::checked_sub_opt(
+                    &current,
+                    value,
+                )
+                .ok_or_else(|| {
+                    storage_error(
+                        Dis::CheckedSubUnderflow,
+                        current,
+                        hint,
+                    )
+                })?;
+            storage_store(
+                &slot,
+                &next,
+            );
+            Ok(next)
+        }
+        pub fn exchange(
+            $($param: &U),+
+        ) {
             let slot = storage_slot($($param),+);
             assert!(
-                storage_exchange_bool(&slot, false),
+                storage_exchange_bool(
+                    &slot,
+                    false,
+                ),
                 "exchange failed"
             );
         }
     };
-
     (
         @derive_slot
         slot: $slot:expr,
-        keys: [$key:ident $(, $rest:ident)*]
+        keys: [
+            $key:ident
+            $(, $rest:ident)*
+        ]
     ) => {{
-        let slot = slot_map($key, &$slot);
-
+        let slot =
+            slot_map(
+                $key,
+                &$slot,
+            );
         storage! {
             @derive_slot
             slot: slot,
             keys: [$($rest),*]
         }
     }};
-
     (
         @derive_slot
         slot: $slot:expr,
