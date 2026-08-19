@@ -3,7 +3,7 @@ use crate::{
     BundleTaker, BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,
     call_accounts,
     error::{Dis, Error},
-    signable::{Hash, SignableAggregateArgs},
+    signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
     storage,
 };
 
@@ -14,7 +14,7 @@ use bobcat_sdk::{entry::msg_sender, maths::U};
 unsafe fn recurse_aggregate_src(
     imm: &Imm,
     src: &OnrampingSource,
-    signable: &SignableAggregateArgs,
+    signable: &SignableBundleTakerArgs,
 ) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
     match src {
         OnrampingSource::OnchainPot(OnchainPotArgs {
@@ -29,7 +29,11 @@ unsafe fn recurse_aggregate_src(
         OnrampingSource::AggregatedResult(r) => {
             match &**r {
                 AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
-                    recurse_aggregate_args(imm, args, signable, server_sig)
+                    if let Some(ref res) = signable.aggregated_res {
+                        recurse_aggregate_args(imm, args, &res, server_sig)
+                    } else {
+                        Err(Dis::InconsistentSignable.into())
+                    }
                 },
                 // Since we use the storage to get info on what's available to be
                 // spent, this is a noop, and we just return what's there:
@@ -107,8 +111,17 @@ unsafe fn recurse_aggregate_args(
     if timestamplet_time != expiry {
         return Err(Dis::TimestampletInconsistentTime.into());
     }
-    // TODO: descend into the signable here.
-    let (taker_amt, taker_acc, asset) = unsafe { recurse_aggregate_src(imm, &src, signable)? };
+    // Check if we've actually seen this hash before, and if we have, bug
+    // out. They need to submit with the hash again themselves:
+    let signable_hash_u = U::from(signable.hash.clone());
+    if storage::hash_asset::get(&signable_hash_u).is_some() {
+        return Err(Error {
+            hash: Some(signable_hash_u),
+            ..Dis::HashAlreadySeen.into()
+        });
+    }
+    let (taker_amt, taker_acc, asset) =
+        unsafe { recurse_aggregate_src(imm, &src, &signable.maker.taker_args)? };
     let did_taker_win = match (is_up, timestamplet_val > price_target) {
         (true, true) | (false, false) => true,
         _ => false,
@@ -116,7 +129,6 @@ unsafe fn recurse_aggregate_args(
     let asset_u = U::from(asset);
     let maker_amt_u = U::from(maker_amt);
     let taker_amt_u = U::from(taker_amt);
-    let signable_hash_u = U::from(signable.hash.clone());
     storage::hash_taker_addr::set(&signable_hash_u, &taker_acc.into());
     storage::hash_maker_addr::set(&signable_hash_u, &maker_acc.into());
     if did_taker_win {
@@ -357,10 +369,10 @@ mod test {
     }
 
     #[test]
-    fn test_erik_alex_posted_blob() {
-        // In this example, Erik is reinvesting his profits to play the
-        // game with Alex again. But unlike the previous example, Alex
-        // posted his blob, so the interaction was seen on-chain.
+    fn test_erik_alex_after_posted_blob() {
+        // In this example, Erik is reinvesting profits from a result that was
+        // already posted on-chain, so the second aggregate refers to the first
+        // aggregate by hash instead of inlining the same blob again.
         let expiry_1 = [0, 0, 0, 0, 0, 1];
         let expiry_2 = [0, 0, 0, 0, 0, 2];
         let outcome = Outcome::BitcoinPrice;
@@ -398,12 +410,16 @@ mod test {
                 timestamplet_val: 101,
             },
         };
+        let signable_1 = SignableAggregateArgs::from(&agg_1);
+        assert_eq!((700, erik_addr, Asset::USDC.addr()), unsafe {
+            recurse_aggregate_args(&Imm::default(), &agg_1, &signable_1, &[0u8; 64]).unwrap()
+        });
+
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Aggregate {
-                    args: agg_1,
-                    server_sig: [0u8; 64],
-                }))),
+                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Hash(
+                    signable_1.hash.into(),
+                ))),
                 expiry: expiry_2,
                 ms_ts: [1u8; 6],
                 is_up: false,
@@ -429,9 +445,13 @@ mod test {
                 timestamplet_val: 40,
             },
         };
-        let signable = SignableAggregateArgs::from(&agg_2);
-        assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
+        let signable_2 = SignableAggregateArgs::from(&agg_2);
+        // Current behaviour: once the first aggregate has been posted and the
+        // second aggregate refers to it by hash, only the posted maker delta is
+        // reusable as the taker's source. That makes the second aggregate return
+        // 500, unlike test_erik_alex_after_already_same_blob's 1000.
+        assert_eq!((500, erik_addr, Asset::USDC.addr()), unsafe {
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
         });
     }
 }
