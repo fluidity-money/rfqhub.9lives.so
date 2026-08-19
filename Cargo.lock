@@ -949,9 +949,9 @@ dependencies = [
 
 [[package]]
 name = "superposition_libaccounts"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7a2efe7bea3fcb231fe92645c199aaaaf8de99371aba42e0a2a6be2ef696d4d"
+checksum = "e913018432f1a6105c4fa3ef9161dc27c40b4a25586cff558d662bc49dae07ee"
 dependencies = [
  "array-concat",
  "bobcat-sdk",

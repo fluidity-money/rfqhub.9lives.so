@@ -1,12 +1,13 @@
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_accounts,
+    Aggregate, AggregateArgs, AggregateEnum, AggregateToOfframpArgs, BundleMaker, BundleMakerArgs,
+    BundleTaker, BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,
+    call_accounts,
     error::{Dis, Error},
     signable::{Hash, SignableAggregateArgs},
     storage,
 };
 
-use bobcat_sdk::maths::U;
+use bobcat_sdk::{entry::msg_sender, maths::U};
 
 // Recursively descend into the aggregated bundle, returning the address
 // of the taker, and the amount they provided.
@@ -21,14 +22,14 @@ unsafe fn recurse_aggregate_src(
             amt,
             asset,
         }) => {
-	    // TODO: check one last time if we're able to use this by
-	    // checking if the hash is onchain:
+            // TODO: check one last time if we're able to use this by
+            // checking if the hash is onchain:
             Ok((*amt, *acc_addr, asset.addr()))
-        },
+        }
         OnrampingSource::AggregatedResult(r) => {
             match &**r {
                 AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
-                    recurse_aggregate_args(imm, args, signable, *server_sig)
+                    recurse_aggregate_args(imm, args, signable, server_sig)
                 },
                 // Since we use the storage to get info on what's available to be
                 // spent, this is a noop, and we just return what's there:
@@ -98,7 +99,7 @@ unsafe fn recurse_aggregate_args(
             },
     }: &AggregateArgs,
     signable: &SignableAggregateArgs,
-    server_sig: Sig,
+    server_sig: &Sig,
 ) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
     if timestamplet_outcome != outcome {
         return Err(Dis::TimestampletInconsistentOutcome.into());
@@ -116,9 +117,13 @@ unsafe fn recurse_aggregate_args(
     let maker_amt_u = U::from(maker_amt);
     let taker_amt_u = U::from(taker_amt);
     let signable_hash_u = U::from(signable.hash.clone());
+    storage::hash_taker_addr::set(&signable_hash_u, &taker_acc.into());
+    storage::hash_maker_addr::set(&signable_hash_u, &maker_acc.into());
     if did_taker_win {
+        storage::hash_taker_position::checked_add_res(&signable_hash_u, &asset_u, &maker_amt_u)?;
         storage::hash_taker_leftover::checked_add_res(&signable_hash_u, &asset_u, &maker_amt_u)?;
     } else {
+        storage::hash_maker_position::checked_add_res(&signable_hash_u, &asset_u, &taker_amt_u)?;
         storage::hash_maker_leftover::checked_add_res(&signable_hash_u, &asset_u, &taker_amt_u)?;
     }
     storage::hash_asset::set(&signable_hash_u, &asset_u);
@@ -134,11 +139,51 @@ unsafe fn recurse_aggregate_args(
     Ok((taker_leftover, taker_acc, asset))
 }
 
-pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateArgs, server_sig: Sig) -> usize {
+// Entry the aggregate recursive function, returning the amount that's
+// able to be withdrawn by the party given.
+pub fn entry_aggregate_enum(
+    imm: &Imm,
+    args: &AggregateEnum,
+    is_taker: bool,
+    server_sig: Sig,
+) -> Result<u64, Error> {
+    match args {
+        AggregateEnum::Args(Aggregate { args, server_sig }) => {
+            let signable = SignableAggregateArgs::from(args);
+            let (taker_leftover, taker_acc, asset) =
+                recurse_aggregate_args(imm, args, &signable, server_sig)?;
+            let sender = msg_sender();
+            if is_taker {
+                let recipient = call_accounts::get_owner(taker_acc);
+                if recipient != sender {
+                    return Err(Dis::SenderNotTaker.into());
+                }
+                storage::hash_taker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
+                Ok(taker_leftover)
+            } else {
+                let signable_hash_u: U = signable.hash.clone().into();
+                let maker_acc: [u8; 20] = storage::hash_maker_addr::get(&signable_hash_u).into();
+                let recipient = call_accounts::get_owner(maker_acc);
+                if recipient != sender {
+                    return Err(Dis::SenderNotTaker.into());
+                }
+                let maker_leftover =
+                    storage::hash_maker_leftover::get(&signable_hash_u, &asset.into());
+                storage::hash_maker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
+                Ok(maker_leftover.into())
+            }
+        }
+    }
+}
+
+pub fn entry_aggregate_to_offramp(
+    imm: &Imm,
+    AggregateToOfframpArgs { args, is_taker }: AggregateToOfframpArgs,
+    server_sig: Sig,
+) -> usize {
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
-    // First, we need to validate that this combination is legitimate:
     let signable = SignableAggregateArgs::from(&args);
     unsafe {
         recurse_aggregate_args(imm, &args, &signable, server_sig).unwrap();
@@ -152,11 +197,6 @@ fn check_hash_signer(addr: [u8; 20], hash: Hash, ms_ts: [u8; 6], sig: Sig) -> Re
     } else {
         Err(Dis::StatementCheckFailed.into())
     }
-}
-
-fn get_hash_taker(hash: Hash) -> [u8; 20] {
-    let h: U = hash.into();
-    storage::hash_taker_addr::get(&h).into()
 }
 
 fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
@@ -223,19 +263,17 @@ mod test {
             },
         };
         let signable = SignableAggregateArgs::from(&agg);
-        assert_eq!(
-            (700, erik_addr, Asset::USDC.addr()),
-            unsafe {
-                recurse_aggregate_args(&Imm::default(), &agg, &signable, [0u8; 64]).unwrap()
-            }
-        );
+        assert_eq!((700, erik_addr, Asset::USDC.addr()), unsafe {
+            recurse_aggregate_args(&Imm::default(), &agg, &signable, [0u8; 64]).unwrap()
+        });
     }
 
     #[test]
-    fn test_erik_alex_after_already() {
-        // In this example, Erik is reinvesting his profits to play the game with Alex again.
+    fn test_erik_alex_after_already_same_blob() {
+        // In this example, Erik is reinvesting his profits to play the
+        // game with Alex again.
         let expiry_1 = [0, 0, 0, 0, 0, 1];
-        let expiry_2 =[0, 0, 0, 0, 0, 2];
+        let expiry_2 = [0, 0, 0, 0, 0, 2];
         let outcome = Outcome::BitcoinPrice;
         let alex_addr = [0u8; 20];
         let erik_addr = [1u8; 20];
@@ -300,14 +338,90 @@ mod test {
                 timestamplet_time: [0, 0, 0, 0, 0, 2],
                 timestamplet_outcome: outcome,
                 timestamplet_val: 40,
-            }
+            },
         };
         let signable = SignableAggregateArgs::from(&agg_2);
-        assert_eq!(
-            (1000, erik_addr, Asset::USDC.addr()),
-            unsafe {
-                recurse_aggregate_args(&Imm::default(), &agg_2, &signable, [0u8; 64]).unwrap()
-            }
-        );
+        assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, [0u8; 64]).unwrap()
+        });
+    }
+
+    #[test]
+    fn test_erik_alex_posted_blob() {
+        // In this example, Erik is reinvesting his profits to play the
+        // game with Alex again. But unlike the previous example, Alex
+        // posted his blob, so the interaction was seen on-chain.
+        let expiry_1 = [0, 0, 0, 0, 0, 1];
+        let expiry_2 = [0, 0, 0, 0, 0, 2];
+        let outcome = Outcome::BitcoinPrice;
+        let alex_addr = [0u8; 20];
+        let erik_addr = [1u8; 20];
+        let erik_1 = BundleTaker {
+            args: BundleTakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: erik_addr,
+                    amt: 500,
+                    asset: Asset::USDC,
+                }),
+                expiry: expiry_1,
+                ms_ts: [0u8; 6],
+                is_up: true,
+                price_target: 100,
+                outcome,
+            },
+            sig: [0u8; 64],
+        };
+        let alex_1 = BundleMaker {
+            args: BundleMakerArgs {
+                taker: erik_1,
+                ms_ts: [0u8; 6],
+                acc: alex_addr,
+                amt: 200,
+            },
+            sig: [0u8; 64],
+        };
+        let agg_1 = AggregateArgs {
+            maker: alex_1,
+            timestamplet: Timestamplet {
+                timestamplet_time: [0, 0, 0, 0, 0, 1],
+                timestamplet_outcome: outcome,
+                timestamplet_val: 101,
+            },
+        };
+        let erik_2 = BundleTaker {
+            args: BundleTakerArgs {
+                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Aggregate {
+                    args: agg_1,
+                    server_sig: [0u8; 64],
+                }))),
+                expiry: expiry_2,
+                ms_ts: [1u8; 6],
+                is_up: false,
+                price_target: 50,
+                outcome,
+            },
+            sig: [0u8; 64],
+        };
+        let alex_2 = BundleMaker {
+            args: BundleMakerArgs {
+                taker: erik_2,
+                ms_ts: [1u8; 6],
+                acc: alex_addr,
+                amt: 300,
+            },
+            sig: [0u8; 64],
+        };
+        let agg_2 = AggregateArgs {
+            maker: alex_2,
+            timestamplet: Timestamplet {
+                timestamplet_time: [0, 0, 0, 0, 0, 2],
+                timestamplet_outcome: outcome,
+                timestamplet_val: 40,
+            },
+        };
+        let signable = SignableAggregateArgs::from(&agg_2);
+        assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, [0u8; 64]).unwrap()
+        });
     }
 }

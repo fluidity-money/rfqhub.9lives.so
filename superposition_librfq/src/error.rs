@@ -8,6 +8,7 @@ pub enum Dis {
     BadSignature,
     CheckedAddOverflow,
     CheckedSubUnderflow,
+    SenderNotTaker,
 }
 
 #[derive(Debug, Clone, PartialEq)]

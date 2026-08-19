@@ -154,6 +154,12 @@ pub enum AggregateEnum {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+pub struct AggregateToOfframpArgs {
+    pub args: AggregateEnum,
+    pub is_taker: bool,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 pub enum Args {
     Version,
     /// Dumps the source code of the contract using the bobcat-create harness.
@@ -179,14 +185,11 @@ pub enum Args {
         server_sig: Sig,
     },
     /// Aggregate a pair of bundles together, with a signature from the
-    /// Superposition aggregator. Moves the end result of the pot to the
-    /// takers and makers that were involved, and hashes the input data
-    /// so that later we can reuse the input if we want without needing to
-    /// supply the entire calldata. It will revert any users of the entrypoint
-    /// here.
+    /// Superposition aggregator. Offramps the taker that was involved
+    /// in the submission of the data.
     AggregateToOfframp {
-        args: AggregateArgs,
-        /// For the aggregation here, we need to use the server signature to prevent abuse.
+        args: AggregateToOfframpArgs,
+        /// For the aggregation here, we need to use the server signature to prevent abuse:
         server_sig: Sig,
     },
 }

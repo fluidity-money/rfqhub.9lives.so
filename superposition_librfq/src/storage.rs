@@ -161,12 +161,22 @@ storage! {
     // Onramped balance of the account address given. Should be possible
     // to spend by the account address given here.
     onramped_bal(asset, account),
-    // Taker amount that is available from the hash given.
+    // Taker amount that is available to be withdrawn for the taker of this
+    // position:
     hash_taker_leftover(hash, asset),
-    // Maker amount that is available from the hash given.
+    // Taker amount that is usable in a recursive use of the hash that they're
+    // associated with.
+    hash_taker_position(hash, asset),
+    // Maker amount that is available to be potentially withdrawn for the
+    // maker of this position.
     hash_maker_leftover(hash, asset),
+    // Maker amount that is earmarked to record the value available for
+    // a user when the hash is used recursively.
+    hash_maker_position(hash, asset),
     // Address of the taker for the hash given.
     hash_taker_addr(hash),
+    // Address of the maker for the hash given.
+    hash_maker_addr(hash),
     // The asset in use for the hash given.
     hash_asset(hash)
 }

@@ -4,6 +4,18 @@ use superposition_libaccounts::{Args, Sig, StatementArgs};
 
 use crate::signable::Hash;
 
+pub fn get_owner(addr: [u8; 20]) -> [u8; 20] {
+    let (rc, _, o) = call_slice::<[u8; 20]>(
+        addr,
+        &borsh::to_vec(&Args::Owner).unwrap(),
+        &U::ZERO,
+        u64::MAX,
+        0,
+    );
+    assert!(rc, "reverted owner call");
+    o
+}
+
 /// Check the statement of a hash given by a user by converting it to
 /// its keccak form then checking to see if they signed it with the
 /// prelude that we use internally.
