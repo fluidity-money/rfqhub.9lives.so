@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "testing"), no_main)]
+#![cfg_attr(target_arch = "wasm32", no_main)]
 #![no_std]
 
 use bobcat_sdk::{entry::read_args_vec, maths::U, storage::flush_guard};
@@ -7,13 +7,13 @@ use borsh::de::BorshDeserialize;
 
 use superposition_librfq::{Args, Imm, entry};
 
-mod testing_addrs;
+mod host_addrs;
 
 macro_rules! env_word {
     ($name:ident, $input:literal) => {
-        #[cfg(feature = "testing")]
-        const $name: U = testing_addrs::$name;
-        #[cfg(not(feature = "testing"))]
+        #[cfg(any(feature = "testing", not(target_arch = "wasm32")))]
+        const $name: U = host_addrs::$name;
+        #[cfg(not(any(feature = "testing", not(target_arch = "wasm32"))))]
         const $name: U = U::const_from_hex(env!($input).as_bytes()).unwrap();
     };
 }
@@ -31,5 +31,5 @@ pub unsafe extern "C" fn user_entrypoint(len: usize) -> usize {
     flush_guard(|| entry(&imm, Args::deserialize(&mut args.as_slice()).unwrap()))
 }
 
-#[cfg(feature = "testing")]
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {}
