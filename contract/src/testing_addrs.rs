@@ -5,10 +5,12 @@ macro_rules! defaults {
         defaults!(@count 1, $( $name ),+);
     };
     (@count $n:expr, $name:ident, $( $rest:ident ),+) => {
+        #[allow(unused)]
         pub const $name: U = U::from_u32($n);
         defaults!(@count ($n + 1), $( $rest ),+);
     };
     (@count $n:expr, $name:ident) => {
+        #[allow(unused)]
         pub const $name: U = U::from_u32($n);
     };
 }
