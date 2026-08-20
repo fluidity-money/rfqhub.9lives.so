@@ -74,6 +74,8 @@ pub enum OnrampingSource {
     OnchainPot(OnchainPotArgs),
     /// Take the liquidity from the result that we have here.
     AggregatedResult(Box<AggregateEnum>),
+    /// Combination of the aggregated result from before and an onramping amount. TODO.
+    OnchainPotAggregatedResult(OnchainPotArgs, Box<AggregateEnum>),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]

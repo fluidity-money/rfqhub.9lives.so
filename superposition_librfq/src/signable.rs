@@ -165,6 +165,7 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
                 }
                 AggregateEnum::Hash(u) => (None, Hash::Onchain(u)),
             },
+            OnrampingSource::OnchainPotAggregatedResult(_, _) => todo!(),
         };
         let content = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {

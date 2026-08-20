@@ -32,6 +32,7 @@ macro_rules! storage {
             #[inline]
             fn storage_error(
                 dis: Dis,
+                consuming_amt: U,
                 prev_amt: U,
                 hint: &'static str,
             ) -> Error {
@@ -39,6 +40,7 @@ macro_rules! storage {
                     dis,
                     hash: None,
                     storage: Some(stringify!($name)),
+                    consuming_amt: Some(consuming_amt),
                     prev_amt: Some(prev_amt),
                     hint: Some(hint),
                 }
@@ -79,6 +81,7 @@ macro_rules! storage {
                 .ok_or_else(|| {
                     storage_error(
                         Dis::CheckedAddOverflow,
+                        *value,
                         current,
                         hint,
                     )
@@ -99,6 +102,7 @@ macro_rules! storage {
                 .ok_or_else(|| {
                     storage_error(
                         Dis::CheckedSubUnderflow,
+                        *value,
                         current,
                         hint,
                     )
@@ -151,6 +155,7 @@ macro_rules! storage {
                 .ok_or_else(|| {
                     storage_error(
                         Dis::CheckedAddOverflow,
+                        *value,
                         current,
                         hint,
                     )
@@ -176,6 +181,7 @@ macro_rules! storage {
                 .ok_or_else(|| {
                     storage_error(
                         Dis::CheckedSubUnderflow,
+                        *value,
                         current,
                         hint,
                     )

@@ -43,10 +43,6 @@ unsafe fn recurse_aggregate_src(
                 // Since we use the storage to get info on what's available to be
                 // spent, this is a noop, and we just return what's there:
                 AggregateEnum::Hash(h) => {
-                    // We need to zero out the taker's position here, so
-                    // that the next code can assume it's unset. The offramp function
-                    // for the maker can adjust this itself, since we're not going to assume
-                    // that the maker wants to get their money out this way:
                     let asset = storage::hash_asset::get(h);
                     storage::hash_taker_leftover::set(
                         &signable.hash.clone().into(),
@@ -54,13 +50,14 @@ unsafe fn recurse_aggregate_src(
                         &U::ZERO,
                     );
                     Ok((
-                        storage::hash_taker_leftover::get(h, &asset).into(),
+                        storage::hash_taker_position::get(h, &asset).into(),
                         storage::hash_taker_addr::get(h).into(),
                         asset.into(),
                     ))
                 }
             }
         }
+        OnrampingSource::OnchainPotAggregatedResult(_, _) => todo!(),
     }
 }
 
@@ -202,18 +199,18 @@ unsafe fn recurse_aggregate_args(
 }
 
 // Entry the aggregate recursive function, returning the amount that's
-// able to be withdrawn by the party given.
-pub fn recurse_aggregate_enum(
+// able to be withdrawn by the party given. Checks the msg_sender.
+pub fn entry_recurse_aggregate_enum(
     imm: &Imm,
     args: &AggregateEnum,
     is_taker: bool,
 ) -> Result<u64, Error> {
+    let sender = msg_sender();
     match args {
         AggregateEnum::Args(Aggregate { args, server_sig }) => {
             let signable = SignableAggregateArgs::from(args);
             let (taker_leftover, taker_acc, asset) =
                 unsafe { recurse_aggregate_args(imm, args, &signable, server_sig)? };
-            let sender = msg_sender();
             if is_taker {
                 let recipient = call_accounts::get_owner(taker_acc);
                 if recipient != sender {
@@ -238,9 +235,17 @@ pub fn recurse_aggregate_enum(
             let asset = storage::hash_asset::get(h);
             Ok(if is_taker {
                 let amt = storage::hash_taker_leftover::get(&h, &asset.into());
+                let recipient = call_accounts::get_owner(storage::hash_taker_addr::get(h).into());
+                if recipient != sender {
+                    return Err(Dis::SenderNotTaker.into());
+                }
                 storage::hash_taker_leftover::set(&h, &asset.into(), &U::ZERO);
                 amt
             } else {
+                let recipient = call_accounts::get_owner(storage::hash_maker_addr::get(h).into());
+                if recipient != sender {
+                    return Err(Dis::SenderNotMaker.into());
+                }
                 let amt = storage::hash_maker_leftover::get(&h, &asset.into());
                 storage::hash_maker_leftover::set(&h, &asset.into(), &U::ZERO);
                 amt
@@ -254,7 +259,7 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
-    recurse_aggregate_enum(imm, &args, is_taker).unwrap();
+    entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
     0
 }
 
@@ -282,229 +287,244 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use super::*;
+
     use crate::{Asset, Outcome, Timestamplet};
+
     use alloc::boxed::Box;
+
+    use bobcat_sdk::storage::flush_guard_fresh;
 
     #[test]
     fn test_erik_alex() {
-        // Erik is expecting that the price of Bitcoin will go up above $100 by
-        // timestamp 1. Alex bets that it won't, providing $200 as the
-        // compensation if Erik is correct. As Alex has provided the highest
-        // offer at the conclusion of the sealed bid auction, he is chosen. At
-        // timestamp 1, Erik is correct. Erik provided $500 for his prediction,
-        // so he ends up with $700.
-        let expiry: [u8; 6] = [0, 0, 0, 0, 0, 1];
-        let outcome = Outcome::BitcoinPrice;
-        let alex_addr = [0u8; 20];
-        let alex_amt = 200;
-        let erik_addr = [1u8; 20];
-        let erik_amt = 500;
-        let asset = Asset::USDC;
-        let erik = BundleTaker {
-            args: BundleTakerArgs {
-                src: OnrampingSource::OnchainPot(OnchainPotArgs {
-                    acc_addr: erik_addr,
-                    amt: erik_amt,
-                    asset,
-                }),
-                expiry,
-                ms_ts: [0u8; 6],
-                is_up: true,
-                price_target: 100,
-                outcome,
-            },
-            sig: [0u8; 64],
-        };
-        let alex = BundleMaker {
-            args: BundleMakerArgs {
-                taker: erik,
-                ms_ts: [0u8; 6],
-                acc: alex_addr,
-                amt: alex_amt,
-            },
-            sig: [0u8; 64],
-        };
-        let agg = AggregateArgs {
-            maker: alex,
-            timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 1],
-                timestamplet_outcome: outcome,
-                timestamplet_val: 101,
-            },
-        };
-        let signable = SignableAggregateArgs::from(&agg);
-        storage::onramped_bal::set(&asset.into(), &erik_addr.into(), &erik_amt.into());
-        storage::onramped_bal::set(&asset.into(), &alex_addr.into(), &alex_amt.into());
-        assert_eq!((700, erik_addr, asset.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg, &signable, &[0u8; 64]).unwrap()
-        });
+        flush_guard_fresh(|| {
+            // Erik is expecting that the price of Bitcoin will go up above $100 by
+            // timestamp 1. Alex bets that it won't, providing $200 as the
+            // compensation if Erik is correct. As Alex has provided the highest
+            // offer at the conclusion of the sealed bid auction, he is chosen. At
+            // timestamp 1, Erik is correct. Erik provided $500 for his prediction,
+            // so he ends up with $700.
+            let expiry: [u8; 6] = [0, 0, 0, 0, 0, 1];
+            let outcome = Outcome::BitcoinPrice;
+            let alex_addr = [0u8; 20];
+            let alex_amt = 200;
+            let erik_addr = [1u8; 20];
+            let erik_amt = 500;
+            let asset = Asset::USDC;
+            storage::onramped_bal::set(&asset.into(), &erik_addr.into(), &erik_amt.into());
+            storage::onramped_bal::set(&asset.into(), &alex_addr.into(), &alex_amt.into());
+            let erik = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                        acc_addr: erik_addr,
+                        amt: erik_amt,
+                        asset,
+                    }),
+                    expiry,
+                    ms_ts: [0u8; 6],
+                    is_up: true,
+                    price_target: 100,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let alex = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: erik,
+                    ms_ts: [0u8; 6],
+                    acc: alex_addr,
+                    amt: alex_amt,
+                },
+                sig: [0u8; 64],
+            };
+            let agg = AggregateArgs {
+                maker: alex,
+                timestamplet: Timestamplet {
+                    timestamplet_time: [0, 0, 0, 0, 0, 1],
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 101,
+                },
+            };
+            let signable = SignableAggregateArgs::from(&agg);
+            assert_eq!((700, erik_addr, asset.addr()), unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg, &signable, &[0u8; 64]).unwrap()
+            });
+        })
     }
 
     #[test]
     fn test_erik_alex_after_already_same_blob() {
-        // In this example, Erik is reinvesting his profits to play the
-        // game with Alex again.
-        let expiry_1 = [0, 0, 0, 0, 0, 1];
-        let expiry_2 = [0, 0, 0, 0, 0, 2];
-        let outcome = Outcome::BitcoinPrice;
-        let alex_addr = [0u8; 20];
-        let erik_addr = [1u8; 20];
-        let asset = Asset::USDC;
-        let erik_amt_1 = 500;
-        let erik_1 = BundleTaker {
-            args: BundleTakerArgs {
-                src: OnrampingSource::OnchainPot(OnchainPotArgs {
-                    acc_addr: erik_addr,
-                    amt: erik_amt_1,
-                    asset,
-                }),
-                expiry: expiry_1,
-                ms_ts: [0u8; 6],
-                is_up: true,
-                price_target: 100,
-                outcome,
-            },
-            sig: [0u8; 64],
-        };
-        let alex_1 = BundleMaker {
-            args: BundleMakerArgs {
-                taker: erik_1,
-                ms_ts: [0u8; 6],
-                acc: alex_addr,
-                amt: 200,
-            },
-            sig: [0u8; 64],
-        };
-        let agg_1 = AggregateArgs {
-            maker: alex_1,
-            timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 1],
-                timestamplet_outcome: outcome,
-                timestamplet_val: 101,
-            },
-        };
-        let erik_2 = BundleTaker {
-            args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Aggregate {
-                    args: agg_1,
-                    server_sig: [0u8; 64],
-                }))),
-                expiry: expiry_2,
-                ms_ts: [1u8; 6],
-                is_up: false,
-                price_target: 50,
-                outcome,
-            },
-            sig: [0u8; 64],
-        };
-        let alex_2 = BundleMaker {
-            args: BundleMakerArgs {
-                taker: erik_2,
-                ms_ts: [1u8; 6],
-                acc: alex_addr,
-                amt: 300,
-            },
-            sig: [0u8; 64],
-        };
-        let agg_2 = AggregateArgs {
-            maker: alex_2,
-            timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 2],
-                timestamplet_outcome: outcome,
-                timestamplet_val: 40,
-            },
-        };
-        storage::onramped_bal::set(&asset.into(), &erik_addr.into(), &erik_amt_1.into());
-        let signable = SignableAggregateArgs::from(&agg_2);
-        assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
-        });
+        flush_guard_fresh(|| {
+            // In this example, Erik is reinvesting his profits to play the
+            // game with Alex again.
+            let expiry_1 = [0, 0, 0, 0, 0, 1];
+            let expiry_2 = [0, 0, 0, 0, 0, 2];
+            let outcome = Outcome::BitcoinPrice;
+            let alex_addr = [0u8; 20];
+            let erik_addr = [1u8; 20];
+            let asset = Asset::USDC;
+            let erik_amt_1 = 500;
+            storage::onramped_bal::set(&asset.into(), &erik_addr.into(), &erik_amt_1.into());
+            storage::onramped_bal::set(&asset.into(), &alex_addr.into(), &U::from_u32(500));
+            let erik_1 = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                        acc_addr: erik_addr,
+                        amt: erik_amt_1,
+                        asset,
+                    }),
+                    expiry: expiry_1,
+                    ms_ts: [0u8; 6],
+                    is_up: true,
+                    price_target: 100,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let alex_1 = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: erik_1,
+                    ms_ts: [0u8; 6],
+                    acc: alex_addr,
+                    amt: 200,
+                },
+                sig: [0u8; 64],
+            };
+            let agg_1 = AggregateArgs {
+                maker: alex_1,
+                timestamplet: Timestamplet {
+                    timestamplet_time: [0, 0, 0, 0, 0, 1],
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 101,
+                },
+            };
+            let erik_2 = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(
+                        Aggregate {
+                            args: agg_1,
+                            server_sig: [0u8; 64],
+                        },
+                    ))),
+                    expiry: expiry_2,
+                    ms_ts: [1u8; 6],
+                    is_up: false,
+                    price_target: 50,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let alex_2 = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: erik_2,
+                    ms_ts: [1u8; 6],
+                    acc: alex_addr,
+                    amt: 300,
+                },
+                sig: [0u8; 64],
+            };
+            let agg_2 = AggregateArgs {
+                maker: alex_2,
+                timestamplet: Timestamplet {
+                    timestamplet_time: [0, 0, 0, 0, 0, 2],
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 40,
+                },
+            };
+            let signable = SignableAggregateArgs::from(&agg_2);
+            assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
+            });
+        })
     }
 
     #[test]
     fn test_erik_alex_after_posted_blob() {
-        // In this example, Erik is reinvesting profits from a result that was
-        // already posted on-chain, so the second aggregate refers to the first
-        // aggregate by hash instead of inlining the same blob again.
-        let expiry_1 = [0, 0, 0, 0, 0, 1];
-        let expiry_2 = [0, 0, 0, 0, 0, 2];
-        let outcome = Outcome::BitcoinPrice;
-        let alex_addr = [0u8; 20];
-        let erik_addr = [1u8; 20];
-        let erik_1 = BundleTaker {
-            args: BundleTakerArgs {
-                src: OnrampingSource::OnchainPot(OnchainPotArgs {
-                    acc_addr: erik_addr,
-                    amt: 500,
-                    asset: Asset::USDC,
-                }),
-                expiry: expiry_1,
-                ms_ts: [0u8; 6],
-                is_up: true,
-                price_target: 100,
-                outcome,
-            },
-            sig: [0u8; 64],
-        };
-        let alex_1 = BundleMaker {
-            args: BundleMakerArgs {
-                taker: erik_1,
-                ms_ts: [0u8; 6],
-                acc: alex_addr,
-                amt: 200,
-            },
-            sig: [0u8; 64],
-        };
-        let agg_1 = AggregateArgs {
-            maker: alex_1,
-            timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 1],
-                timestamplet_outcome: outcome,
-                timestamplet_val: 101,
-            },
-        };
-        let signable_1 = SignableAggregateArgs::from(&agg_1);
-        assert_eq!((700, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_1, &signable_1, &[0u8; 64]).unwrap()
-        });
-
-        let erik_2 = BundleTaker {
-            args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Hash(
-                    signable_1.hash.into(),
-                ))),
-                expiry: expiry_2,
-                ms_ts: [1u8; 6],
-                is_up: false,
-                price_target: 50,
-                outcome,
-            },
-            sig: [0u8; 64],
-        };
-        let alex_2 = BundleMaker {
-            args: BundleMakerArgs {
-                taker: erik_2,
-                ms_ts: [1u8; 6],
-                acc: alex_addr,
-                amt: 300,
-            },
-            sig: [0u8; 64],
-        };
-        let agg_2 = AggregateArgs {
-            maker: alex_2,
-            timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 2],
-                timestamplet_outcome: outcome,
-                timestamplet_val: 40,
-            },
-        };
-        let signable_2 = SignableAggregateArgs::from(&agg_2);
-        // Current behaviour: once the first aggregate has been posted and the
-        // second aggregate refers to it by hash, only the posted maker delta is
-        // reusable as the taker's source. That makes the second aggregate return
-        // 500, unlike test_erik_alex_after_already_same_blob's 1000.
-        assert_eq!((500, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
-        });
+        flush_guard_fresh(|| {
+            // In this example, Erik is reinvesting profits from a result that was
+            // already posted on-chain, so the second aggregate refers to the first
+            // aggregate by hash instead of inlining the same blob again.
+            let expiry_1 = [0, 0, 0, 0, 0, 1];
+            let expiry_2 = [0, 0, 0, 0, 0, 2];
+            let outcome = Outcome::BitcoinPrice;
+            let alex_addr = [0u8; 20];
+            let erik_addr = [1u8; 20];
+            let asset = Asset::USDC;
+            storage::onramped_bal::set(&asset.into(), &alex_addr.into(), &U::from_u32(200 + 300));
+            storage::onramped_bal::set(&asset.into(), &erik_addr.into(), &U::from_u32(500));
+            let erik_1 = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                        acc_addr: erik_addr,
+                        amt: 500,
+                        asset: Asset::USDC,
+                    }),
+                    expiry: expiry_1,
+                    ms_ts: [0u8; 6],
+                    is_up: true,
+                    price_target: 100,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let alex_1 = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: erik_1,
+                    ms_ts: [0u8; 6],
+                    acc: alex_addr,
+                    amt: 200,
+                },
+                sig: [0u8; 64],
+            };
+            let agg_1 = AggregateArgs {
+                maker: alex_1,
+                timestamplet: Timestamplet {
+                    timestamplet_time: [0, 0, 0, 0, 0, 1],
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 101,
+                },
+            };
+            let signable_1 = SignableAggregateArgs::from(&agg_1);
+            assert_eq!((700, erik_addr, Asset::USDC.addr()), unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg_1, &signable_1, &[0u8; 64]).unwrap()
+            });
+            let erik_2 = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Hash(
+                        signable_1.hash.into(),
+                    ))),
+                    expiry: expiry_2,
+                    ms_ts: [1u8; 6],
+                    is_up: false,
+                    price_target: 50,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let alex_2 = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: erik_2,
+                    ms_ts: [1u8; 6],
+                    acc: alex_addr,
+                    amt: 300,
+                },
+                sig: [0u8; 64],
+            };
+            let agg_2 = AggregateArgs {
+                maker: alex_2,
+                timestamplet: Timestamplet {
+                    timestamplet_time: [0, 0, 0, 0, 0, 2],
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 40,
+                },
+            };
+            let signable_2 = SignableAggregateArgs::from(&agg_2);
+            // Current behaviour: once the first aggregate has been posted and the
+            // second aggregate refers to it by hash, only the posted maker delta is
+            // reusable as the taker's source. That makes the second aggregate return
+            // 500, unlike test_erik_alex_after_already_same_blob's 1000.
+            assert_eq!((500, erik_addr, Asset::USDC.addr()), unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
+            });
+        })
     }
 }
