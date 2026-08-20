@@ -1,9 +1,10 @@
 use crate::{
     Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
     BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_accounts,
+    call_eip20,
     error::{Dis, Error},
     signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
-    storage, call_eip20,
+    storage,
 };
 
 use bobcat_sdk::{entry::msg_sender, maths::U};
@@ -233,7 +234,7 @@ pub fn entry_recurse_aggregate_enum(
         }
         AggregateEnum::Hash(h) => {
             let asset = storage::hash_asset::get(h);
-            Ok(if is_taker {
+            let (sender, asset, amt) = if is_taker {
                 let amt = storage::hash_taker_leftover::get(&h, &asset.into());
                 let recipient = call_accounts::get_owner(storage::hash_taker_addr::get(h).into());
                 if recipient != sender {
@@ -249,8 +250,8 @@ pub fn entry_recurse_aggregate_enum(
                 let amt = storage::hash_maker_leftover::get(&h, &asset.into());
                 storage::hash_maker_leftover::set(&h, &asset.into(), &U::ZERO);
                 (sender, asset, amt)
-            }
-            )
+            };
+            Ok((sender.into(), asset.into(), amt.into()))
         }
     }
 }
@@ -260,7 +261,7 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
     let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
-    call_eip20::transfer(asset, sender, leftover)?;
+    assert!(call_eip20::transfer(asset, sender, &leftover.into()), "eip20 transfer err");
     0
 }
 

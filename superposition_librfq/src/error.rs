@@ -1,4 +1,4 @@
-use core::fmt::{Formatter, Result as FmtResult, Debug, Display};
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use bobcat_sdk::maths::U;
 
@@ -48,8 +48,18 @@ impl Display for Error {
 
 impl Debug for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> FmtResult {
-        let Self { dis, hash, storage, consuming_amt, prev_amt, hint } = self;
-        write!(f, "Error {{ dis: {dis:?}, hash: {hash:?}, storage: {storage:?}, consuming_amt: ")?;
+        let Self {
+            dis,
+            hash,
+            storage,
+            consuming_amt,
+            prev_amt,
+            hint,
+        } = self;
+        write!(
+            f,
+            "Error {{ dis: {dis:?}, hash: {hash:?}, storage: {storage:?}, consuming_amt: "
+        )?;
         if let Some(x) = consuming_amt {
             write!(f, "{x}")?;
         } else {
