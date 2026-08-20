@@ -3,7 +3,7 @@ members = ["superposition_librfq", "contract"]
 resolver = "3"
 
 [workspace.dependencies]
-bobcat-sdk = { version = ">=0.8.6", default-features = false, features = ["alloc", "panic-revert"] }
+bobcat-sdk = { version = ">=0.8.7", default-features = false, features = ["alloc", "panic-revert"] }
 borsh = { version = "1.8.0", default-features = false, features = ["derive"] }
 superposition-assets = { version = ">=0.4.5", features = ["borsh"] }
 

@@ -14,7 +14,7 @@ macro_rules! env_word {
         #[cfg(feature = "testing")]
         const $name: U = testing_addrs::$name;
         #[cfg(not(feature = "testing"))]
-        const $name: U = U::const_from_hex(env!($input).as_bytes());
+        const $name: U = U::const_from_hex(env!($input).as_bytes()).unwrap();
     };
 }
 

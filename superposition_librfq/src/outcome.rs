@@ -2,6 +2,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 #[repr(u8)]
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Copy)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "proptest", derive(proptest_derive::Arbitrary))]
 pub enum Outcome {
     BitcoinPrice,
 }

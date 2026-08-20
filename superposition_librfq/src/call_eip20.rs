@@ -23,13 +23,9 @@ pub fn safe_transfer_from(addr: [u8; 20], from: [u8; 20], to: [u8; 20], amt: &U)
 /// Transfer, checking the return type if we have it, but if we don't,
 /// we assume everything is okay.
 pub fn transfer(addr: [u8; 20], to: [u8; 20], amt: &U) -> bool {
-    if let (true, len, rd) = call_slice::<1>(
-        addr,
-        &make_fn_transfer(to, &amt),
-        &U::ZERO,
-        u64::MAX,
-        1,
-    ) {
+    if let (true, len, rd) =
+        call_slice::<1>(addr, &make_fn_transfer(to, &amt), &U::ZERO, u64::MAX, 1)
+    {
         len == 0 || rd[0] == 1
     } else {
         false

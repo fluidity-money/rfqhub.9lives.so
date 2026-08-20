@@ -261,7 +261,10 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
     let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
-    assert!(call_eip20::transfer(asset, sender, &leftover.into()), "eip20 transfer err");
+    assert!(
+        call_eip20::transfer(asset, sender, &leftover.into()),
+        "eip20 transfer err"
+    );
     0
 }
 
@@ -436,6 +439,141 @@ mod test {
             assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
                 recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
             });
+        })
+    }
+
+    #[test]
+    fn test_recycled_posted_taker_profit_beats_second_maker_betting_up() {
+        flush_guard_fresh(|| {
+            // Casey first bets that Bitcoin will go down. Jordan is the maker on
+            // the other side, effectively betting that Bitcoin will go up, and
+            // loses when the timestamplet resolves below the target. Casey posts
+            // that aggregate on-chain, then recycles the posted winning delta into
+            // a second position against Riley, another maker betting on Bitcoin
+            // going up. Riley loses too.
+            let expiry_1 = [0, 0, 0, 0, 0, 1];
+            let expiry_2 = [0, 0, 0, 0, 0, 2];
+            let outcome = Outcome::BitcoinPrice;
+            let casey_addr = [2u8; 20];
+            let jordan_addr = [3u8; 20];
+            let riley_addr = [4u8; 20];
+            let asset = Asset::USDC;
+            let casey_stake = 1_000;
+            let first_maker_loss = 250;
+            let second_maker_loss = 400;
+
+            storage::onramped_bal::set(&asset.into(), &casey_addr.into(), &casey_stake.into());
+            storage::onramped_bal::set(
+                &asset.into(),
+                &jordan_addr.into(),
+                &first_maker_loss.into(),
+            );
+            storage::onramped_bal::set(
+                &asset.into(),
+                &riley_addr.into(),
+                &second_maker_loss.into(),
+            );
+
+            let casey_1 = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                        acc_addr: casey_addr,
+                        amt: casey_stake,
+                        asset,
+                    }),
+                    expiry: expiry_1,
+                    ms_ts: [0u8; 6],
+                    is_up: false,
+                    price_target: 100,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let jordan_1 = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: casey_1,
+                    ms_ts: [0u8; 6],
+                    acc: jordan_addr,
+                    amt: first_maker_loss,
+                },
+                sig: [0u8; 64],
+            };
+            let agg_1 = AggregateArgs {
+                maker: jordan_1,
+                timestamplet: Timestamplet {
+                    timestamplet_time: expiry_1,
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 90,
+                },
+            };
+            let signable_1 = SignableAggregateArgs::from(&agg_1);
+            assert_eq!((1_250, casey_addr, asset.addr()), unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg_1, &signable_1, &[0u8; 64]).unwrap()
+            });
+
+            let signable_hash_1: U = signable_1.hash.clone().into();
+            assert_eq!(
+                U::from(first_maker_loss),
+                storage::hash_taker_position::get(&signable_hash_1, &asset.into())
+            );
+            assert_eq!(
+                U::from(first_maker_loss),
+                storage::hash_taker_leftover::get(&signable_hash_1, &asset.into())
+            );
+
+            let casey_2 = BundleTaker {
+                args: BundleTakerArgs {
+                    src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Hash(
+                        signable_1.hash.into(),
+                    ))),
+                    expiry: expiry_2,
+                    ms_ts: [1u8; 6],
+                    is_up: false,
+                    price_target: 100,
+                    outcome,
+                },
+                sig: [0u8; 64],
+            };
+            let riley_2 = BundleMaker {
+                args: BundleMakerArgs {
+                    taker: casey_2,
+                    ms_ts: [1u8; 6],
+                    acc: riley_addr,
+                    amt: second_maker_loss,
+                },
+                sig: [0u8; 64],
+            };
+            let agg_2 = AggregateArgs {
+                maker: riley_2,
+                timestamplet: Timestamplet {
+                    timestamplet_time: expiry_2,
+                    timestamplet_outcome: outcome,
+                    timestamplet_val: 80,
+                },
+            };
+            let signable_2 = SignableAggregateArgs::from(&agg_2);
+
+            // Posted hashes currently recycle only the previously-posted winning
+            // delta, not the taker's full original stake plus winnings. Casey can
+            // therefore carry Jordan's 250 loss into the second position, then win
+            // Riley's 400 for a returned amount of 650.
+            assert_eq!((650, casey_addr, asset.addr()), unsafe {
+                recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
+            });
+
+            let signable_hash_2: U = signable_2.hash.clone().into();
+            assert_eq!(
+                U::from(second_maker_loss),
+                storage::hash_taker_position::get(&signable_hash_2, &asset.into())
+            );
+            assert_eq!(
+                U::from(second_maker_loss),
+                storage::hash_taker_leftover::get(&signable_hash_2, &asset.into())
+            );
+            assert_eq!(
+                U::from(first_maker_loss),
+                storage::hash_taker_position::get(&signable_hash_1, &asset.into())
+            );
         })
     }
 
