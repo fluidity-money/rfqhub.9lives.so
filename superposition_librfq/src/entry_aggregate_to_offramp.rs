@@ -3,7 +3,7 @@ use crate::{
     BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_accounts,
     error::{Dis, Error},
     signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
-    storage,
+    storage, call_eip20,
 };
 
 use bobcat_sdk::{entry::msg_sender, maths::U};
@@ -204,7 +204,7 @@ pub fn entry_recurse_aggregate_enum(
     imm: &Imm,
     args: &AggregateEnum,
     is_taker: bool,
-) -> Result<u64, Error> {
+) -> Result<([u8; 20], [u8; 20], u64), Error> {
     let sender = msg_sender();
     match args {
         AggregateEnum::Args(Aggregate { args, server_sig }) => {
@@ -217,7 +217,7 @@ pub fn entry_recurse_aggregate_enum(
                     return Err(Dis::SenderNotTaker.into());
                 }
                 storage::hash_taker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
-                Ok(taker_leftover)
+                Ok((sender, asset, taker_leftover))
             } else {
                 let signable_hash_u: U = signable.hash.clone().into();
                 let maker_acc: [u8; 20] = storage::hash_maker_addr::get(&signable_hash_u).into();
@@ -228,7 +228,7 @@ pub fn entry_recurse_aggregate_enum(
                 let maker_leftover =
                     storage::hash_maker_leftover::get(&signable_hash_u, &asset.into());
                 storage::hash_maker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
-                Ok(maker_leftover.into())
+                Ok((sender, asset, maker_leftover.into()))
             }
         }
         AggregateEnum::Hash(h) => {
@@ -240,7 +240,7 @@ pub fn entry_recurse_aggregate_enum(
                     return Err(Dis::SenderNotTaker.into());
                 }
                 storage::hash_taker_leftover::set(&h, &asset.into(), &U::ZERO);
-                amt
+                (sender, asset, amt)
             } else {
                 let recipient = call_accounts::get_owner(storage::hash_maker_addr::get(h).into());
                 if recipient != sender {
@@ -248,9 +248,9 @@ pub fn entry_recurse_aggregate_enum(
                 }
                 let amt = storage::hash_maker_leftover::get(&h, &asset.into());
                 storage::hash_maker_leftover::set(&h, &asset.into(), &U::ZERO);
-                amt
+                (sender, asset, amt)
             }
-            .into())
+            )
         }
     }
 }
@@ -259,7 +259,8 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
-    entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
+    let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
+    call_eip20::transfer(asset, sender, leftover)?;
     0
 }
 
