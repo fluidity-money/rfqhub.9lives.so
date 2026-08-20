@@ -11,6 +11,7 @@ macro_rules! storage {
             items: [$($name($($param),*)),*]
         }
     };
+
     (
         @internal
         counter: $counter:expr,
@@ -26,9 +27,14 @@ macro_rules! storage {
     ) => {
         pub mod $name {
             pub(crate) use bobcat_sdk::storage::*;
-            pub use crate::error::{Dis, Error};
+
+            pub use crate::error::{Dis, Error, ErrorData};
+
+            use alloc::boxed::Box;
             use bobcat_sdk::maths::{u, U};
+
             const SLOT: U = u!($counter);
+
             #[inline]
             fn storage_error(
                 dis: Dis,
@@ -38,18 +44,22 @@ macro_rules! storage {
             ) -> Error {
                 Error {
                     dis,
-                    hash: None,
-                    storage: Some(stringify!($name)),
-                    consuming_amt: Some(consuming_amt),
-                    prev_amt: Some(prev_amt),
-                    hint: Some(hint),
+                    data: Box::new(ErrorData {
+                        hash: None,
+                        storage: Some(stringify!($name)),
+                        consuming_amt: Some(consuming_amt),
+                        prev_amt: Some(prev_amt),
+                        hint: Some(hint),
+                    }),
                 }
             }
+
             storage! {
                 @impl
                 params: [$($param),*]
             }
         }
+
         $(
             storage! {
                 @internal
@@ -65,9 +75,11 @@ macro_rules! storage {
         pub fn get() -> U {
             storage_load(&SLOT)
         }
+
         pub fn set(value: &U) {
             storage_store(&SLOT, value);
         }
+
         pub fn checked_add_res(
             value: &U,
             hint: &'static str,
@@ -89,6 +101,7 @@ macro_rules! storage {
             set(&next);
             Ok(next)
         }
+
         pub fn checked_sub_res(
             value: &U,
             hint: &'static str,
@@ -124,12 +137,14 @@ macro_rules! storage {
                 keys: [$($param),+]
             }
         }
+
         pub fn get(
             $($param: &U),+
         ) -> U {
             let slot = storage_slot($($param),+);
             storage_load(&slot)
         }
+
         pub fn set(
             $($param: &U,)+
             value: &U
@@ -140,6 +155,7 @@ macro_rules! storage {
                 value,
             );
         }
+
         pub fn checked_add_res(
             $($param: &U,)+
             value: &U,
@@ -166,6 +182,7 @@ macro_rules! storage {
             );
             Ok(next)
         }
+
         pub fn checked_sub_res(
             $($param: &U,)+
             value: &U,
@@ -192,6 +209,7 @@ macro_rules! storage {
             );
             Ok(next)
         }
+
         pub fn exchange(
             $($param: &U),+
         ) {
@@ -205,6 +223,7 @@ macro_rules! storage {
             );
         }
     };
+
     (
         @derive_slot
         slot: $slot:expr,
@@ -224,6 +243,7 @@ macro_rules! storage {
             keys: [$($rest),*]
         }
     }};
+
     (
         @derive_slot
         slot: $slot:expr,

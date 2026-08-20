@@ -1,8 +1,10 @@
+use alloc::boxed::Box;
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use bobcat_sdk::maths::U;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum Dis {
     TimestampletInconsistentOutcome,
     TimestampletInconsistentTime,
@@ -20,6 +22,12 @@ pub enum Dis {
 #[derive(Clone, PartialEq)]
 pub struct Error {
     pub dis: Dis,
+    pub data: Box<ErrorData>,
+}
+
+#[derive(Clone, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
+pub struct ErrorData {
     pub hash: Option<U>,
     pub storage: Option<&'static str>,
     pub consuming_amt: Option<U>,
@@ -31,11 +39,7 @@ impl From<Dis> for Error {
     fn from(dis: Dis) -> Error {
         Error {
             dis,
-            hash: None,
-            storage: None,
-            consuming_amt: None,
-            prev_amt: None,
-            hint: None,
+            data: Box::default(),
         }
     }
 }
@@ -48,14 +52,14 @@ impl Display for Error {
 
 impl Debug for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> FmtResult {
-        let Self {
-            dis,
+        let Self { dis, data } = self;
+        let ErrorData {
             hash,
             storage,
             consuming_amt,
             prev_amt,
             hint,
-        } = self;
+        } = data.as_ref();
         write!(
             f,
             "Error {{ dis: {dis:?}, hash: {hash:?}, storage: {storage:?}, consuming_amt: "

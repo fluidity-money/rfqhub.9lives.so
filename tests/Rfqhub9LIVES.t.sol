@@ -1,20 +1,29 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 
 import {IArbFoundry} from "./IArbFoundry.sol";
 
+import {RfqhubTypes, ArgsKind, Args} from "./RfqhubTypes.sol";
+
 contract Rfqhub9LIVES is Test {
-    IRfqhub9LIVES c;
+    using RfqhubTypes for address;
+
+    address c;
 
     function setUp() external {
-        c = IRfqhub9LIVES(IArbFoundry(address(vm)).deployStylusCode(
-            "rfqhub_9lives.wasm"
-        ));
+        c = IArbFoundry(address(vm)).deployStylusCode(
+            "rfqhub.9lives.so.wasm"
+        );
     }
 
-    function test_contractDeployed() public view {
-        assertEq(123, c.hello());
+    function test_contractHello() public {
+        Args memory args;
+        args.kind = ArgsKind.Version;
+        (bool rc, bytes memory rd) = RfqhubTypes.sendCalldata(vm, c, args);
+        assert(rc);
+        (uint256 version) = abi.decode(rd, (uint256));
+        assertEq(1, version);
     }
 }

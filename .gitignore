@@ -3,3 +3,5 @@ rfqhub.9lives.so.wasm
 *.wasm1
 target
 out
+rfqhub-cli
+cache

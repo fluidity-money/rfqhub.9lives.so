@@ -10,7 +10,7 @@ name = "contract"
 
 [dependencies]
 bobcat-sdk.workspace = true
-const-hex = { version = "1.19.1", default-features = false }
+const-hex.workspace = true
 superposition_librfq = { version = "0.1.0", path = "../superposition_librfq", default-features = false }
 borsh.workspace = true
 paste = "1.0.15"
