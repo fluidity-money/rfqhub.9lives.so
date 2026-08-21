@@ -11,6 +11,13 @@ input CreateAccount {
   authority: String,
 }
 
+input Permit {
+  deadline: Int!,
+  permitV: Int!,
+  permitR: String!,
+  permitS: String!
+}
+
 input OnrampingFromBal {
   """
   Amount that we're onramping from the owner's address here.
@@ -29,6 +36,7 @@ type Mutation {
   """
   createAccountExec(
     createAccount: CreateAccount!,
+    permit: Permit,
     onrampingFromBal: OnrampingFromBal!
   ): Boolean!
 }

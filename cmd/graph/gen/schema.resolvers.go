@@ -7,22 +7,23 @@ package gen
 
 import (
 	"context"
-	"math/big"
 	"fmt"
 	"log/slog"
+	"math/big"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/fluidity-money/9lives.so/lib/types/events"
+	"github.com/fluidity-money/accounts.superposition.so/lib/convertor"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
-func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, onrampingFromBal model.OnrampingFromBal) (bool, error) {
-	amt, _ := new(big.Int).SetString(mint.Amt, 10)
+func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal) (bool, error) {
+	amt, _ := new(big.Int).SetString(onrampingFromBal.Amt, 10)
 	//minimum amount > amt
 	if r.MinimumAmount.Cmp(amt) > 0 {
-		return nil, fmt.Errorf("below the minimum amount (%v)", amt)
+		return false, fmt.Errorf("below the minimum amount (%v)", amt)
 	}
 	snowflake, _ := ctx.Value("snowflake").(int)
 	f, err := convertor.CreateAccountToFreshBackwards(r.AccPubKey, createAccount)
@@ -38,22 +39,17 @@ func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount 
 		return nil, fmt.Errorf("not eoa address")
 	}
 	eoa := ethCommon.HexToAddress(createAccount.EoaAddr)
-	if mint != nil {
-		err = convertor.TagFreshBackwardsWithMint(
-			ProgDalek,
-			f,
-			types.AssetUsdc,
-			mint.Market,
-			mint.Outcome,
-			mint.Amount,
-			mint.Referrer,
-			eoa,
-			mint.Permit,
-			mint.MsTs,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("mint tagging: %v", err)
-		}
+	err = convertor.TagFreshBackwardsWithOnrampingFromBal(
+		ProgDalek,
+		r.RfqhubAddr,
+		f,
+		types.AssetUsdc,
+		onrampingFromBal.Amount,
+		onrampingFromBal.Permit,
+		onrampingFromBal.MsTs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("mint tagging: %v", err)
 	}
 	privKey, sender, err := db.PickPrivateKey(ctx, r.Db)
 	if err != nil {

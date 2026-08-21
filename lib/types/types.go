@@ -1,16 +1,14 @@
 package types
 
-import "github.com/near/borsh-go"
+import (
+	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
+
+	"github.com/near/borsh-go"
+)
 
 type Sig [64]byte
 
-type Asset uint8
-
-const (
-	AssetUSDC Asset = iota
-	AssetARB
-	AssetWETH
-)
+type Asset = acc_types.Asset
 
 type Outcome uint8
 
@@ -30,13 +28,13 @@ type OnchainPotArgs struct {
 }
 
 const (
-	OnrampingSourceOnchainPot                borsh.Enum = iota
+	OnrampingSourceOnchainPot borsh.Enum = iota
 	OnrampingSourceAggregatedResult
 	OnrampingSourceOnchainPotAggregatedResult
 )
 
 type OnrampingSource struct {
-	Enum                       borsh.Enum                      `borsh_enum:"true"`
+	Enum                       borsh.Enum `borsh_enum:"true"`
 	OnchainPot                 OnchainPotArgs
 	AggregatedResult           *AggregateEnum
 	OnchainPotAggregatedResult OnchainPotAggregatedResultArgs
@@ -84,7 +82,7 @@ type Timestamplet struct {
 }
 
 type AggregateArgs struct {
-	Maker       BundleMaker
+	Maker        BundleMaker
 	Timestamplet Timestamplet
 }
 
@@ -134,7 +132,7 @@ type AggregateToOfframpArgs struct {
 }
 
 type Args struct {
-	Enum               borsh.Enum             `borsh_enum:"true"`
+	Enum               borsh.Enum `borsh_enum:"true"`
 	Version            struct{}
 	Source             struct{}
 	Balance            BalanceArgs

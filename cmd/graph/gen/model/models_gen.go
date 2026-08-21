@@ -20,5 +20,12 @@ type OnrampingFromBal struct {
 	MsTs string `json:"msTs"`
 }
 
+type Permit struct {
+	Deadline int    `json:"deadline"`
+	PermitV  int    `json:"permitV"`
+	PermitR  string `json:"permitR"`
+	PermitS  string `json:"permitS"`
+}
+
 type Query struct {
 }

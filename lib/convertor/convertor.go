@@ -2,12 +2,19 @@ package convertor
 
 import (
 	"crypto/sha512"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
 	"os/exec"
+	"strconv"
 	"strings"
+
+	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
+
+	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
 
@@ -58,18 +65,18 @@ func strToBytes32(s string) ([32]byte, error) {
 func CreateFreshBackwards(
 	pubKey [32]byte,
 	createAccount model.CreateAccount,
-) (*types.FreshBackwards, error) {
+) (*acc_types.FreshBackwards, error) {
 	eoa, err := strToAddr(createAccount.EoaAddr)
 	if err != nil {
 		return nil, fmt.Errorf("eoa: %v", err)
 	}
-	var authority *types.ArgsAuthorityAddr
+	var authority *acc_types.ArgsAuthorityAddr
 	if a := createAccount.Authority; a != nil {
 		x, err := strToAddr(*a)
 		if err != nil {
 			return nil, fmt.Errorf("authority: %v", err)
 		}
-		v := types.ArgsAuthorityAddr(x)
+		v := acc_types.ArgsAuthorityAddr(x)
 		authority = &v
 	}
 	if createAccount.SigV < 0 || createAccount.SigV > math.MaxUint8 {
@@ -84,7 +91,7 @@ func CreateFreshBackwards(
 	if err != nil {
 		return nil, fmt.Errorf("s: %v", err)
 	}
-	return &types.FreshBackwards{
+	return &acc_types.FreshBackwards{
 		Key:       pubKey,
 		EoaAddr:   eoa,
 		V:         v,
@@ -97,12 +104,13 @@ func CreateFreshBackwards(
 // CreateSolveArgsSigArgs for minting by also creating 9lives calldata.
 func CreateSolveArgsSigArgs(
 	prog string,
+	rfqhubAddr ethCommon.Address,
+	asset types.Asset,
 	amt string,
-	asset uint8,
 	permit *model.Permit,
 	msTs_ string,
-) (*types.SolveArgsSigArgs, error) {
-	a, err := strconv.ParseInt(amt, 64, 10)
+) (*acc_types.SolveArgsSigArgs, error) {
+	a, err := strconv.ParseUint(amt, 64, 10)
 	if err != nil {
 		return nil, fmt.Errorf("bad int")
 	}
@@ -110,27 +118,31 @@ func CreateSolveArgsSigArgs(
 	if !ok {
 		return nil, fmt.Errorf("ms ts: %v", msTs_)
 	}
-	var msTs [6]byte
-	if b := msTsI.Bytes(); len(b) > 6 {
+	var msTs [16]byte
+	if b := msTsI.Bytes(); len(b) > len(msTs) {
 		return nil, fmt.Errorf("too large msts")
 	}
 	copy(msTs[:], msTsI.Bytes())
-	cd, err := borsh.Serialize(types.Args {
-		OnrampingFromBal: OnrampingFromBal {
+	cd, err := borsh.Serialize(types.Args{
+		OnrampingFromBal: types.OnrampingFromBalArgs{
 			Asset: asset,
-			Amt: a,
+			Amt:   a,
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("serialise borsh: %v", err)
 	}
-	solveArgs := types.SolveArgs{
-		From: []types.FromArgs{{
+	var toTake [32]byte
+	if _, err := binary.Encode(toTake[:], binary.BigEndian, a); err != nil {
+		return nil, fmt.Errorf("encoding toTake: %v", err)
+	}
+	solveArgs := acc_types.SolveArgs{
+		From: []acc_types.FromArgs{{
 			Asset:  asset,
-			ToTake: a,
+			ToTake: toTake,
 			//MaxUnspent: [32]byte{},
 		}},
-		Target: m,
+		Target: rfqhubAddr,
 		Cd:     cd,
 		MsTs:   msTs,
 	}
@@ -166,7 +178,7 @@ func CreateSolveArgsSigArgs(
 		return nil, fmt.Errorf("invoking dalekph: %v, %v", string(sig), err)
 	}
 	copy(sigArr[:], sig)
-	return &types.SolveArgsSigArgs{
+	return &acc_types.SolveArgsSigArgs{
 		Sig:  sigArr,
 		Args: solveArgs,
 	}, nil
@@ -174,13 +186,16 @@ func CreateSolveArgsSigArgs(
 
 func TagFreshBackwardsWithOnrampingFromBal(
 	prog string,
-	f *types.FreshBackwards,
+	rfqhubAddr ethCommon.Address,
+	f *acc_types.FreshBackwards,
 	asset types.Asset,
 	amt string,
+	permit *model.Permit,
 	msTs string,
 ) error {
 	m, err := CreateSolveArgsSigArgs(
 		prog,
+		rfqhubAddr,
 		asset,
 		amt,
 		permit,
@@ -196,9 +211,9 @@ func TagFreshBackwardsWithOnrampingFromBal(
 func NewPermit(
 	asset types.Asset,
 	deadline uint64,
-	permitV int32,
+	permitV int,
 	permitR, permitS string,
-) (*types.Permit, error) {
+) (*acc_types.Permit, error) {
 	if permitV < 0 || permitV > math.MaxUint8 {
 		return nil, fmt.Errorf("v exceeds")
 	}
@@ -211,7 +226,7 @@ func NewPermit(
 	if err != nil {
 		return nil, fmt.Errorf("permit s: %v", err)
 	}
-	return &types.Permit{
+	return &acc_types.Permit{
 		Asset:    asset,
 		Deadline: deadline,
 		V:        v,

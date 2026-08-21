@@ -37,7 +37,7 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Mutation struct {
-		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, onrampingFromBal model.OnrampingFromBal) int
+		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal) int
 	}
 
 	Query struct {
@@ -50,7 +50,7 @@ type ComplexityRoot struct {
 // region    ************************** generated!.gotpl **************************
 
 type MutationResolver interface {
-	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, onrampingFromBal model.OnrampingFromBal) (bool, error)
+	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal) (bool, error)
 }
 type QueryResolver interface {
 	Balance(ctx context.Context, addr string) (string, error)
@@ -84,7 +84,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["onrampingFromBal"].(model.OnrampingFromBal)), true
+		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["onrampingFromBal"].(model.OnrampingFromBal)), true
 
 	case "Query.balance":
 		if e.ComplexityRoot.Query.Balance == nil {
@@ -108,6 +108,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCreateAccount,
 		ec.unmarshalInputOnrampingFromBal,
+		ec.unmarshalInputPermit,
 	)
 	first := true
 
@@ -196,6 +197,13 @@ input CreateAccount {
   authority: String,
 }
 
+input Permit {
+  deadline: Int!,
+  permitV: Int!,
+  permitR: String!,
+  permitS: String!
+}
+
 input OnrampingFromBal {
   """
   Amount that we're onramping from the owner's address here.
@@ -214,6 +222,7 @@ type Mutation {
   """
   createAccountExec(
     createAccount: CreateAccount!,
+    permit: Permit,
     onrampingFromBal: OnrampingFromBal!
   ): Boolean!
 }
@@ -352,14 +361,22 @@ func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Co
 		return nil, err
 	}
 	args["createAccount"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "onrampingFromBal",
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "permit",
+		func(ctx context.Context, v any) (*model.Permit, error) {
+			return ec.unmarshalOPermit2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐPermit(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["permit"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "onrampingFromBal",
 		func(ctx context.Context, v any) (model.OnrampingFromBal, error) {
 			return ec.unmarshalNOnrampingFromBal2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOnrampingFromBal(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["onrampingFromBal"] = arg1
+	args["onrampingFromBal"] = arg2
 	return args, nil
 }
 
@@ -461,7 +478,7 @@ func (ec *executionContext) _Mutation_createAccountExec(ctx context.Context, fie
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAccountExec(ctx, fc.Args["createAccount"].(model.CreateAccount), fc.Args["onrampingFromBal"].(model.OnrampingFromBal))
+			return ec.Resolvers.Mutation().CreateAccountExec(ctx, fc.Args["createAccount"].(model.CreateAccount), fc.Args["permit"].(*model.Permit), fc.Args["onrampingFromBal"].(model.OnrampingFromBal))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
@@ -1769,6 +1786,57 @@ func (ec *executionContext) unmarshalInputOnrampingFromBal(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputPermit(ctx context.Context, obj any) (model.Permit, error) {
+	var it model.Permit
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"deadline", "permitV", "permitR", "permitS"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "deadline":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("deadline"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Deadline = data
+		case "permitV":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("permitV"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PermitV = data
+		case "permitR":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("permitR"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PermitR = data
+		case "permitS":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("permitS"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PermitS = data
+		}
+	}
+	return it, nil
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
@@ -2520,6 +2588,14 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOPermit2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐPermit(ctx context.Context, v any) (*model.Permit, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputPermit(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {
