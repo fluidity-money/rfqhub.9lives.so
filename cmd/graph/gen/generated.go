@@ -37,7 +37,7 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Mutation struct {
-		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal) int
+		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal, isDryrun *bool) int
 	}
 
 	Query struct {
@@ -50,7 +50,7 @@ type ComplexityRoot struct {
 // region    ************************** generated!.gotpl **************************
 
 type MutationResolver interface {
-	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal) (bool, error)
+	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal, isDryrun *bool) (bool, error)
 }
 type QueryResolver interface {
 	Balance(ctx context.Context, addr string) (string, error)
@@ -84,7 +84,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["onrampingFromBal"].(model.OnrampingFromBal)), true
+		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["onrampingFromBal"].(model.OnrampingFromBal), args["isDryrun"].(*bool)), true
 
 	case "Query.balance":
 		if e.ComplexityRoot.Query.Balance == nil {
@@ -223,7 +223,8 @@ type Mutation {
   createAccountExec(
     createAccount: CreateAccount!,
     permit: Permit,
-    onrampingFromBal: OnrampingFromBal!
+    onrampingFromBal: OnrampingFromBal!,
+    isDryrun: Boolean
   ): Boolean!
 }
 `, BuiltIn: false},
@@ -377,6 +378,14 @@ func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Co
 		return nil, err
 	}
 	args["onrampingFromBal"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "isDryrun",
+		func(ctx context.Context, v any) (*bool, error) {
+			return ec.unmarshalOBoolean2ᚖbool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["isDryrun"] = arg3
 	return args, nil
 }
 
@@ -478,7 +487,7 @@ func (ec *executionContext) _Mutation_createAccountExec(ctx context.Context, fie
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAccountExec(ctx, fc.Args["createAccount"].(model.CreateAccount), fc.Args["permit"].(*model.Permit), fc.Args["onrampingFromBal"].(model.OnrampingFromBal))
+			return ec.Resolvers.Mutation().CreateAccountExec(ctx, fc.Args["createAccount"].(model.CreateAccount), fc.Args["permit"].(*model.Permit), fc.Args["onrampingFromBal"].(model.OnrampingFromBal), fc.Args["isDryrun"].(*bool))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {

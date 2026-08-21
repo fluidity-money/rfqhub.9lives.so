@@ -23,18 +23,6 @@ import (
 
 var MaxBytes32 [32]byte
 
-func strToBytes8(s string) ([8]byte, error) {
-	var b [8]byte
-	i, err := hex.Decode(b[:], []byte(strings.TrimPrefix(s, "0x")))
-	if err != nil {
-		return b, fmt.Errorf("decode str: %v", err)
-	}
-	if i != 8 {
-		return b, fmt.Errorf("decode str len: %v", i)
-	}
-	return b, nil
-}
-
 func strToAddr(s string) ([20]byte, error) {
 	var b [20]byte
 	if s == "" {
