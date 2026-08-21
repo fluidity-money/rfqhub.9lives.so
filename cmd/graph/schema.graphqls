@@ -3,32 +3,32 @@ type Query {
   balance(addr: String!): String!
 }
 
+input CreateAccount {
+  eoa_addr: String!,
+  sigV: Int!,
+  sigR: String!,
+  sigS: String!
+  authority: String,
+}
+
+input OnrampingFromBal {
+  """
+  Amount that we're onramping from the owner's address here.
+  """
+  amt: String!,
+
+  """
+  The timestamp when this was submitted to prevent nonce reuse.
+  """
+  msTs: String!
+}
+
 type Mutation {
   """
-  Use the same secret as the accounts server to create a statement for the spendable
-  amount if the balance is enough, then use that amount to create an internal object for
-  spending that can be accessed to be used to create a recursive RFQ blob. Currently,
-  rfqhub is needed to sign off on any pairs that are created to prevent any potential for
-  abuse. This weakness stems from trying to keep the system lean by not doing any
-  historical calculation for the best result from the RFQ matching, instead preferring
-  to expire the amount if noone matches. Any RFQ engine matchers should use the
-  model to backstop poor liquidity.
-
-  The secret in-browser blob needs to be sent with the Authorization header.
+  Create an account while onramping from bal to create a balance object.
   """
-  createRfqV1(
-    """
-    The asset that this prediction is for.
-    """
-    quoteAsset: String!,
-    """
-    The deadline for when this option should expire.
-    """
-    deadline: String!,
-
-    """
-    The amount that's being staked on the outcome of the market.
-    """
-    fromAmt: String!
-  ): String!
+  createAccountExec(
+    createAccount: CreateAccount!,
+    onrampingFromBal: OnrampingFromBal!
+  ): Boolean!
 }

@@ -2,5 +2,23 @@
 
 package model
 
+type CreateAccount struct {
+	EoaAddr   string  `json:"eoa_addr"`
+	SigV      int     `json:"sigV"`
+	SigR      string  `json:"sigR"`
+	SigS      string  `json:"sigS"`
+	Authority *string `json:"authority,omitempty"`
+}
+
+type Mutation struct {
+}
+
+type OnrampingFromBal struct {
+	// Amount that we're onramping from the owner's address here.
+	Amt string `json:"amt"`
+	// The timestamp when this was submitted to prevent nonce reuse.
+	MsTs string `json:"msTs"`
+}
+
 type Query struct {
 }

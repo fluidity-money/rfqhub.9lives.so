@@ -7,10 +7,115 @@ package gen
 
 import (
 	"context"
+	"math/big"
 	"fmt"
+	"log/slog"
 
+	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/fluidity-money/9lives.so/lib/types/events"
+	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
+	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 )
+
+// CreateAccountExec is the resolver for the createAccountExec field.
+func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, onrampingFromBal model.OnrampingFromBal) (bool, error) {
+	amt, _ := new(big.Int).SetString(mint.Amt, 10)
+	//minimum amount > amt
+	if r.MinimumAmount.Cmp(amt) > 0 {
+		return nil, fmt.Errorf("below the minimum amount (%v)", amt)
+	}
+	snowflake, _ := ctx.Value("snowflake").(int)
+	f, err := convertor.CreateAccountToFreshBackwards(r.AccPubKey, createAccount)
+	if err != nil {
+		slog.Error("create account",
+			"create account", createAccount,
+			"onramping from bal", onrampingFromBal,
+			"err", err,
+		)
+		return nil, fmt.Errorf("create account: %v", err)
+	}
+	if !ethCommon.IsHexAddress(createAccount.EoaAddr) {
+		return nil, fmt.Errorf("not eoa address")
+	}
+	eoa := ethCommon.HexToAddress(createAccount.EoaAddr)
+	if mint != nil {
+		err = convertor.TagFreshBackwardsWithMint(
+			ProgDalek,
+			f,
+			types.AssetUsdc,
+			mint.Market,
+			mint.Outcome,
+			mint.Amount,
+			mint.Referrer,
+			eoa,
+			mint.Permit,
+			mint.MsTs,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("mint tagging: %v", err)
+		}
+	}
+	privKey, sender, err := db.PickPrivateKey(ctx, r.Db)
+	if err != nil {
+		log.Fatalf("error picking private key: %v", err)
+	}
+	h, gasLimit, err := client.SendArguments(
+		ctx,
+		r.Client,
+		r.ChainId,
+		privKey,
+		*sender,
+		r.AccountsFactoryAddr,
+		types.Args{
+			Enum:           types.ArgsFreshBackwards,
+			FreshBackwards: *f,
+		},
+		isDryrun(dryrun),
+	)
+	if err != nil {
+		slog.Error("error creating an account",
+			"sender", sender,
+			"fresh backwards", f,
+			"err", err,
+			"create v", createAccount.SigV,
+			"create r", createAccount.SigR,
+			"create s", createAccount.SigS,
+		)
+		// We ignore messages if someone is trying to buy at the end of a market:
+		if !isIgnorable(err) {
+			activateSoftAlarm(r.UrlAlarm, snowflake, fmt.Errorf(
+				"create account exec, user address: %v, sender: %v, contract: %v, err: %v",
+				eoa,
+				sender,
+				r.AccountsFactoryAddr,
+				err,
+			))
+		}
+		return nil, fmt.Errorf("send arguments: fresh backwards %+v: %v", f, err)
+	}
+	secret := makeSecret()
+	secretX := hex.EncodeToString(secret)
+	if !isDryrun(dryrun) {
+		eoaS := strings.ToLower(eoa.String())
+		if !isDryrun(dryrun) {
+			_, err = r.Db.Exec(`
+INSERT INTO accounts_secrets_2 (eoa_addr, secret)
+VALUES ($1, $2)`,
+				eoaS,
+				secretX,
+			)
+			if err != nil {
+				slog.Error("error inserting a secret", "err", err)
+				return nil, fmt.Errorf("error inserting secret")
+			}
+		}
+		trackTx(r.Db, eoaS, h.Hex(), gasLimit, "create account")
+	}
+	return &model.CreateAccountExec{
+		Hash:   h.Hex(),
+		Secret: secretX,
+	}, nil
+}
 
 // Balance is the resolver for the balance field.
 func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error) {
@@ -19,7 +124,12 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	// amounts are amounts that were earmarked to be spent,
 	// which when they are designated are immediately consumed
 	// as such.
-	row := r.Db.QueryRow("SELECT rfqhub_get_spendable_1($1)", addr)
+	if !ethCommon.IsHexAddress(addr) {
+		return "", fmt.Errorf("not valid address")
+	}
+	addr_ := ethCommon.HexToAddress(addr)
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, addr_)
+	row := r.Db.QueryRow("SELECT rfqhub_get_spendable_1($1)", accAddr.String())
 	var amt events.Number
 	if err := row.Scan(&amt).Error; err != nil {
 		slog.Error("Failed to scan the get spendable row",
@@ -30,7 +140,13 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	return amt.String(), nil
 }
 
+// Mutation returns MutationResolver implementation.
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
-type queryResolver struct{ *Resolver }
+type (
+	mutationResolver struct{ *Resolver }
+	queryResolver    struct{ *Resolver }
+)

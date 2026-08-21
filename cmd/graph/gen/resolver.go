@@ -1,8 +1,12 @@
 package gen
 
-// This file will not be regenerated automatically.
-//
-// It serves as dependency injection for your app, add any dependencies you require
-// here.
+import (
+	"database/sql"
 
-type Resolver struct{}
+	ethCommon "github.com/ethereum/go-ethereum/common"
+)
+
+type Resolver struct{
+	Db *sql.DB
+	AccountsFactoryAddr ethCommon.Address
+}
