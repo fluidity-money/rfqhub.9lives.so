@@ -11,23 +11,26 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"strconv"
 	"strings"
-	"math/big"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/fluidity-money/9lives.so/lib/types/events"
+	acc_client "github.com/fluidity-money/accounts.superposition.so/lib/client"
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
-	acc_client "github.com/fluidity-money/accounts.superposition.so/lib/client"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
-func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal, isDryrun *bool) (bool, error) {
-	amt, _ := new(big.Int).SetString(onrampingFromBal.Amt, 10)
+func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error) {
+	amt_, err := strconv.ParseUint(amt, 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("bad amt")
+	}
 	//minimum amount > amt
-	if r.MinimumAmount.Cmp(amt) > 0 {
+	if r.MinimumAmount > amt_ {
 		return false, fmt.Errorf("below the minimum amount (%v)", amt)
 	}
 	f, err := convertor.CreateFreshBackwards(
@@ -37,7 +40,7 @@ func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount 
 	if err != nil {
 		slog.Error("create account",
 			"create account", createAccount,
-			"onramping from bal", onrampingFromBal,
+			"amt", amt_,
 			"err", err,
 		)
 		return false, fmt.Errorf("create account: %v", err)
@@ -46,14 +49,15 @@ func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount 
 		return false, fmt.Errorf("not eoa address")
 	}
 	eoa := ethCommon.HexToAddress(createAccount.EoaAddr)
+	msTs := pickMsTs()
 	err = convertor.TagFreshBackwardsWithOnrampingFromBal(
 		ProgDalek,
 		r.RfqhubAddr,
 		f,
 		acc_types.AssetUsdc,
-		onrampingFromBal.Amt,
+		amt_,
 		permit,
-		onrampingFromBal.MsTs,
+		msTs,
 	)
 	if err != nil {
 		return false, fmt.Errorf("mint tagging: %v", err)
@@ -106,6 +110,16 @@ VALUES ($1, $2)`,
 		trackTx(r.Db, eoaS, h.Hex(), gasLimit, "create account")
 	}
 	return true, nil
+}
+
+// OnrampAmount is the resolver for the onrampAmount field.
+func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string) (bool, error) {
+	panic(fmt.Errorf("not implemented: OnrampAmount - onrampAmount"))
+}
+
+// CreateAuction is the resolver for the createAuction field.
+func (r *mutationResolver) CreateAuction(ctx context.Context, minAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error) {
+	panic(fmt.Errorf("not implemented: CreateAuction - createAuction"))
 }
 
 // Balance is the resolver for the balance field.

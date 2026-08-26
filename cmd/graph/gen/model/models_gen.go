@@ -2,6 +2,20 @@
 
 package model
 
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
+)
+
+type AuctionResult struct {
+	// Leftover amount that can be spent by this user.
+	LeftoverBal string `json:"leftoverBal"`
+	// The amount that was spent in the creation of this auction.
+	AmountSpent string `json:"amountSpent"`
+}
+
 type CreateAccount struct {
 	EoaAddr   string  `json:"eoa_addr"`
 	SigV      int     `json:"sigV"`
@@ -13,13 +27,6 @@ type CreateAccount struct {
 type Mutation struct {
 }
 
-type OnrampingFromBal struct {
-	// Amount that we're onramping from the owner's address here.
-	Amt string `json:"amt"`
-	// The timestamp when this was submitted to prevent nonce reuse.
-	MsTs string `json:"msTs"`
-}
-
 type Permit struct {
 	Deadline int    `json:"deadline"`
 	PermitV  int    `json:"permitV"`
@@ -28,4 +35,57 @@ type Permit struct {
 }
 
 type Query struct {
+}
+
+type Outcome string
+
+const (
+	OutcomeBitcoinPrice Outcome = "BitcoinPrice"
+)
+
+var AllOutcome = []Outcome{
+	OutcomeBitcoinPrice,
+}
+
+func (e Outcome) IsValid() bool {
+	switch e {
+	case OutcomeBitcoinPrice:
+		return true
+	}
+	return false
+}
+
+func (e Outcome) String() string {
+	return string(e)
+}
+
+func (e *Outcome) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = Outcome(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid Outcome", str)
+	}
+	return nil
+}
+
+func (e Outcome) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *Outcome) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e Outcome) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }

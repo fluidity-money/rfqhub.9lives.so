@@ -36,8 +36,15 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AuctionResult struct {
+		AmountSpent func(childComplexity int) int
+		LeftoverBal func(childComplexity int) int
+	}
+
 	Mutation struct {
-		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal, isDryrun *bool) int
+		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
+		CreateAuction     func(childComplexity int, minAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) int
+		OnrampAmount      func(childComplexity int, amt string) int
 	}
 
 	Query struct {
@@ -50,7 +57,9 @@ type ComplexityRoot struct {
 // region    ************************** generated!.gotpl **************************
 
 type MutationResolver interface {
-	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, onrampingFromBal model.OnrampingFromBal, isDryrun *bool) (bool, error)
+	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error)
+	OnrampAmount(ctx context.Context, amt string) (bool, error)
+	CreateAuction(ctx context.Context, minAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error)
 }
 type QueryResolver interface {
 	Balance(ctx context.Context, addr string) (string, error)
@@ -74,6 +83,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	_ = ec
 	switch typeName + "." + field {
 
+	case "AuctionResult.amountSpent":
+		if e.ComplexityRoot.AuctionResult.AmountSpent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuctionResult.AmountSpent(childComplexity), true
+	case "AuctionResult.leftoverBal":
+		if e.ComplexityRoot.AuctionResult.LeftoverBal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuctionResult.LeftoverBal(childComplexity), true
+
 	case "Mutation.createAccountExec":
 		if e.ComplexityRoot.Mutation.CreateAccountExec == nil {
 			break
@@ -84,7 +106,29 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["onrampingFromBal"].(model.OnrampingFromBal), args["isDryrun"].(*bool)), true
+		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["amt"].(string), args["isDryrun"].(*bool)), true
+	case "Mutation.createAuction":
+		if e.ComplexityRoot.Mutation.CreateAuction == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createAuction_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateAuction(childComplexity, args["minAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(string)), true
+	case "Mutation.onrampAmount":
+		if e.ComplexityRoot.Mutation.OnrampAmount == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_onrampAmount_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.OnrampAmount(childComplexity, args["amt"].(string)), true
 
 	case "Query.balance":
 		if e.ComplexityRoot.Query.Balance == nil {
@@ -107,7 +151,6 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCreateAccount,
-		ec.unmarshalInputOnrampingFromBal,
 		ec.unmarshalInputPermit,
 	)
 	first := true
@@ -185,7 +228,14 @@ func newExecutionContext(
 
 var sources = []*ast.Source{
 	{Name: "../schema.graphqls", Input: `
+enum Outcome {
+    BitcoinPrice,
+}
+
 type Query {
+  """
+  Get the balance that can be spent after it was onramped.
+  """
   balance(addr: String!): String!
 }
 
@@ -204,16 +254,16 @@ input Permit {
   permitS: String!
 }
 
-input OnrampingFromBal {
+type AuctionResult {
   """
-  Amount that we're onramping from the owner's address here.
+  Leftover amount that can be spent by this user.
   """
-  amt: String!,
+  leftoverBal: String!,
 
   """
-  The timestamp when this was submitted to prevent nonce reuse.
+  The amount that was spent in the creation of this auction.
   """
-  msTs: String!
+  amountSpent: String!,
 }
 
 type Mutation {
@@ -223,9 +273,32 @@ type Mutation {
   createAccountExec(
     createAccount: CreateAccount!,
     permit: Permit,
-    onrampingFromBal: OnrampingFromBal!,
+    amt: String!,
     isDryrun: Boolean
   ): Boolean!
+
+  onrampAmount(amt: String!): Boolean!
+
+  """
+  Create an auction for a taker position, returning the
+  """
+  createAuction(
+    """
+    The minimum amount of the outstanding balance we can spend here.
+    """
+    minAmount: String!,
+
+    isUp: Boolean!,
+
+    priceTarget: String!,
+
+    outcome: Outcome!,
+
+    """
+    The timestamp that we use for expiry of the market.
+    """
+    expiry: String!
+  ): AuctionResult!
 }
 `, BuiltIn: false},
 }
@@ -234,6 +307,16 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // childFields_* functions provide shared child field context lookups.
 // Each function is generated once per unique object type, deduplicating the
 // switch statements that were previously inlined in every fieldContext_* function.
+
+func (ec *executionContext) childFields_AuctionResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "leftoverBal":
+		return ec.fieldContext_AuctionResult_leftoverBal(ctx, field)
+	case "amountSpent":
+		return ec.fieldContext_AuctionResult_amountSpent(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AuctionResult", field.Name)
+}
 
 func (ec *executionContext) childFields___Directive(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
@@ -370,14 +453,14 @@ func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Co
 		return nil, err
 	}
 	args["permit"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "onrampingFromBal",
-		func(ctx context.Context, v any) (model.OnrampingFromBal, error) {
-			return ec.unmarshalNOnrampingFromBal2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOnrampingFromBal(ctx, v)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "amt",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["onrampingFromBal"] = arg2
+	args["amt"] = arg2
 	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "isDryrun",
 		func(ctx context.Context, v any) (*bool, error) {
 			return ec.unmarshalOBoolean2ᚖbool(ctx, v)
@@ -386,6 +469,66 @@ func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Co
 		return nil, err
 	}
 	args["isDryrun"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createAuction_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "minAmount",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["minAmount"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "isUp",
+		func(ctx context.Context, v any) (bool, error) {
+			return ec.unmarshalNBoolean2bool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["isUp"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "priceTarget",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["priceTarget"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "outcome",
+		func(ctx context.Context, v any) (model.Outcome, error) {
+			return ec.unmarshalNOutcome2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOutcome(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["outcome"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "expiry",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["expiry"] = arg4
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_onrampAmount_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "amt",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["amt"] = arg0
 	return args, nil
 }
 
@@ -477,6 +620,52 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
+func (ec *executionContext) _AuctionResult_leftoverBal(ctx context.Context, field graphql.CollectedField, obj *model.AuctionResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuctionResult_leftoverBal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LeftoverBal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuctionResult_leftoverBal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuctionResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _AuctionResult_amountSpent(ctx context.Context, field graphql.CollectedField, obj *model.AuctionResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuctionResult_amountSpent(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AmountSpent, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuctionResult_amountSpent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuctionResult", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
 func (ec *executionContext) _Mutation_createAccountExec(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -487,7 +676,7 @@ func (ec *executionContext) _Mutation_createAccountExec(ctx context.Context, fie
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAccountExec(ctx, fc.Args["createAccount"].(model.CreateAccount), fc.Args["permit"].(*model.Permit), fc.Args["onrampingFromBal"].(model.OnrampingFromBal), fc.Args["isDryrun"].(*bool))
+			return ec.Resolvers.Mutation().CreateAccountExec(ctx, fc.Args["createAccount"].(model.CreateAccount), fc.Args["permit"].(*model.Permit), fc.Args["amt"].(string), fc.Args["isDryrun"].(*bool))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
@@ -515,6 +704,94 @@ func (ec *executionContext) fieldContext_Mutation_createAccountExec(ctx context.
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createAccountExec_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_onrampAmount(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_onrampAmount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().OnrampAmount(ctx, fc.Args["amt"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_onrampAmount(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_onrampAmount_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createAuction(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createAuction(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateAuction(ctx, fc.Args["minAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.AuctionResult) graphql.Marshaler {
+			return ec.marshalNAuctionResult2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAuctionResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createAuction(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AuctionResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createAuction_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -1758,43 +2035,6 @@ func (ec *executionContext) unmarshalInputCreateAccount(ctx context.Context, obj
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputOnrampingFromBal(ctx context.Context, obj any) (model.OnrampingFromBal, error) {
-	var it model.OnrampingFromBal
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"amt", "msTs"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "amt":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("amt"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Amt = data
-		case "msTs":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("msTs"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.MsTs = data
-		}
-	}
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputPermit(ctx context.Context, obj any) (model.Permit, error) {
 	var it model.Permit
 	if obj == nil {
@@ -1854,6 +2094,49 @@ func (ec *executionContext) unmarshalInputPermit(ctx context.Context, obj any) (
 
 // region    **************************** object.gotpl ****************************
 
+var auctionResultImplementors = []string{"AuctionResult"}
+
+func (ec *executionContext) _AuctionResult(ctx context.Context, sel ast.SelectionSet, obj *model.AuctionResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, auctionResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AuctionResult")
+		case "leftoverBal":
+			out.Values[i] = ec._AuctionResult_leftoverBal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "amountSpent":
+			out.Values[i] = ec._AuctionResult_amountSpent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -1877,6 +2160,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "createAccountExec":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createAccountExec(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "onrampAmount":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_onrampAmount(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createAuction":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createAuction(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -2371,6 +2668,20 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
+func (ec *executionContext) marshalNAuctionResult2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAuctionResult(ctx context.Context, sel ast.SelectionSet, v model.AuctionResult) graphql.Marshaler {
+	return ec._AuctionResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAuctionResult2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAuctionResult(ctx context.Context, sel ast.SelectionSet, v *model.AuctionResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AuctionResult(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -2408,9 +2719,14 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
-func (ec *executionContext) unmarshalNOnrampingFromBal2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOnrampingFromBal(ctx context.Context, v any) (model.OnrampingFromBal, error) {
-	res, err := ec.unmarshalInputOnrampingFromBal(ctx, v)
+func (ec *executionContext) unmarshalNOutcome2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOutcome(ctx context.Context, v any) (model.Outcome, error) {
+	var res model.Outcome
+	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNOutcome2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOutcome(ctx context.Context, sel ast.SelectionSet, v model.Outcome) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {

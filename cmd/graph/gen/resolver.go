@@ -11,7 +11,8 @@ import (
 type Resolver struct {
 	Db                              *sql.DB
 	AccountsFactoryAddr, RfqhubAddr ethCommon.Address
-	MinimumAmount, ChainId                   *big.Int
+	ChainId                   *big.Int
+	MinimumAmount uint64
 	AccPubKey                       [32]byte
 	Client *ethclient.Client
 }

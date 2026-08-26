@@ -1,5 +1,12 @@
 
+enum Outcome {
+    BitcoinPrice,
+}
+
 type Query {
+  """
+  Get the balance that can be spent after it was onramped.
+  """
   balance(addr: String!): String!
 }
 
@@ -18,16 +25,16 @@ input Permit {
   permitS: String!
 }
 
-input OnrampingFromBal {
+type AuctionResult {
   """
-  Amount that we're onramping from the owner's address here.
+  Leftover amount that can be spent by this user.
   """
-  amt: String!,
+  leftoverBal: String!,
 
   """
-  The timestamp when this was submitted to prevent nonce reuse.
+  The amount that was spent in the creation of this auction.
   """
-  msTs: String!
+  amountSpent: String!,
 }
 
 type Mutation {
@@ -37,7 +44,30 @@ type Mutation {
   createAccountExec(
     createAccount: CreateAccount!,
     permit: Permit,
-    onrampingFromBal: OnrampingFromBal!,
+    amt: String!,
     isDryrun: Boolean
   ): Boolean!
+
+  onrampAmount(amt: String!): Boolean!
+
+  """
+  Create an auction for a taker position, returning the
+  """
+  createAuction(
+    """
+    The minimum amount of the outstanding balance we can spend here.
+    """
+    minAmount: String!,
+
+    isUp: Boolean!,
+
+    priceTarget: String!,
+
+    outcome: Outcome!,
+
+    """
+    The timestamp that we use for expiry of the market.
+    """
+    expiry: String!
+  ): AuctionResult!
 }

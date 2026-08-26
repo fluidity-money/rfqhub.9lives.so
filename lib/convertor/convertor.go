@@ -6,9 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"math/big"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
@@ -94,36 +92,25 @@ func CreateSolveArgsSigArgs(
 	prog string,
 	rfqhubAddr ethCommon.Address,
 	asset types.Asset,
-	amt string,
+	amt uint64,
 	permit *model.Permit,
-	msTs_ string,
+	msTs [6]byte,
 ) (*acc_types.SolveArgsSigArgs, error) {
-	a, err := strconv.ParseUint(amt, 64, 10)
-	if err != nil {
-		return nil, fmt.Errorf("bad int")
-	}
-	msTsI, ok := new(big.Int).SetString(msTs_, 10)
-	if !ok {
-		return nil, fmt.Errorf("ms ts: %v", msTs_)
-	}
-	var msTs [16]byte
-	if b := msTsI.Bytes(); len(b) > len(msTs) {
-		return nil, fmt.Errorf("too large msts")
-	}
-	copy(msTs[:], msTsI.Bytes())
 	cd, err := borsh.Serialize(types.Args{
 		OnrampingFromBal: types.OnrampingFromBalArgs{
 			Asset: asset,
-			Amt:   a,
+			Amt:   amt,
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("serialise borsh: %v", err)
 	}
 	var toTake [32]byte
-	if _, err := binary.Encode(toTake[:], binary.BigEndian, a); err != nil {
+	if _, err := binary.Encode(toTake[:], binary.BigEndian, amt); err != nil {
 		return nil, fmt.Errorf("encoding toTake: %v", err)
 	}
+	var msTsI [16]byte
+	copy(msTsI[:16-len(msTs)], msTs[:])
 	solveArgs := acc_types.SolveArgs{
 		From: []acc_types.FromArgs{{
 			Asset:  asset,
@@ -132,7 +119,7 @@ func CreateSolveArgsSigArgs(
 		}},
 		Target: rfqhubAddr,
 		Cd:     cd,
-		MsTs:   msTs,
+		MsTs:   msTsI,
 	}
 	if permit != nil {
 		if permit.Deadline < 0 {
@@ -177,9 +164,9 @@ func TagFreshBackwardsWithOnrampingFromBal(
 	rfqhubAddr ethCommon.Address,
 	f *acc_types.FreshBackwards,
 	asset types.Asset,
-	amt string,
+	amt uint64,
 	permit *model.Permit,
-	msTs string,
+	msTs [6]byte,
 ) error {
 	m, err := CreateSolveArgsSigArgs(
 		prog,

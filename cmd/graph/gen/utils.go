@@ -2,6 +2,8 @@ package gen
 
 import (
 	"bytes"
+	"time"
+	"math/big"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -63,4 +65,10 @@ func isIgnorable(err error) bool {
 	default:
 		return false
 	}
+}
+
+func pickMsTs() (b [6]byte) {
+	u := new(big.Int).SetInt64(time.Now().Unix())
+	copy(b[:], u.Bytes())
+	return
 }
