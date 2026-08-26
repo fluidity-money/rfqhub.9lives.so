@@ -132,6 +132,10 @@ unsafe fn recurse_aggregate_args(
     }
     let (taker_amt, taker_acc, asset) =
         unsafe { recurse_aggregate_src(imm, &src, &signable.maker.taker_args)? };
+    let taker_acc_u: U = taker_acc.into();
+    let maker_acc_u: U = maker_acc.into();
+    storage::ms_ts::exchange(&taker_acc_u, &taker_ms_ts.into());
+    storage::ms_ts::exchange(&maker_acc_u, &maker_ms_ts.into());
     if imm.should_user_sig_validate {
         check_hash_signer(
             maker_acc,
@@ -161,8 +165,8 @@ unsafe fn recurse_aggregate_args(
         &maker_amt_u,
         "maker take onramped bal",
     )?;
-    storage::hash_taker_addr::set(&signable_hash_u, &taker_acc.into());
-    storage::hash_maker_addr::set(&signable_hash_u, &maker_acc.into());
+    storage::hash_taker_addr::set(&signable_hash_u, &taker_acc_u);
+    storage::hash_maker_addr::set(&signable_hash_u, &maker_acc_u);
     if did_taker_win {
         storage::hash_taker_position::checked_add_res(
             &signable_hash_u,

@@ -261,6 +261,8 @@ storage! {
     // Onramped balance of the account address given. Should be possible
     // to spend by the account address given here.
     onramped_bal(asset, account),
+    // Seen timestamps that we track to prevent reuse.
+    ms_ts(account, ms_ts),
     // Taker amount that is available to be withdrawn for the taker of this
     // position:
     hash_taker_leftover(hash, asset),
