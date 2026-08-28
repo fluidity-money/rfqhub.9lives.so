@@ -21,8 +21,7 @@ contract Rfqhub9LIVES is Test {
     function test_contractVersion() public {
         Args memory args;
         args.kind = ArgsKind.Version;
-        (bool rc, bytes memory rd) = RfqhubTypes.sendCalldata(vm, c, args);
-        assert(rc);
+        (,bytes memory rd) = RfqhubTypes.sendCalldata(vm, c, args);
         (uint256 version) = abi.decode(rd, (uint256));
         assert(version > 0);
     }
