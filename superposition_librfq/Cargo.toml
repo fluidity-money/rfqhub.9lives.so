@@ -27,3 +27,6 @@ serde = ["dep:serde", "bobcat-sdk/serde", "const-hex/serde", "const-hex/alloc"]
 storage-debug = ["std"]
 arbos = []
 arbitrum = []
+
+[dev-dependencies]
+proptest = ">=1.11.0"

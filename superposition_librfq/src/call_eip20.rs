@@ -12,7 +12,7 @@ pub fn safe_transfer_from(addr: [u8; 20], from: [u8; 20], to: [u8; 20], amt: &U)
         &make_fn_transfer_from(from, to, &amt),
         &U::ZERO,
         u64::MAX,
-        1,
+        31,
     ) {
         len == 0 || rd[0] == 1
     } else {

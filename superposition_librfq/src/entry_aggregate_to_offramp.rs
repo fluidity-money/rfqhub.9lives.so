@@ -80,7 +80,7 @@ unsafe fn recurse_aggregate_src(
 // SAFETY: Uses the contract storage to move amounts around, taking
 // advantage of the memory performing caching at places. Uses the storage
 // to look up the funds involved.
-unsafe fn recurse_aggregate_args(
+pub unsafe fn recurse_aggregate_args(
     imm: &Imm,
     &AggregateArgs {
         maker:
@@ -347,63 +347,6 @@ mod test {
     use alloc::boxed::Box;
 
     use bobcat_sdk::storage::flush_guard_fresh;
-
-    #[test]
-    fn test_erik_alex() {
-        flush_guard_fresh(|| {
-            // Erik is expecting that the price of Bitcoin will go up above $100 by
-            // timestamp 1. Alex bets that it won't, providing $200 as the
-            // compensation if Erik is correct. As Alex has provided the highest
-            // offer at the conclusion of the sealed bid auction, he is chosen. At
-            // timestamp 1, Erik is correct. Erik provided $500 for his prediction,
-            // so he ends up with $700.
-            let expiry: [u8; 6] = [0, 0, 0, 0, 0, 1];
-            let outcome = Outcome::BitcoinPrice;
-            let alex_addr = [0u8; 20];
-            let alex_amt = 200;
-            let erik_addr = [1u8; 20];
-            let erik_amt = 500;
-            let asset = Asset::USDC;
-            storage::onramped_bal::set(&asset.into(), &erik_addr.into(), &erik_amt.into());
-            storage::onramped_bal::set(&asset.into(), &alex_addr.into(), &alex_amt.into());
-            let erik = BundleTaker {
-                args: BundleTakerArgs {
-                    src: OnrampingSource::OnchainPot(OnchainPotArgs {
-                        acc_addr: erik_addr,
-                        amt: erik_amt,
-                        asset,
-                    }),
-                    expiry,
-                    ms_ts: [0u8; 6],
-                    is_up: true,
-                    price_target: 100,
-                    outcome,
-                },
-                sig: [0u8; 64],
-            };
-            let alex = BundleMaker {
-                args: BundleMakerArgs {
-                    taker: erik,
-                    ms_ts: [0u8; 6],
-                    acc: alex_addr,
-                    amt: alex_amt,
-                },
-                sig: [0u8; 64],
-            };
-            let agg = AggregateArgs {
-                maker: alex,
-                timestamplet: Timestamplet {
-                    timestamplet_time: [0, 0, 0, 0, 0, 1],
-                    timestamplet_outcome: outcome,
-                    timestamplet_val: 101,
-                },
-            };
-            let signable = SignableAggregateArgs::from(&agg);
-            assert_eq!((700, erik_addr, asset.addr()), unsafe {
-                recurse_aggregate_args(&Imm::default(), &agg, &signable, &[0u8; 64]).unwrap()
-            });
-        })
-    }
 
     #[test]
     fn test_erik_alex_after_already_same_blob() {

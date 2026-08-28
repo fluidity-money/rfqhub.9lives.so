@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0253c418da74dc75670475c1e72d5fbf2ad062ffd7f14891b21619f1b8189b2f # shrinks to erik_addr = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], alex_addr = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], erik_ms_ts = [0, 0, 0, 0, 0, 1], alex_ms_ts = [0, 0, 0, 0, 0, 1], expiry = [0, 0, 0, 0, 0, 1], outcome = BitcoinPrice, alex_amt = 1, erik_amt = 1, asset = USDC, price_target = 0, timestamplet_val = 0

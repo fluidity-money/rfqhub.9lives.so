@@ -320,3 +320,13 @@ pub fn aggregate_enum() -> StrategyFor<AggregateEnum> {
 pub fn args() -> StrategyFor<Args> {
     any::<Args>()
 }
+
+pub fn strat_u8_6_not_empty() -> impl Strategy<Value = [u8; 6]> {
+    any::<[u8; 6]>().prop_filter("[u8; 6] must be non-zero", |x| {
+        x.iter().any(|&byte| byte != 0)
+    })
+}
+
+pub fn strat_u64_not_empty() -> impl Strategy<Value = u64> {
+    1..=u64::MAX
+}

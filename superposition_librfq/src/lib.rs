@@ -41,7 +41,7 @@ pub use immutables::Imm;
 
 pub use superposition_assets::Asset;
 
-use outcome::Outcome;
+pub use outcome::Outcome;
 
 use alloc::boxed::Box;
 
