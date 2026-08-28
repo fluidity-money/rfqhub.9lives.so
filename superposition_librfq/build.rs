@@ -1,44 +1,34 @@
 use std::{env, fs, path::PathBuf};
 
-const VERSION_TAG: u8 = 1;
-
 fn main() {
     println!("cargo:rerun-if-changed=Cargo.toml");
-
-    let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION is set by Cargo");
-    let variant = format!(
-        "V{}",
-        version
-            .chars()
-            .map(|character| {
-                if character.is_ascii_alphanumeric() {
-                    character
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>()
-    );
-
+    let v = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION is set by Cargo");
+    let [major, minor, patch] = v.split(".").collect::<Vec<&str>>()[..].try_into().unwrap();
     let generated = format!(
         r#"use bobcat_sdk::maths::U;
 
-/// Versions of the RFQ hub crate and their externally visible tags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Version {{
-    /// Crate version {version}.
-    {variant} = {VERSION_TAG},
+pub struct Version {{
+    pub major: u64,
+    pub minor: u64,
+    pub patch: u64
 }}
 
 impl Version {{
-    pub const CURRENT: Self = Self::{variant};
-    pub const CRATE_VERSION: &'static str = "{version}";
+    pub const CURRENT: Self = Self {{
+        major: {major},
+        minor: {minor},
+        patch: {patch},
+    }};
 }}
 
 impl From<Version> for U {{
-    fn from(v: Version) -> Self {{
-        Self::from(v as u8).into()
+    fn from(Version {{ major, minor, patch }}: Version) -> Self {{
+        let mut x = U::ZERO;
+        x |= U::from(major) << 128;
+        x |= U::from(minor) << 64;
+        x |= patch.into();
+        x
     }}
 }}
 

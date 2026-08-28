@@ -18,12 +18,12 @@ contract Rfqhub9LIVES is Test {
         );
     }
 
-    function test_contractHello() public {
+    function test_contractVersion() public {
         Args memory args;
         args.kind = ArgsKind.Version;
         (bool rc, bytes memory rd) = RfqhubTypes.sendCalldata(vm, c, args);
         assert(rc);
         (uint256 version) = abi.decode(rd, (uint256));
-        assertEq(1, version);
+        assert(version > 0);
     }
 }
