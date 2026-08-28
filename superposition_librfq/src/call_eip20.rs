@@ -24,7 +24,7 @@ pub fn safe_transfer_from(addr: [u8; 20], from: [u8; 20], to: [u8; 20], amt: &U)
 /// we assume everything is okay.
 pub fn transfer(addr: [u8; 20], to: [u8; 20], amt: &U) -> bool {
     if let (true, len, rd) =
-        call_slice::<1>(addr, &make_fn_transfer(to, &amt), &U::ZERO, u64::MAX, 1)
+        call_slice::<1>(addr, &make_fn_transfer(to, &amt), &U::ZERO, u64::MAX, 31)
     {
         len == 0 || rd[0] == 1
     } else {

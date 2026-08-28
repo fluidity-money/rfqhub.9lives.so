@@ -4,6 +4,6 @@ cargo test --features testing
 
 export SPN_DEPLOY_TARGET=arbos
 
-make rfqhub.9lives.so.wasm
+make -B rfqhub.9lives.so.wasm
 
-arbos-forge test --ffi
+arbos-forge test --stylus-debug --ffi -vvv

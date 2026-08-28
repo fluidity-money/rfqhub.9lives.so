@@ -1,7 +1,6 @@
 use crate::{
     Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,
-    call_eip20,
+    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_eip20,
     error::{Dis, Error, ErrorData},
     signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
     storage,
