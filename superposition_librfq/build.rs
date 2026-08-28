@@ -9,8 +9,6 @@ fn hex_val(b: u8) -> u8 {
     }
 }
 
-/// Turn a 40-char git commit hash into a big-endian [u8; 32] U word.
-/// The hash is 20 bytes, left-padded with 12 zero bytes to fill the 256-bit word.
 fn commit_to_u_bytes(hex: &str) -> [u8; 32] {
     let nibbles = hex.as_bytes();
     assert_eq!(
@@ -30,35 +28,31 @@ fn main() {
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/refs/heads");
-
-    // The git commit hash the contract is compiled from.
     let commit_hash = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .output()
-        .expect("failed to run `git rev-parse HEAD`");
+        .unwrap();
     assert!(
         commit_hash.status.success(),
         "`git rev-parse HEAD` failed: {}",
         String::from_utf8_lossy(&commit_hash.stderr)
     );
     let commit_hash = String::from_utf8(commit_hash.stdout)
-        .expect("git output is not valid UTF-8")
+        .unwrap()
         .trim()
         .to_string();
-
     let bytes = commit_to_u_bytes(&commit_hash);
     let arr = bytes
         .iter()
         .map(|b| format!("0x{b:02x}"))
         .collect::<Vec<_>>()
         .join(", ");
-
     let generated = format!(
         r#"use bobcat_sdk::maths::U;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Version {{
-    /// The git commit hash (as a single U word) this contract was compiled from: {commit_hash}
+    /// Hash git commit {commit_hash}
     pub commit: U,
 }}
 
