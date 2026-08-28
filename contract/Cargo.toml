@@ -17,3 +17,5 @@ paste = "1.0.15"
 
 [features]
 testing = ["superposition_librfq/std"]
+arbos = []
+arbitrum = []

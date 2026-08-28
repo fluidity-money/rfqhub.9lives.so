@@ -14,7 +14,10 @@ OUT_WASM := target/wasm32-unknown-unknown/release/contract.wasm
 OUT_CLI := target/release/cli
 
 ${OUT_WASM}: $(shell find Cargo.* superposition_librfq contract -type f)
-	@cargo build --release --target wasm32-unknown-unknown
+	@cargo build \
+		--release \
+		--target wasm32-unknown-unknown \
+		--features ${SPN_DEPLOY_TARGET}
 
 rfqhub.9lives.so.wasm: ${OUT_WASM}
 	@./wasm-post.sh ${OUT_WASM} rfqhub.9lives.so.wasm
