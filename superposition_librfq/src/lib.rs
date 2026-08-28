@@ -14,6 +14,7 @@ pub mod entry_offramp;
 pub mod entry_onramping_from_bal;
 pub mod entry_source;
 pub mod entry_version;
+pub mod version;
 
 pub mod signable;
 
@@ -24,6 +25,8 @@ pub mod call_accounts;
 pub mod call_eip20;
 
 pub mod storage;
+
+pub use version::Version;
 
 use entry_aggregate_to_offramp::entry_aggregate_to_offramp;
 use entry_balance::entry_balance;
@@ -67,7 +70,7 @@ pub const TOPIC_BALANCE_CHANGED: U = const_keccak256(b"BalanceChanged(address,ad
 
 /// Global balance for the asset given has changed.
 pub const TOPIC_GLOBAL_BALANCE_CHANGED: U =
-    const_keccak256(b"GlobalBalanceChanged(address,uint256)");
+    const_keccak256(b"GlobalBalanceChanged(address,uint256,uint256)");
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]

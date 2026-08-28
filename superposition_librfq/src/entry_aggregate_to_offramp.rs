@@ -134,8 +134,8 @@ unsafe fn recurse_aggregate_args(
         unsafe { recurse_aggregate_src(imm, &src, &signable.maker.taker_args)? };
     let taker_acc_u: U = taker_acc.into();
     let maker_acc_u: U = maker_acc.into();
-    storage::ms_ts::exchange(&taker_acc_u, &taker_ms_ts.into());
-    storage::ms_ts::exchange(&maker_acc_u, &maker_ms_ts.into());
+    storage::ms_ts::exchange_res(&taker_acc_u, &taker_ms_ts.into(), "taker ms ts")?;
+    storage::ms_ts::exchange_res(&maker_acc_u, &maker_ms_ts.into(), "maker ms ts")?;
     if imm.should_user_sig_validate {
         check_hash_signer(
             maker_acc,
@@ -172,26 +172,26 @@ unsafe fn recurse_aggregate_args(
             &signable_hash_u,
             &asset_u,
             &maker_amt_u,
-            "give winnings to taker position",
+            "hash taker position checked add",
         )?;
         storage::hash_taker_leftover::checked_add_res(
             &signable_hash_u,
             &asset_u,
             &maker_amt_u,
-            "give winnings to taker leftover",
+            "hash taker leftover checked add",
         )?;
     } else {
         storage::hash_maker_position::checked_add_res(
             &signable_hash_u,
             &asset_u,
             &taker_amt_u,
-            "give winnings to maker position",
+            "hash maker position checked add",
         )?;
         storage::hash_maker_leftover::checked_add_res(
             &signable_hash_u,
             &asset_u,
             &taker_amt_u,
-            "give winnings to maker leftover",
+            "hash maker leftover checked add",
         )?;
     }
     storage::hash_asset::set(&signable_hash_u, &asset_u);
@@ -396,7 +396,7 @@ mod test {
             let alex_1 = BundleMaker {
                 args: BundleMakerArgs {
                     taker: erik_1,
-                    ms_ts: [0u8; 6],
+                    ms_ts: [1u8; 6],
                     acc: alex_addr,
                     amt: 200,
                 },
@@ -419,7 +419,7 @@ mod test {
                         },
                     ))),
                     expiry: expiry_2,
-                    ms_ts: [1u8; 6],
+                    ms_ts: [2u8; 6],
                     is_up: false,
                     price_target: 50,
                     outcome,
@@ -429,7 +429,7 @@ mod test {
             let alex_2 = BundleMaker {
                 args: BundleMakerArgs {
                     taker: erik_2,
-                    ms_ts: [1u8; 6],
+                    ms_ts: [3u8; 6],
                     acc: alex_addr,
                     amt: 300,
                 },
@@ -482,7 +482,7 @@ mod test {
             let alex_1 = BundleMaker {
                 args: BundleMakerArgs {
                     taker: erik_1,
-                    ms_ts: [0u8; 6],
+                    ms_ts: [1u8; 6],
                     acc: alex_addr,
                     amt: 200,
                 },
@@ -506,7 +506,7 @@ mod test {
                         signable_1.hash.into(),
                     ))),
                     expiry: expiry_2,
-                    ms_ts: [1u8; 6],
+                    ms_ts: [2u8; 6],
                     is_up: false,
                     price_target: 50,
                     outcome,
@@ -516,7 +516,7 @@ mod test {
             let alex_2 = BundleMaker {
                 args: BundleMakerArgs {
                     taker: erik_2,
-                    ms_ts: [1u8; 6],
+                    ms_ts: [3u8; 6],
                     acc: alex_addr,
                     amt: 300,
                 },

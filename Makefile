@@ -29,4 +29,5 @@ rfqhub-cli: ${OUT_CLI}
 	@cp ${OUT_CLI} rfqhub-cli
 
 clean:
-	@rm -rf target ${OUT_CLI} ${OUT_WASM}
+	@cargo clean
+	@rm -f ${OUT_CLI} ${OUT_WASM}

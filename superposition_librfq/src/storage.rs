@@ -35,7 +35,6 @@ macro_rules! storage {
 
             const SLOT: U = u!($counter);
 
-            #[inline]
             fn storage_error(
                 dis: Dis,
                 consuming_amt: U,
@@ -45,11 +44,11 @@ macro_rules! storage {
                 Error {
                     dis,
                     data: Box::new(ErrorData {
-                        hash: None,
                         storage: Some(stringify!($name)),
                         consuming_amt: Some(consuming_amt),
                         prev_amt: Some(prev_amt),
                         hint: Some(hint),
+                        ..ErrorData::default()
                     }),
                 }
             }
@@ -176,10 +175,7 @@ macro_rules! storage {
                         hint,
                     )
                 })?;
-            storage_store(
-                &slot,
-                &next,
-            );
+            storage_store(&slot, &next);
             Ok(next)
         }
 
@@ -203,24 +199,27 @@ macro_rules! storage {
                         hint,
                     )
                 })?;
-            storage_store(
-                &slot,
-                &next,
-            );
+            storage_store(&slot, &next);
             Ok(next)
         }
 
-        pub fn exchange(
-            $($param: &U),+
-        ) {
+        pub fn exchange_res(
+            $($param: &U),+,
+            hint: &'static str
+        ) -> Result<(), Error> {
             let slot = storage_slot($($param),+);
-            assert!(
-                storage_exchange_bool(
-                    &slot,
-                    false,
-                ),
-                "exchange failed"
-            );
+            storage_exchange_res(&slot, &U::ZERO, &U::ONE).map_err(|o| {
+                Error {
+                    dis: Dis::ExchangeErr,
+                    data: Box::new(ErrorData {
+                        hash: None,
+                        storage: Some(hint),
+                        old_val: Some(o),
+                        hint: Some(hint),
+                        ..ErrorData::default()
+                    }),
+                }
+            })
         }
     };
 

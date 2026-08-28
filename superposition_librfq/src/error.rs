@@ -17,6 +17,7 @@ pub enum Dis {
     SenderNotTaker,
     SenderNotMaker,
     HashAlreadySeen,
+    ExchangeErr,
 }
 
 #[derive(Clone, PartialEq)]
@@ -33,6 +34,7 @@ pub struct ErrorData {
     pub consuming_amt: Option<U>,
     pub prev_amt: Option<U>,
     pub hint: Option<&'static str>,
+    pub old_val: Option<U>,
 }
 
 impl From<Dis> for Error {
@@ -59,6 +61,7 @@ impl Debug for Error {
             consuming_amt,
             prev_amt,
             hint,
+            old_val,
         } = data.as_ref();
         write!(
             f,
@@ -75,7 +78,12 @@ impl Debug for Error {
         } else {
             write!(f, "None")?;
         };
-        write!(f, ", hint: {hint:?} }}")
+        write!(f, ", hint: {hint:?}, old_val: }}")?;
+        if let Some(x) = old_val {
+            write!(f, "{x}")
+        } else {
+            write!(f, "None")
+        }
     }
 }
 

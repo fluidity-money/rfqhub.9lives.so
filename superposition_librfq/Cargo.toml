@@ -10,7 +10,7 @@ crate-type   = ["rlib", "cdylib"]
 [dependencies]
 bobcat-sdk.workspace = true
 borsh.workspace = true
-superposition_libaccounts = "0.5.0"
+superposition_libaccounts = "0.6.0"
 superposition-assets.workspace = true
 array-concat = "0.5.5"
 const-hex.workspace = true
@@ -24,3 +24,4 @@ std = ["bobcat-sdk/std"]
 arbitrary = ["dep:arbitrary", "std", "superposition-assets/arbitrary", "bobcat-sdk/arbitrary"]
 proptest = ["dep:proptest", "dep:proptest-derive", "std", "superposition-assets/proptest", "bobcat-sdk/proptest"]
 serde = ["dep:serde", "bobcat-sdk/serde", "const-hex/serde", "const-hex/alloc"]
+storage-debug = ["std"]
