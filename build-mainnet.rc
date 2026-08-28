@@ -1,5 +1,0 @@
-#!/usr/bin/env rc
-
-SPN_DEPLOY_TARGET=arbitrum
-
-make -B rfqhub.9lives.so.wasm

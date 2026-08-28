@@ -53,6 +53,9 @@ use arbitrary::Arbitrary;
 #[cfg(feature = "serde")]
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
+#[cfg(all(feature = "arbos", feature = "arbitrum"))]
+compile_error!("arbos and arbitrum cannot both be enabled");
+
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]

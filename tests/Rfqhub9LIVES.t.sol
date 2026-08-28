@@ -7,6 +7,16 @@ import {IArbFoundry} from "./IArbFoundry.sol";
 
 import {RfqhubTypes, ArgsKind, Args} from "./RfqhubTypes.sol";
 
+contract Erc20 {
+    function transfer(address recipient, uint256 amt) external pure returns (bool) {
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amt) external pure returns (bool) {
+        return true;
+    }
+}
+
 contract Rfqhub9LIVES is Test {
     using RfqhubTypes for address;
 

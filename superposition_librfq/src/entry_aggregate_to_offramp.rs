@@ -1,14 +1,22 @@
 use crate::{
     Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_accounts,
+    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,
     call_eip20,
     error::{Dis, Error, ErrorData},
     signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
     storage,
 };
 
+#[cfg(not(feature = "arbos"))]
+use crate::call_accounts;
+
 use alloc::boxed::Box;
-use bobcat_sdk::{entry::msg_sender, maths::U};
+
+use bobcat_sdk::{
+    entry::{chain_id, msg_sender},
+    maths::U,
+    storage::{const_keccak256, slot_map, storage_load},
+};
 
 // Recursively descend into the aggregated bundle, returning the address
 // of the taker, and the amount they provided.
@@ -221,7 +229,7 @@ pub fn entry_recurse_aggregate_enum(
             let (taker_leftover, taker_acc, asset) =
                 unsafe { recurse_aggregate_args(imm, args, &signable, server_sig)? };
             if is_taker {
-                let recipient = call_accounts::get_owner(taker_acc);
+                let recipient = get_acc_owner(taker_acc);
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
@@ -230,7 +238,7 @@ pub fn entry_recurse_aggregate_enum(
             } else {
                 let signable_hash_u: U = signable.hash.clone().into();
                 let maker_acc: [u8; 20] = storage::hash_maker_addr::get(&signable_hash_u).into();
-                let recipient = call_accounts::get_owner(maker_acc);
+                let recipient = get_acc_owner(maker_acc);
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
@@ -244,14 +252,14 @@ pub fn entry_recurse_aggregate_enum(
             let asset = storage::hash_asset::get(h);
             let (sender, asset, amt) = if is_taker {
                 let amt = storage::hash_taker_leftover::get(h, &asset.into());
-                let recipient = call_accounts::get_owner(storage::hash_taker_addr::get(h).into());
+                let recipient = get_acc_owner(storage::hash_taker_addr::get(h).into());
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
                 storage::hash_taker_leftover::set(&h, &asset.into(), &U::ZERO);
                 (sender, asset, amt)
             } else {
-                let recipient = call_accounts::get_owner(storage::hash_maker_addr::get(h).into());
+                let recipient = get_acc_owner(storage::hash_maker_addr::get(h).into());
                 if recipient != sender {
                     return Err(Dis::SenderNotMaker.into());
                 }
@@ -276,8 +284,19 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     0
 }
 
-fn check_hash_signer(addr: [u8; 20], hash: Hash, ms_ts: [u8; 6], sig: Sig) -> Result<(), Error> {
-    if call_accounts::check_hash_statement(addr, hash, ms_ts, &sig) {
+fn check_hash_signer(
+    _addr: [u8; 20],
+    _hash: Hash,
+    _ms_ts: [u8; 6],
+    _sig: Sig,
+) -> Result<(), Error> {
+    #[cfg(feature = "arbos")]
+    {
+        unsafe { check_on_arbos() };
+        Ok(())
+    }
+    #[cfg(not(feature = "arbos"))]
+    if call_accounts::check_hash_statement(_addr, _hash, _ms_ts, &_sig) {
         Ok(())
     } else {
         Err(Dis::StatementCheckFailed.into())
@@ -295,6 +314,29 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
         // The hash is already on-chain, we don't need to verify it.
         Ok(())
     }
+}
+
+// Get the owner of an account, or skipping it based on what's in the
+// current slot for this purpose.
+fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
+    #[cfg(feature = "arbos")]
+    unsafe {
+        arbos_recipient_hint(acc)
+    }
+    #[cfg(not(feature = "arbos"))]
+    call_accounts::get_owner(acc)
+}
+
+unsafe fn check_on_arbos() {
+    assert_eq!(31337, chain_id(), "chain id not arbos-forge");
+}
+
+// Not safe for production, checks a derived storage slot that the test
+// runner can set for online testing.
+#[allow(unused)]
+unsafe fn arbos_recipient_hint(acc: [u8; 20]) -> [u8; 20] {
+    unsafe { check_on_arbos() };
+    storage_load(&slot_map(&acc.into(), &const_keccak256(b"arbos.recipient"))).into()
 }
 
 #[cfg(test)]

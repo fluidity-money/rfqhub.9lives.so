@@ -1,4 +1,4 @@
 
 export SPN_SERVER_PUBLIC_KEY = ac9783d6cf21415c9cc2a77896dfdf3142efae6ee85fd7745d637c46a5745574
 
-export SPN_DEPLOY_TARGET ?= arbos
+export SPN_DEPLOY_TARGET ?= arbitrum

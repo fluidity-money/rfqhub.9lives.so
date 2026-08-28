@@ -25,3 +25,5 @@ arbitrary = ["dep:arbitrary", "std", "superposition-assets/arbitrary", "bobcat-s
 proptest = ["dep:proptest", "dep:proptest-derive", "std", "superposition-assets/proptest", "bobcat-sdk/proptest"]
 serde = ["dep:serde", "bobcat-sdk/serde", "const-hex/serde", "const-hex/alloc"]
 storage-debug = ["std"]
+arbos = []
+arbitrum = []
