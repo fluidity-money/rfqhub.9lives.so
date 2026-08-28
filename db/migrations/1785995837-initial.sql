@@ -26,20 +26,33 @@
 -- This function gets the outstanding balances for the bundles marked
 -- as open:
 
-CREATE TABLE rfqhub_bundle_user_count_1 (
+CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	id SERIAL PRIMARY KEY,
 	addr ADDRESS NOT NULL UNIQUE,
 	count INTEGER NOT NULL DEFAULT 0
 );
 
--- BundleMaker bundles that are made after validation on the server side.
-CREATE TABLE rfqhub_bundle_maker_1 (
+-- BundleTaker bundles are made after validation on the server side. This
+-- table is a departure from our usual practice, in that it's updated
+-- with whether the bundle is the latest status of it being used in the
+-- recursive bundle, aka whether it's the definitive source in the taker.
+CREATE TABLE rfqhub_bundles_taker_1 (
 	id SERIAL PRIMARY KEY,
 	created_by TIMESTAMP NOT NULL,
 	-- Count of the bundle per user derived from rfqhub_bundle_user_count_1.
-	user_id INTEGER NOT NULL UNIQUE
+	user_id INTEGER NOT NULL UNIQUE,
+	-- Is this BundleTaker used for an aggregate bundle?
+	is_spendable BOOLEAN NOT NULL,
+	-- Did this BundleTaker come from an onboarding source, or did it come
+	-- from an aggregate bundle?
+	from_res INTEGER,
+	-- The asset is derived from the answer that we see after the aggregate is either
+	-- submitted, or used in an aggregate bundle.
 	asset ADDRESS NOT NULL,
-	user_addr ADDRESS NOT NULL
+	user_addr ADDRESS NOT NULL,
+	-- What amount are we able to use with this BundleTaker here? Based on the end
+	-- result of the aggregate, or the deposit.
+	amt BIGINT NOT NULL
 );
 
 CREATE FUNCTION rfqhub_get_current_bundles_amt_1 (
