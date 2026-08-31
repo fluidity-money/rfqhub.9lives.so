@@ -49,17 +49,14 @@ unsafe fn recurse_aggregate_src(
                         Err(Dis::InconsistentSignable.into())
                     }
                 },
-                // Since we use the storage to get info on what's available to be
-                // spent, this is a noop, and we just return what's there:
+                // Since we use storage to get what is available to be spent,
+                // consume the withdrawable amount from the posted result.
                 AggregateEnum::Hash(h) => {
                     let asset = storage::hash_asset::get(h);
-                    storage::hash_taker_leftover::set(
-                        &signable.hash.clone().into(),
-                        &asset,
-                        &U::ZERO,
-                    );
+                    let taker_leftover = storage::hash_taker_leftover::get(h, &asset);
+                    storage::hash_taker_leftover::set(h, &asset, &U::ZERO);
                     Ok((
-                        storage::hash_taker_position::get(h, &asset).into(),
+                        taker_leftover.into(),
                         storage::hash_taker_addr::get(h).into(),
                         asset.into(),
                     ))
@@ -181,12 +178,6 @@ pub unsafe fn recurse_aggregate_args(
             &maker_amt_u,
             "hash taker position checked add",
         )?;
-        storage::hash_taker_leftover::checked_add_res(
-            &signable_hash_u,
-            &asset_u,
-            &maker_amt_u,
-            "hash taker leftover checked add",
-        )?;
     } else {
         storage::hash_maker_position::checked_add_res(
             &signable_hash_u,
@@ -211,6 +202,7 @@ pub unsafe fn recurse_aggregate_args(
             .checked_sub(taker_amt)
             .ok_or(Dis::CheckedSubUnderflow)
     }?;
+    storage::hash_taker_leftover::set(&signable_hash_u, &asset_u, &U::from(taker_leftover));
     Ok((taker_leftover, taker_acc, asset))
 }
 
@@ -515,11 +507,9 @@ mod test {
                 },
             };
             let signable_2 = SignableAggregateArgs::from(&agg_2);
-            // Current behaviour: once the first aggregate has been posted and the
-            // second aggregate refers to it by hash, only the posted maker delta is
-            // reusable as the taker's source. That makes the second aggregate return
-            // 500, unlike test_erik_alex_after_already_same_blob's 1000.
-            assert_eq!((500, erik_addr, Asset::USDC.addr()), unsafe {
+            // Referring to the posted aggregate by hash preserves the complete
+            // taker return, just like inlining the first aggregate above.
+            assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
                 recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
             });
         })
