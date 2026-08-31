@@ -166,7 +166,7 @@ pub struct OfframpArgs {
     /// The timestamp of the offramp request we have here.
     pub ms_ts: [u8; 6],
     /// The Accounts address in use for the amount here.
-    pub acc_addr: [u8; 20]
+    pub acc_addr: [u8; 20],
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]

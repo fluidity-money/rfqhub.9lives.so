@@ -15,7 +15,7 @@ use borsh::BorshSerialize;
 
 use crate::{
     Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, OnrampingSource, Outcome, OfframpArgs,
+    BundleTakerArgs, OfframpArgs, OnrampingSource, Outcome,
 };
 
 use array_concat::concat_arrays;

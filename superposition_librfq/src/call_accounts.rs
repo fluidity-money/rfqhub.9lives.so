@@ -5,15 +5,15 @@ use bobcat_sdk::{
 
 use superposition_libaccounts::{Args, Sig, StatementArgs};
 
-use crate::{error::{Error, Dis}, signable::Hash};
+use crate::{
+    error::{Dis, Error},
+    signable::Hash,
+};
 
 pub fn get_owner(addr: [u8; 20]) -> Result<[u8; 20], Error> {
-    let (ok, _, addr) = safe_static_call_slice::<20>(
-        addr,
-        &borsh::to_vec(&Args::Owner).unwrap(),
-        u64::MAX,
-        0,
-    ).ok_or(Error::from(Dis::AccountNonexistent))?;
+    let (ok, _, addr) =
+        safe_static_call_slice::<20>(addr, &borsh::to_vec(&Args::Owner).unwrap(), u64::MAX, 0)
+            .ok_or(Error::from(Dis::AccountNonexistent))?;
     if !ok {
         return Err(Dis::AccountError.into());
     }

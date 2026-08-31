@@ -1,4 +1,4 @@
-use crate::{events::event_emit_bal_update, call_eip20, storage};
+use crate::{call_eip20, events::event_emit_bal_update, storage};
 
 use bobcat_sdk::{
     entry::{contract_address, msg_sender},

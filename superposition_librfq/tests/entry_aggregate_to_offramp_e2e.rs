@@ -1,6 +1,10 @@
 #[cfg(all(feature = "proptest", feature = "arbitrary", feature = "std"))]
 mod test {
-    use std::collections::BTreeMap;
+    use std::{
+        any::Any,
+        collections::BTreeMap,
+        panic::{AssertUnwindSafe, catch_unwind},
+    };
 
     use proptest::prelude::*;
 
@@ -27,6 +31,16 @@ mod test {
                 .copied()
                 .unwrap_or(U::ZERO)
         })
+    }
+
+    fn panic_message(payload: Box<dyn Any + Send>) -> String {
+        match payload.downcast::<String>() {
+            Ok(message) => *message,
+            Err(payload) => match payload.downcast::<&'static str>() {
+                Ok(message) => (*message).to_owned(),
+                Err(_) => "non-string panic".to_owned(),
+            },
+        }
     }
 
     fn aggregate_from_submission(
@@ -73,6 +87,48 @@ mod test {
     }
 
     proptest! {
+        #[test]
+        fn offramp_blob_rejects_submitter_other_than_embedded_account(
+            asset in any::<Asset>(),
+            amt in 1_u64..=u64::MAX,
+            ms_ts in any::<[u8; 6]>(),
+            acc_addr in any::<[u8; 20]>(),
+            submitter in any::<[u8; 20]>(),
+        ) {
+            prop_assume!(submitter != acc_addr);
+
+            flush_guard_fresh(|| {
+                set_contract_address(CONTRACT);
+                set_msg_sender(submitter);
+
+                let result = catch_unwind(AssertUnwindSafe(|| {
+                    entry_offramp::entry_offramp(
+                        &Imm::default(),
+                        OfframpArgs {
+                            asset,
+                            amt,
+                            ms_ts,
+                            acc_addr,
+                        },
+                        [0_u8; 64],
+                    )
+                }));
+
+                let error = result.expect_err(
+                    "an address other than OfframpArgs::acc_addr submitted the offramp blob",
+                );
+                assert!(
+                    panic_message(error).contains("not owner of blob submitted"),
+                    "offramp failed for a reason other than submitter/account authorization",
+                );
+                assert_eq!(
+                    storage::server_ms_ts::get(&U::from(acc_addr), &U::from(ms_ts)),
+                    U::ZERO,
+                    "an unauthorized submission consumed the replay key",
+                );
+            });
+        }
+
         #[test]
         fn test_extended_form(
             inverted in any::<InvertedAggregate>(),

@@ -1,7 +1,6 @@
-
 use crate::{TOPIC_BALANCE_CHANGED, TOPIC_GLOBAL_BALANCE_CHANGED, Version};
 
-use bobcat_sdk::{maths::U, events::emit};
+use bobcat_sdk::{events::emit, maths::U};
 
 pub fn event_emit_bal_update(acc_addr: [u8; 20], asset_addr: [u8; 20], user_bal: U, global_bal: U) {
     emit!(

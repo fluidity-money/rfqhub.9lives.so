@@ -42,13 +42,14 @@ CREATE TYPE RFQHUB_OUTCOME AS ENUM ('Bitcoin');
 CREATE TABLE rfqhub_bundles_taker_1 (
 	id SERIAL PRIMARY KEY,
 	created_by TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_by TIMESTAMP NOT NULL,
+	updated_by TIMESTAMP,
 	-- The account owner of this record.
 	acc_addr ADDRESS NOT NULL,
 	-- Count of the bundle per user derived from rfqhub_bundles_taker_user_count_1.
 	user_id INTEGER NOT NULL UNIQUE,
-	-- Is this BundleTaker used for an aggregate bundle?
-	is_spendable BOOLEAN NOT NULL,
+	-- Is this BundleTaker able to be used for an aggregate bundle? NULL if we're not
+	-- done finding the winner for it yet.
+	is_spendable BOOLEAN,
 	-- Did this BundleTaker come from an onboarding source, or did it come
 	-- from an aggregate bundle? NULL if it's the onboarding source.
 	from_res INTEGER,
@@ -64,7 +65,7 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	price_target BIGINT NOT NULL,
 	-- What's the outcome we're speculating on here?
 	outcome RFQHUB_OUTCOME NOT NULL,
-	-- The Maker bundle this was combined with.
+	-- The Maker bundle this was combined with, updated on set.
 	maker_id INTEGER,
 	-- The millisecond timestamp that we use here to prevent abuse.
 	ms_ts INTEGER NOT NULL,
@@ -83,7 +84,7 @@ CREATE TABLE rfqhub_bundles_maker_user_count_1 (
 CREATE TABLE rfqhub_bundles_maker_1 (
 	id SERIAL PRIMARY KEY,
 	created_by TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	updated_by TIMESTAMP NOT NULL,
+	updated_by TIMESTAMP,
 	-- The account of the maker.
 	acc_addr ADDRESS NOT NULL
 	-- Count of the bundle per user derived from rfqhub_bundles_maker_user_count_1.
@@ -100,15 +101,50 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	amt BIGINT NOT NULL
 	-- To keep things simple since this is complex code, we actually update this table
 	-- with this field. If the choice hasn't happened yet, then we don't proceed yet.
-	was_winner BOOLEAN
+	was_winner BOOLEAN,
+	-- Certain fields we get from the underlying taker once, but in the case of this
+	-- table, we embed the value here of the end result timestamp:
+	timestamplet_val INTEGER,
+	-- The server side aggregation signature if this maker was chosen as the winner,
+	-- for the aggregate bundle we create. We get the timestamplet fields by looking
+	-- up the taker.
+	server_sig BYTES64
 );
 
 -- As an example, if we were to create a row for someone that's just
 -- opened a position, following from the Alex and Erik example:
 
-(1, current_timestamp, 1, TRUE, NULL, <usdc>, <user addr>, 100, TRUE, 101, 'Bitcoin');
+-- rfqhub_bundles_taker_1(
+-- 	1,				id
+-- 	current_timestamp,	created_timestamp
+-- 	NULL,			updated timestamp
+-- 	<acc addr>,		acc addr
+-- 	1,				the count for the user for pagination
+-- 	NULL,			is this spendable? answer; no, it's incomplete.
+-- 	NULL,			was this derived from a bundle? NULL if onramping
+-- 	<usdc>,			the asset in use here
+-- 	100,				the amount we're using
+-- 	TRUE,			are we betting on up or down?
+-- 	101,				the price we have to beat
+-- 	'Bitcoin',			the outcome stream, aka what price market
+-- 	NULL,			the maker id, aka whether this has been used for a maker yet.
+-- 	<ms ts>,			the ms timestamp the user provided when signing
+-- 	<expiry>,			the expiry of this outcome
+-- 	<user sig>			the account's signature
+-- );
 
+-- Which would flow into the BundleMaker, assuming they onramped
+-- directly:
 
+-- rfqhub_bundles_maker_1(
+	1,				id
+	current_timestamp,	created timestamp
+	NULL,			updated timestamp
+	<acc addr>,		acc addr
+	1,				NULL, <ms ts>, 8000, NULL, NULL, NULL);
+
+-- Where we would run the auction until we're not able to anymore, at which point we would
+-- choose the winner. We would update the table accordingly.
 
 CREATE FUNCTION rfqhub_get_current_bundles_amt_1 (
 	user_addr ADDRESS,
