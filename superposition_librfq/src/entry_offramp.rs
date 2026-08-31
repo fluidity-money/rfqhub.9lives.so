@@ -1,10 +1,13 @@
 use crate::{
-    Imm, OfframpArgs, Sig, call_accounts, call_eip20, events::event_emit_bal_update,
+    Imm, OfframpArgs, Sig, call_eip20, events::event_emit_bal_update,
     signable::SignableOfframpArgs, storage,
 };
 
+#[cfg(not(any(feature = "arbos", feature = "std")))]
+use crate::call_accounts;
+
 use bobcat_sdk::{
-    entry::{chain_id, msg_sender},
+    entry::msg_sender,
     maths::U,
     storage::{const_keccak256, slot_map, storage_load},
 };
@@ -44,9 +47,8 @@ pub fn entry_offramp(
     storage::onramped_bal::set(&asset_u, &acc_addr_u, &remaining_bal);
     let global_bal = storage::global_bal::checked_sub_res(&asset_u, &amt_u, "global bal").unwrap();
     event_emit_bal_update(acc_addr, asset.into(), remaining_bal, global_bal);
-    let recipient = call_accounts::get_owner(acc_addr).unwrap();
     assert!(
-        call_eip20::transfer(asset.into(), recipient, &amt_u),
+        call_eip20::transfer(asset.into(), acc_owner, &amt_u),
         "transfer failed"
     );
     0
@@ -55,11 +57,11 @@ pub fn entry_offramp(
 // Get the owner of an account, or skipping it based on what's in the
 // current slot for this purpose.
 fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
-    #[cfg(feature = "arbos")]
+    #[cfg(any(feature = "arbos", feature = "std"))]
     unsafe {
         arbos_recipient_hint(acc)
     }
-    #[cfg(not(feature = "arbos"))]
+    #[cfg(not(any(feature = "arbos", feature = "std")))]
     call_accounts::get_owner(acc).unwrap()
 }
 
@@ -67,6 +69,11 @@ fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
 // runner can set for online testing.
 #[allow(unused)]
 unsafe fn arbos_recipient_hint(acc: [u8; 20]) -> [u8; 20] {
-    assert_eq!(31337, chain_id(), "chain id not arbos-forge");
+    #[cfg(all(feature = "arbos", not(feature = "std")))]
+    assert_eq!(
+        31337,
+        bobcat_sdk::entry::chain_id(),
+        "chain id not arbos-forge"
+    );
     storage_load(&slot_map(&acc.into(), &const_keccak256(b"arbos.recipient"))).into()
 }

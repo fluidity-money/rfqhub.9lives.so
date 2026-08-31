@@ -12,7 +12,7 @@ mod test {
         entry::contract_address,
         host::{set_contract_address, set_msg_sender},
         maths::U,
-        storage::flush_guard_fresh,
+        storage::{const_keccak256, flush_guard_fresh, slot_map, storage_store},
     };
 
     use superposition_librfq::{
@@ -88,44 +88,72 @@ mod test {
 
     proptest! {
         #[test]
-        fn offramp_blob_rejects_submitter_other_than_embedded_account(
+        fn offramp_blob_requires_the_embedded_accounts_owner(
             asset in any::<Asset>(),
             amt in 1_u64..=u64::MAX,
             ms_ts in any::<[u8; 6]>(),
             acc_addr in any::<[u8; 20]>(),
-            submitter in any::<[u8; 20]>(),
+            owner in any::<[u8; 20]>(),
+            unauthorized_submitter in any::<[u8; 20]>(),
         ) {
-            prop_assume!(submitter != acc_addr);
+            prop_assume!(unauthorized_submitter != owner);
 
             flush_guard_fresh(|| {
+                std_eip20::reset_balances();
                 set_contract_address(CONTRACT);
-                set_msg_sender(submitter);
 
+                let owner_slot = slot_map(
+                    &U::from(acc_addr),
+                    &const_keccak256(b"arbos.recipient"),
+                );
+                storage_store(&owner_slot, &U::from(owner));
+                onramp(asset, acc_addr, amt);
+
+                let args = OfframpArgs {
+                    asset,
+                    amt,
+                    ms_ts,
+                    acc_addr,
+                };
+                let asset_addr = asset.addr();
+
+                set_msg_sender(unauthorized_submitter);
                 let result = catch_unwind(AssertUnwindSafe(|| {
-                    entry_offramp::entry_offramp(
-                        &Imm::default(),
-                        OfframpArgs {
-                            asset,
-                            amt,
-                            ms_ts,
-                            acc_addr,
-                        },
-                        [0_u8; 64],
-                    )
+                    entry_offramp::entry_offramp(&Imm::default(), args.clone(), [0_u8; 64])
                 }));
 
                 let error = result.expect_err(
-                    "an address other than OfframpArgs::acc_addr submitted the offramp blob",
+                    "an address other than the account owner submitted the offramp blob",
                 );
                 assert!(
-                    panic_message(error).contains("not owner of blob submitted"),
-                    "offramp failed for a reason other than submitter/account authorization",
+                    panic_message(error).contains("not owner of account for offramp"),
+                    "offramp failed for a reason other than submitter/owner authorization",
+                );
+                assert_eq!(
+                    storage::onramped_bal::get(&asset.u(), &U::from(acc_addr)),
+                    U::from(amt),
+                    "an unauthorized submission changed the account balance",
                 );
                 assert_eq!(
                     storage::server_ms_ts::get(&U::from(acc_addr), &U::from(ms_ts)),
                     U::ZERO,
                     "an unauthorized submission consumed the replay key",
                 );
+                assert_eq!(eip20_balance(asset_addr, owner), U::ZERO);
+
+                set_msg_sender(owner);
+                assert_eq!(
+                    entry_offramp::entry_offramp(&Imm::default(), args, [0_u8; 64]),
+                    0,
+                );
+                assert_eq!(
+                    storage::onramped_bal::get(&asset.u(), &U::from(acc_addr)),
+                    U::ZERO,
+                );
+                assert_eq!(eip20_balance(asset_addr, owner), U::from(amt));
+                assert_eq!(eip20_balance(asset_addr, CONTRACT), U::ZERO);
+
+                std_eip20::reset_balances();
             });
         }
 
