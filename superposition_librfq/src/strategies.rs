@@ -450,7 +450,19 @@ impl proptest::arbitrary::Arbitrary for OfframpArgs {
     type Strategy = BoxedStrategy<Self>;
 
     fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-        any::<u64>().prop_map(|amt| OfframpArgs { amt }).boxed()
+        (
+            any::<[u8; 20]>(),
+            any::<Asset>(),
+            any::<u64>(),
+            any::<[u8; 6]>(),
+        )
+            .prop_map(|(acc_addr, asset, amt, ms_ts)| OfframpArgs {
+                acc_addr,
+                asset,
+                amt,
+                ms_ts,
+            })
+            .boxed()
     }
 }
 

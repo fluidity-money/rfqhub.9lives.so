@@ -15,7 +15,7 @@ use borsh::BorshSerialize;
 
 use crate::{
     Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, OnrampingSource, Outcome,
+    BundleTakerArgs, OnrampingSource, Outcome, OfframpArgs,
 };
 
 use array_concat::concat_arrays;
@@ -24,10 +24,12 @@ use bobcat_sdk::{maths::U, precompiles::superposition::sha512, storage::keccak25
 
 use alloc::boxed::Box;
 
+pub type JustInTime = [u8; 64];
+
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub enum Hash {
     Onchain(U),
-    JustInTime([u8; 64]),
+    JustInTime(JustInTime),
 }
 
 impl From<Hash> for [u8; 32] {
@@ -51,6 +53,7 @@ pub enum PreDiscriminant {
     AggregateEnum,
     BundleMakerArgs,
     BundleTakerArgs,
+    OfframpArgs,
 }
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
@@ -85,6 +88,11 @@ pub struct SignableBundleMakerArgs {
 pub struct SignableAggregateArgs {
     pub maker: SignableBundleMakerArgs,
     pub hash: Hash,
+}
+
+#[derive(BorshSerialize, Clone, PartialEq, Debug)]
+pub struct SignableOfframpArgs {
+    pub hash: JustInTime,
 }
 
 impl From<&AggregateArgs> for SignableAggregateArgs {
@@ -186,5 +194,15 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             aggregated_res: onramping_pre,
             hash: Hash::JustInTime(sha512(&pre)),
         }
+    }
+}
+
+impl From<&OfframpArgs> for SignableOfframpArgs {
+    fn from(args: &OfframpArgs) -> Self {
+        let pre: [u8; 1 + 64] = concat_arrays!(
+            [PreDiscriminant::OfframpArgs as u8],
+            sha512(&borsh::to_vec(args).unwrap())
+        );
+        Self { hash: sha512(&pre) }
     }
 }

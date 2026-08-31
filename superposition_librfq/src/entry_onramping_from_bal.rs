@@ -1,8 +1,7 @@
-use crate::{TOPIC_BALANCE_CHANGED, TOPIC_GLOBAL_BALANCE_CHANGED, Version, call_eip20, storage};
+use crate::{events::event_emit_bal_update, call_eip20, storage};
 
 use bobcat_sdk::{
     entry::{contract_address, msg_sender},
-    events::emit,
     maths::U,
 };
 
@@ -31,20 +30,6 @@ pub fn entry_onramping_from_bal(asset: Asset, amt: u64) -> usize {
     let global_bal =
         storage::global_bal::checked_add_res(&asset_addr_u, &amt_u, "incresaing global bal")
             .unwrap();
-    emit!(
-        TOPIC_BALANCE_CHANGED,
-        sender,
-        asset_addr,
-        user_bal,
-        data: Version::CURRENT,
-        32
-    );
-    emit!(
-        TOPIC_GLOBAL_BALANCE_CHANGED,
-        asset_addr,
-        global_bal,
-        data: Version::CURRENT,
-        32
-    );
+    event_emit_bal_update(sender, asset_addr, user_bal, global_bal);
     0
 }

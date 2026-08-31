@@ -34,6 +34,8 @@ pub mod storage;
 
 pub use version::Version;
 
+pub mod events;
+
 use entry_aggregate_to_offramp::entry_aggregate_to_offramp;
 use entry_balance::entry_balance;
 use entry_offramp::entry_offramp;
@@ -157,7 +159,14 @@ pub struct BundleMaker {
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub struct OfframpArgs {
+    /// The asset being used here.
+    pub asset: Asset,
+    /// The amount being taken out of the game.
     pub amt: u64,
+    /// The timestamp of the offramp request we have here.
+    pub ms_ts: [u8; 6],
+    /// The Accounts address in use for the amount here.
+    pub acc_addr: [u8; 20]
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]

@@ -65,7 +65,10 @@ struct BundleMaker {
 }
 
 struct OfframpArgs {
+    Asset asset;
     uint64 amt;
+    bytes6 msTs;
+    address accAddr;
 }
 
 struct Timestamplet {
@@ -269,7 +272,12 @@ library RfqhubTypes {
     }
 
     function _offrampArgs(OfframpArgs memory a) internal pure returns (string memory) {
-        return string.concat("{\"amt\":", _u2s(uint256(a.amt)), "}");
+        return string.concat(
+            "{\"asset\":\"", _assetStr(a.asset),
+            "\",\"amt\":", _u2s(uint256(a.amt)),
+            ",\"ms_ts\":", _u8Arr6(a.msTs),
+            ",\"acc_addr\":", _u8Arr20(a.accAddr), "}"
+        );
     }
 
     function _aggregateEnum(AggregateEnum memory a) internal pure returns (string memory) {

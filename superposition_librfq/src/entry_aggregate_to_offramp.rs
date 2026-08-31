@@ -125,6 +125,9 @@ pub unsafe fn recurse_aggregate_args(
     }
     if imm.should_server_sig_validate {
         check_server_sig(&signable.hash, &imm.server_key, *server_sig)?;
+        // Here, we don't bother checking the server signature since the
+        // timestamps contained within are going to protect us here
+        // from abuse.
     }
     let signable_hash_u = U::from(signable.hash.clone());
     // Check if we've actually seen this hash before, and if we have, bug
@@ -288,7 +291,9 @@ fn check_hash_signer(
 
 fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
     if let Hash::JustInTime(hash) = hash {
-        if bobcat_sdk::precompiles::superposition::edphverify_post(hash.clone(), key.clone(), sig) {
+        let is_sig_ok =
+            bobcat_sdk::precompiles::superposition::edphverify_post(hash.clone(), key.clone(), sig);
+        if is_sig_ok {
             Ok(())
         } else {
             Err(Dis::BadSignature.into())
