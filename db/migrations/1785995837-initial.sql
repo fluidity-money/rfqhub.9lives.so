@@ -41,19 +41,20 @@ CREATE TYPE RFQHUB_OUTCOME AS ENUM ('Bitcoin');
 -- For us to take this, we need to verify the OnchainPotArgs in the mix.
 CREATE TABLE rfqhub_bundles_taker_1 (
 	id SERIAL PRIMARY KEY,
-	created_by TIMESTAMP NOT NULL,
+	created_by TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_by TIMESTAMP NOT NULL,
+	-- The account owner of this record.
+	acc_addr ADDRESS NOT NULL,
 	-- Count of the bundle per user derived from rfqhub_bundles_taker_user_count_1.
 	user_id INTEGER NOT NULL UNIQUE,
 	-- Is this BundleTaker used for an aggregate bundle?
 	is_spendable BOOLEAN NOT NULL,
 	-- Did this BundleTaker come from an onboarding source, or did it come
-	-- from an aggregate bundle?
+	-- from an aggregate bundle? NULL if it's the onboarding source.
 	from_res INTEGER,
 	-- The asset is derived from the answer that we see after the aggregate is either
 	-- submitted, or used in an aggregate bundle.
 	asset ADDRESS NOT NULL,
-	-- The account owner of this field.
-	acc_addr ADDRESS NOT NULL,
 	-- What amount are we able to use with this BundleTaker here? Based on the end
 	-- result of the aggregate, or the deposit.
 	amt BIGINT NOT NULL,
@@ -65,13 +66,41 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	outcome RFQHUB_OUTCOME NOT NULL,
 	-- The Maker bundle this was combined with.
 	maker_id INTEGER,
+	-- The millisecond timestamp that we use here to prevent abuse.
+	ms_ts INTEGER NOT NULL,
+	-- When does this option expire and the choice needs to be given according to the user?
+	expiry TIMESTAMP NOT NULL,
 	-- The user provided signature for this blob:
 	user_sig BYTES64 NOT NULL UNIQUE
 );
 
+CREATE TABLE rfqhub_bundles_maker_user_count_1 (
+	id SERIAL PRIMARY KEY,
+	addr ADDRESS NOT NULL UNIQUE,
+	count INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE rfqhub_bundles_maker_1 (
 	id SERIAL PRIMARY KEY,
-	created_by TIMESTAMP NOT NULL,
+	created_by TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_by TIMESTAMP NOT NULL,
+	-- The account of the maker.
+	acc_addr ADDRESS NOT NULL
+	-- Count of the bundle per user derived from rfqhub_bundles_maker_user_count_1.
+	user_id INTEGER NOT NULL UNIQUE,
+	-- The source of where the finances come from that we have here. If NULL, then it
+	-- must be an onramping amount. If it's something, this must be the aggregated
+	-- bundle.
+	from_res INTEGER,
+	-- The BundleTaker that this is derivative of with the maker.
+	bundle_taker_id INTEGER NOT NULL,
+	-- The millisecond timestamp that we use here.
+	ms_ts INTEGER NOT NULL,
+	-- The compensation if the maker is correct.
+	amt BIGINT NOT NULL
+	-- To keep things simple since this is complex code, we actually update this table
+	-- with this field. If the choice hasn't happened yet, then we don't proceed yet.
+	was_winner BOOLEAN
 );
 
 -- As an example, if we were to create a row for someone that's just

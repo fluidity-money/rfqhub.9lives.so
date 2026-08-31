@@ -23,9 +23,9 @@ pub mod outcome;
 pub mod call_aave_v3;
 pub mod call_accounts;
 
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 pub mod std_eip20;
-#[cfg(not(feature = "std"))]
+#[cfg(any(not(feature = "std"), target_arch = "wasm32"))]
 pub mod wasm_eip20;
 
 pub mod call_eip20;

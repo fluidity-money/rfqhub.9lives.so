@@ -15,6 +15,7 @@ OUT_CLI := target/release/cli
 
 ${OUT_WASM}: $(shell find Cargo.* superposition_librfq contract -type f)
 	@cargo build \
+		--package contract \
 		--release \
 		--target wasm32-unknown-unknown \
 		--features ${SPN_DEPLOY_TARGET}

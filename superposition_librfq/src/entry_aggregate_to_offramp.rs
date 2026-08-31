@@ -259,16 +259,10 @@ pub fn entry_recurse_aggregate_enum(
 }
 
 pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool) -> usize {
-    // TEMPORARY ARBOS DIAGNOSTIC: return Error::dis + 1 as a word rather
-    // than losing the structured error through wasm panic -> unreachable.
-    // A successful aggregate still follows the normal transfer path.
-    let (sender, asset, leftover) = match entry_recurse_aggregate_enum(imm, &args, is_taker) {
-        Ok(result) => result,
-        Err(err) => {
-            bobcat_sdk::entry::write_result_word(&U::from(err.dis as u8 + 1));
-            return 0;
-        }
-    };
+    // This code recursively descends inside the aggregate args, finding the
+    // correct winning amount for the maker and takers, crediting the winning
+    // addresses correctly. The amounts are then sent to the users.
+    let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
     assert!(
         call_eip20::transfer(asset, sender, &leftover.into()),
         "eip20 transfer err"
