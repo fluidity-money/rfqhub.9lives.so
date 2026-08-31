@@ -77,7 +77,7 @@ impl InvertedAggregate {
         let mut aggregate = None;
 
         for submission in self.submissions() {
-            let next = AggregateEnum::Args(Aggregate {
+            let next = AggregateEnum::Args(Box::new(Aggregate {
                 args: AggregateArgs {
                     maker: BundleMaker {
                         args: BundleMakerArgs {
@@ -105,7 +105,7 @@ impl InvertedAggregate {
                     },
                 },
                 server_sig: submission.server_sig,
-            });
+            }));
             source = OnrampingSource::AggregatedResult(Box::new(next.clone()));
             aggregate = Some(next);
         }
@@ -365,7 +365,8 @@ fn aggregate_enum_strategy_with_source(
     src: BoxedStrategy<OnrampingSource>,
 ) -> BoxedStrategy<AggregateEnum> {
     prop_oneof![
-        aggregate_strategy_with_source(src).prop_map(AggregateEnum::Args),
+        aggregate_strategy_with_source(src)
+            .prop_map(|aggregate| AggregateEnum::Args(Box::new(aggregate))),
         any::<U>().prop_map(AggregateEnum::Hash),
     ]
     .boxed()

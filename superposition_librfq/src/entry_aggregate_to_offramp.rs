@@ -1,6 +1,6 @@
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_eip20,
+    AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker, BundleTakerArgs, Imm,
+    OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_eip20,
     error::{Dis, Error, ErrorData},
     signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
     storage,
@@ -42,9 +42,9 @@ pub unsafe fn recurse_aggregate_src(
         }
         OnrampingSource::AggregatedResult(r) => {
             match &**r {
-                AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
+                AggregateEnum::Args(agg) => unsafe {
                     if let Some(ref res) = signable.aggregated_res {
-                        let result = recurse_aggregate_args(imm, args, res, server_sig)?;
+                        let result = recurse_aggregate_args(imm, &agg.args, res, &agg.server_sig)?;
                         let inner_hash: U = res.hash.clone().into();
                         let inner_asset = storage::hash_asset::get(&inner_hash);
                         storage::hash_taker_leftover::set(&inner_hash, &inner_asset, &U::ZERO);
@@ -210,10 +210,10 @@ pub fn entry_recurse_aggregate_enum(
 ) -> Result<([u8; 20], [u8; 20], u64), Error> {
     let sender = msg_sender();
     match args {
-        AggregateEnum::Args(Aggregate { args, server_sig }) => {
-            let signable = SignableAggregateArgs::from(args);
+        AggregateEnum::Args(agg) => {
+            let signable = SignableAggregateArgs::from(&agg.args);
             let (taker_leftover, taker_acc, asset) =
-                unsafe { recurse_aggregate_args(imm, args, &signable, server_sig)? };
+                unsafe { recurse_aggregate_args(imm, &agg.args, &signable, &agg.server_sig)? };
             if is_taker {
                 let recipient = get_acc_owner(taker_acc)?;
                 if recipient != sender {
@@ -291,8 +291,7 @@ fn check_hash_signer(
 
 fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
     if let Hash::JustInTime(hash) = hash {
-        let is_sig_ok =
-            bobcat_sdk::precompiles::superposition::edphverify_post(*hash, *key, sig);
+        let is_sig_ok = bobcat_sdk::precompiles::superposition::edphverify_post(*hash, *key, sig);
         if is_sig_ok {
             Ok(())
         } else {

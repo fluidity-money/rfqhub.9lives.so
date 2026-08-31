@@ -1,21 +1,21 @@
-///! Shadow structure that can be easily signed eagerly to the format
-/// we use to reconstruct signers. Inner structures are used for the
-/// value part of the signing, with the Signable structures being used
-/// to recurse through to retrieve hashes. Hashed structures work like this:
-/// [DISCRIMINT | CONTENT HASHED WITH INNER | CONTENT BEFORE THIS ITEM* ]
-/// The signatures are compressed using keccak256 when they are
-/// aggregated, but when they are signed, they are used in their original
-/// [u8; 64] form. If they are used in the context where a signer tries to
-/// sign something that is on-chain, this is an error. The content is
-/// signed as a sha512. End users signing the eventual blob that must
-/// be checked with the accounts engine need to prefix their blob with
-/// "Accounts statement", and the address of the account doing the
-/// verifying, then the content, in a hex form without a 0x prefix.
+//! Shadow structure that can be easily signed eagerly to the format
+// we use to reconstruct signers. Inner structures are used for the
+// value part of the signing, with the Signable structures being used
+// to recurse through to retrieve hashes. Hashed structures work like this:
+// [DISCRIMINT | CONTENT HASHED WITH INNER | CONTENT BEFORE THIS ITEM* ]
+// The signatures are compressed using keccak256 when they are
+// aggregated, but when they are signed, they are used in their original
+// [u8; 64] form. If they are used in the context where a signer tries to
+// sign something that is on-chain, this is an error. The content is
+// signed as a sha512. End users signing the eventual blob that must
+// be checked with the accounts engine need to prefix their blob with
+// "Accounts statement", and the address of the account doing the
+// verifying, then the content, in a hex form without a 0x prefix.
 use borsh::BorshSerialize;
 
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, OfframpArgs, OnrampingSource, Outcome,
+    AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker, BundleTakerArgs,
+    OfframpArgs, OnrampingSource, Outcome,
 };
 
 use array_concat::concat_arrays;
@@ -166,8 +166,8 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
                 Hash::JustInTime(sha512(&borsh::to_vec(&args).unwrap())),
             ),
             OnrampingSource::AggregatedResult(args) => match *args.clone() {
-                AggregateEnum::Args(Aggregate { args, .. }) => {
-                    let pre = SignableAggregateArgs::from(&args);
+                AggregateEnum::Args(agg) => {
+                    let pre = SignableAggregateArgs::from(&agg.args);
                     let hash = pre.hash.clone();
                     (Some(Box::new(pre)), hash)
                 }

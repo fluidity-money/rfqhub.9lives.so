@@ -241,7 +241,7 @@ mod test {
                     } else {
                         // Keep this node inline in the next posted chunk.
                         source = OnrampingSource::AggregatedResult(Box::new(
-                            AggregateEnum::Args(aggregate),
+                            AggregateEnum::Args(Box::new(aggregate)),
                         ));
                     }
                 }

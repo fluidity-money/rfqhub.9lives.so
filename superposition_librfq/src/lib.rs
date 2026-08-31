@@ -205,7 +205,7 @@ pub struct Aggregate {
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub enum AggregateEnum {
-    Args(Aggregate),
+    Args(Box<Aggregate>),
     Hash(U),
 }
 

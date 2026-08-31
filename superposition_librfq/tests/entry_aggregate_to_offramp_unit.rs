@@ -56,10 +56,12 @@ fn test_erik_alex_after_already_same_blob() {
         };
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Aggregate {
-                    args: agg_1,
-                    server_sig: [0u8; 64],
-                }))),
+                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Box::new(
+                    Aggregate {
+                        args: agg_1,
+                        server_sig: [0u8; 64],
+                    },
+                )))),
                 expiry: expiry_2,
                 ms_ts: [2u8; 6],
                 is_up: false,
@@ -145,10 +147,12 @@ fn test_inline_reinvest_consumes_inner_leftover() {
         // 700 + 300 = 1000.
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Aggregate {
-                    args: agg_1,
-                    server_sig: [0u8; 64],
-                }))),
+                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Box::new(
+                    Aggregate {
+                        args: agg_1,
+                        server_sig: [0u8; 64],
+                    },
+                )))),
                 expiry: expiry_2,
                 ms_ts: [2u8; 6],
                 is_up: false,
