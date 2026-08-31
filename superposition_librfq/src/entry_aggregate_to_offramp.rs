@@ -142,7 +142,7 @@ pub unsafe fn recurse_aggregate_args(
         });
     }
     let (taker_amt, taker_acc, asset) =
-        unsafe { recurse_aggregate_src(imm, &src, &signable.maker.taker_args)? };
+        unsafe { recurse_aggregate_src(imm, src, &signable.maker.taker_args)? };
     let taker_acc_u: U = taker_acc.into();
     let maker_acc_u: U = maker_acc.into();
     storage::ms_ts::exchange_res(&taker_acc_u, &taker_ms_ts.into(), "taker ms ts")?;
@@ -242,18 +242,18 @@ pub fn entry_recurse_aggregate_enum(
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
-                storage::hash_taker_leftover::set(&h, &asset.into(), &U::ZERO);
+                storage::hash_taker_leftover::set(h, &asset, &U::ZERO);
                 (sender, asset, amt)
             } else {
                 let recipient = get_acc_owner(storage::hash_maker_addr::get(h).into())?;
                 if recipient != sender {
                     return Err(Dis::SenderNotMaker.into());
                 }
-                let amt = storage::hash_maker_leftover::get(&h, &asset.into());
-                storage::hash_maker_leftover::set(&h, &asset.into(), &U::ZERO);
+                let amt = storage::hash_maker_leftover::get(h, &asset);
+                storage::hash_maker_leftover::set(h, &asset, &U::ZERO);
                 (sender, asset, amt)
             };
-            Ok((sender.into(), asset.into(), amt.into()))
+            Ok((sender, asset.into(), amt.into()))
         }
     }
 }
@@ -292,7 +292,7 @@ fn check_hash_signer(
 fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
     if let Hash::JustInTime(hash) = hash {
         let is_sig_ok =
-            bobcat_sdk::precompiles::superposition::edphverify_post(hash.clone(), key.clone(), sig);
+            bobcat_sdk::precompiles::superposition::edphverify_post(*hash, *key, sig);
         if is_sig_ok {
             Ok(())
         } else {

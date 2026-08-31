@@ -255,7 +255,7 @@ pub fn entry(imm: &Imm, op: Args) -> usize {
         Args::Source => entry_source(),
         Args::Balance { asset, addr } => entry_balance(asset, addr),
         Args::OnrampingFromBal { asset, amt } => entry_onramping_from_bal(asset, amt),
-        Args::Offramp { args, server_sig } => entry_offramp(&imm, args, server_sig),
+        Args::Offramp { args, server_sig } => entry_offramp(imm, args, server_sig),
         Args::AggregateToOfframp { args, is_taker } => {
             entry_aggregate_to_offramp(imm, args, is_taker)
         }
