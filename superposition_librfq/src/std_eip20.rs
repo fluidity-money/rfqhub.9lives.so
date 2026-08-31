@@ -1,6 +1,6 @@
 #[cfg(feature = "std")]
 mod impls {
-    use std::{collections::HashMap, cell::RefCell};
+    use std::{cell::RefCell, collections::HashMap};
 
     use bobcat_sdk::{entry::contract_address, maths::U};
 
@@ -15,12 +15,22 @@ mod impls {
         BALANCES.with(|s| s.borrow_mut().clear())
     }
 
+    fn balance(asset: [u8; 20], owner: [u8; 20]) -> U {
+        std_eip20::BALANCES.with(|balances| {
+            balances
+                .borrow()
+                .get(&asset)
+                .and_then(|owners| owners.get(&owner))
+                .copied()
+                .unwrap_or(U::ZERO)
+        })
+    }
+
     pub fn burn(asset: Address, spender: Address, amt: &U) {
         BALANCES
             .with(|b| -> Option<()> {
                 let p = *b.borrow().get(&asset)?.get(&spender)?;
-                *b.borrow_mut().get_mut(&asset)?.get_mut(&spender)? = p
-                    .checked_sub(amt);
+                *b.borrow_mut().get_mut(&asset)?.get_mut(&spender)? = p.checked_sub(amt);
                 Some(())
             })
             .expect("went to burn {asset} for spender {spender}, no bal")
@@ -59,4 +69,3 @@ mod impls {
 }
 
 pub use impls::*;
-

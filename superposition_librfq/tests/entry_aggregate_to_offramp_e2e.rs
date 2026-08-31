@@ -7,7 +7,7 @@ mod test {
     use bobcat_sdk::{
         entry::contract_address,
         host::{set_contract_address, set_msg_sender},
-        maths::{U, strategies::*},
+        maths::U,
         storage::flush_guard_fresh,
     };
 
