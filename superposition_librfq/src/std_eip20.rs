@@ -15,8 +15,8 @@ mod impls {
         BALANCES.with(|s| s.borrow_mut().clear())
     }
 
-    fn balance(asset: [u8; 20], owner: [u8; 20]) -> U {
-        std_eip20::BALANCES.with(|balances| {
+    pub fn balance(asset: [u8; 20], owner: [u8; 20]) -> U {
+        BALANCES.with(|balances| {
             balances
                 .borrow()
                 .get(&asset)

@@ -44,7 +44,7 @@ unsafe fn recurse_aggregate_src(
             match &**r {
                 AggregateEnum::Args(Aggregate { args, server_sig }) => unsafe {
                     if let Some(ref res) = signable.aggregated_res {
-                        let result = recurse_aggregate_args(imm, args, &res, server_sig)?;
+                        let result = recurse_aggregate_args(imm, args, res, server_sig)?;
                         let inner_hash: U = res.hash.clone().into();
                         let inner_asset = storage::hash_asset::get(&inner_hash);
                         storage::hash_taker_leftover::set(&inner_hash, &inner_asset, &U::ZERO);
@@ -164,7 +164,6 @@ pub unsafe fn recurse_aggregate_args(
     };
     // We also need to make sure the maker actually has the funds for this trade:
     let asset_u = U::from(asset);
-    let taker_amt_u = U::from(taker_amt);
     let maker_amt_u = U::from(maker_amt);
     let maker_acc_u = U::from(maker_acc);
     storage::onramped_bal::checked_sub_res(
@@ -175,20 +174,16 @@ pub unsafe fn recurse_aggregate_args(
     )?;
     storage::hash_taker_addr::set(&signable_hash_u, &taker_acc_u);
     storage::hash_maker_addr::set(&signable_hash_u, &maker_acc_u);
-    if did_taker_win {
-        storage::hash_taker_position::checked_add_res(
-            &signable_hash_u,
-            &asset_u,
-            &maker_amt_u,
-            "hash taker position checked add",
-        )?;
+    let taker_leftover = if did_taker_win {
+        taker_amt
+            .checked_add(maker_amt)
+            .ok_or(Dis::CheckedAddOverflow)?
     } else {
-        storage::hash_maker_position::checked_add_res(
-            &signable_hash_u,
-            &asset_u,
-            &taker_amt_u,
-            "hash maker position checked add",
-        )?;
+        0
+    };
+    if did_taker_win {
+        storage::hash_taker_leftover::set(&signable_hash_u, &asset_u, &U::from(taker_leftover));
+    } else {
         let maker_winnings = taker_amt
             .checked_add(maker_amt)
             .ok_or(Dis::CheckedAddOverflow)?;
@@ -200,16 +195,6 @@ pub unsafe fn recurse_aggregate_args(
         )?;
     }
     storage::hash_asset::set(&signable_hash_u, &asset_u);
-    let taker_leftover = if did_taker_win {
-        taker_amt
-            .checked_add(maker_amt)
-            .ok_or(Dis::CheckedAddOverflow)
-    } else {
-        taker_amt
-            .checked_sub(taker_amt)
-            .ok_or(Dis::CheckedSubUnderflow)
-    }?;
-    storage::hash_taker_leftover::set(&signable_hash_u, &asset_u, &U::from(taker_leftover));
     Ok((taker_leftover, taker_acc, asset))
 }
 
@@ -249,7 +234,7 @@ pub fn entry_recurse_aggregate_enum(
         AggregateEnum::Hash(h) => {
             let asset = storage::hash_asset::get(h);
             let (sender, asset, amt) = if is_taker {
-                let amt = storage::hash_taker_leftover::get(h, &asset.into());
+                let amt = storage::hash_taker_leftover::get(h, &asset);
                 let recipient = get_acc_owner(storage::hash_taker_addr::get(h).into());
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
@@ -435,6 +420,7 @@ mod test {
         })
     }
 
+    #[test]
     fn test_inline_reinvest_consumes_inner_leftover() {
         flush_guard_fresh(|| {
             let taker = [1u8; 20]; // erik
@@ -680,7 +666,7 @@ mod test {
             std_eip20::give(asset_addr, contract, &U::from(pool));
             storage::onramped_bal::set(&asset_addr.into(), &taker.into(), &U::from(taker_amt));
             storage::onramped_bal::set(&asset_addr.into(), &maker.into(), &U::from(maker_amt));
-            let contract_before = eip20_balance(asset_addr, contract);
+            let contract_before = std_eip20::balance(asset_addr, contract);
 
             let erik_taker = BundleTaker {
                 args: BundleTakerArgs {
@@ -739,9 +725,9 @@ mod test {
 
             // Offramp the maker's entire claim and check conservation.
             assert!(call_eip20::transfer(asset_addr, maker, &U::from(pool)));
-            assert_eq!(eip20_balance(asset_addr, maker), U::from(pool));
+            assert_eq!(std_eip20::balance(asset_addr, maker), U::from(pool));
             assert_eq!(
-                eip20_balance(asset_addr, contract),
+                std_eip20::balance(asset_addr, contract),
                 contract_before.checked_sub(&U::from(pool))
             );
 

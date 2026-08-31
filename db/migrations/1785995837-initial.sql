@@ -36,6 +36,7 @@ CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 -- table is a departure from our usual practice, in that it's updated
 -- with whether the bundle is the latest status of it being used in the
 -- recursive bundle, aka whether it's the definitive source in the taker.
+-- For us to take this, we need to verify the OnchainPotArgs in the mix.
 CREATE TABLE rfqhub_bundles_taker_1 (
 	id SERIAL PRIMARY KEY,
 	created_by TIMESTAMP NOT NULL,
@@ -52,8 +53,24 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	user_addr ADDRESS NOT NULL,
 	-- What amount are we able to use with this BundleTaker here? Based on the end
 	-- result of the aggregate, or the deposit.
-	amt BIGINT NOT NULL
+	amt BIGINT NOT NULL,
+	-- Is the target of this prediction up or down?
+	is_up BOOLEAN NOT NULL,
+	-- What's the target here with this all?
+	price_target BIGINT NOT NULL,
+	-- What's the outcome we're speculating on here? String that we'll convert in Go
+	-- code.
+	outcome VARCHAR NOT NULL
 );
+
+-- As an example, if we were to create a row for someone that's just
+-- opened a position, it would look like the following:
+
+(1, current_timestamp, 1, TRUE, NULL, <usdc>, <user addr>, 10000);
+
+Because it's the only object, later, it could be included like this:
+
+
 
 CREATE FUNCTION rfqhub_get_current_bundles_amt_1 (
 	user_addr ADDRESS,
