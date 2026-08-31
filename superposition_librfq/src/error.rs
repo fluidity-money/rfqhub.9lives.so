@@ -18,6 +18,8 @@ pub enum Dis {
     SenderNotMaker,
     HashAlreadySeen,
     ExchangeErr,
+    AccountNonexistent,
+    AccountError,
 }
 
 #[derive(Clone, PartialEq)]

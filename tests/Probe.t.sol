@@ -49,7 +49,10 @@ contract Probe is Test {
         vm.store(c, slot, bytes32(amt));
     }
 
-    function _tryAggregate(address hintOwner) internal returns (bool ok) {
+    function _tryAggregate(address hintOwner) internal returns (uint256 code) {
+        // Use a fresh deployment per candidate. This avoids relying on failed
+        // Stylus calls rolling back every cached storage write correctly.
+        c = IArbFoundry(address(vm)).deployStylusCode("rfqhub.9lives.so.wasm");
         _setRecipientHint(erik, hintOwner);
         _setOnrampedBal(erik, 500);
         _setOnrampedBal(alex, 200);
@@ -80,16 +83,24 @@ contract Probe is Test {
         args.aggregateToOfframp.args.args.serverSig = new bytes(64);
         args.aggregateToOfframp.isTaker = true;
 
-        (ok,) = RfqhubTypes.sendCalldata(vm, c, args);
-        return ok;
+        (bool ok, bytes memory result) = RfqhubTypes.sendCalldata(vm, c, args);
+        if (!ok) return 255;
+        if (result.length == 32) return abi.decode(result, (uint256));
+        return 0;
     }
 
     function test_probe_msgSender() public {
+        address foundryDefaultSender = 0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38;
         emit log_named_address("address_this", address(this));
+        emit log_named_address("tx_origin", tx.origin);
+        emit log_named_address("address_vm", address(vm));
+        emit log_named_address("foundry_default_sender", foundryDefaultSender);
         emit log_named_address("contract_c", c);
-        emit log_named_uint("hint_address_this", _tryAggregate(address(this)) ? 1 : 0);
-        emit log_named_uint("hint_addr0", _tryAggregate(address(0)) ? 1 : 0);
-        emit log_named_uint("hint_c", _tryAggregate(c) ? 1 : 0);
-        emit log_named_uint("hint_erik", _tryAggregate(erik) ? 1 : 0);
+        emit log_named_uint("code_address_this", _tryAggregate(address(this)));
+        emit log_named_uint("code_tx_origin", _tryAggregate(tx.origin));
+        emit log_named_uint("code_vm", _tryAggregate(address(vm)));
+        emit log_named_uint("code_foundry_default", _tryAggregate(foundryDefaultSender));
+        emit log_named_uint("code_addr0", _tryAggregate(address(0)));
+        emit log_named_uint("code_erik", _tryAggregate(erik));
     }
 }

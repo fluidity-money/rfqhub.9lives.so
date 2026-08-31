@@ -1,22 +1,23 @@
 use bobcat_sdk::{
-    call::{call_slice, call_unit},
+    call::{safe_static_call_slice, safe_static_call_unit},
     maths::U,
 };
 
 use superposition_libaccounts::{Args, Sig, StatementArgs};
 
-use crate::signable::Hash;
+use crate::{error::{Error, Dis}, signable::Hash};
 
-pub fn get_owner(addr: [u8; 20]) -> [u8; 20] {
-    let (rc, _, o) = call_slice::<20>(
+pub fn get_owner(addr: [u8; 20]) -> Result<[u8; 20], Error> {
+    let (ok, _, addr) = safe_static_call_slice::<20>(
         addr,
         &borsh::to_vec(&Args::Owner).unwrap(),
-        &U::ZERO,
         u64::MAX,
         0,
-    );
-    assert!(rc, "reverted owner call");
-    o
+    ).ok_or(Error::from(Dis::AccountNonexistent))?;
+    if !ok {
+        return Err(Dis::AccountError.into());
+    }
+    Ok(addr)
 }
 
 /// Check the statement of a hash given by a user by converting it to
@@ -24,7 +25,7 @@ pub fn get_owner(addr: [u8; 20]) -> [u8; 20] {
 /// prelude that we use internally.
 pub fn check_hash_statement(addr: [u8; 20], hash: Hash, ms_ts: [u8; 6], sig: &[u8; 64]) -> bool {
     let hash: U = hash.into();
-    call_unit(
+    safe_static_call_unit(
         addr,
         &borsh::to_vec(&Args::Statement {
             args: StatementArgs {
@@ -34,7 +35,6 @@ pub fn check_hash_statement(addr: [u8; 20], hash: Hash, ms_ts: [u8; 6], sig: &[u
             sig: Sig(*sig),
         })
         .unwrap(),
-        &U::ZERO,
         u64::MAX,
     )
 }

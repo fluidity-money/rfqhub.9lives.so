@@ -262,8 +262,9 @@ storage! {
     onramped_bal(asset, account),
     // Seen timestamps that we track to prevent reuse.
     ms_ts(account, ms_ts),
-    // Seen server timestamps that we track to prevent reuse.
-    server_ms_ts(ms_ts),
+    // Seen server timestamps that we track to prevent reuse. Keyed by
+    // the account we intended this action for, and the timestamp.
+    server_ms_ts(acc_addr, ms_ts),
     // Taker amount that is available to be withdrawn for the taker of this
     // position:
     hash_taker_leftover(hash, asset),

@@ -72,7 +72,10 @@ type BundleMaker struct {
 }
 
 type OfframpArgs struct {
-	Amt uint64
+	Asset   Asset
+	Amt     uint64
+	MsTs    [6]byte
+	AccAddr [20]byte
 }
 
 type Timestamplet struct {

@@ -64,7 +64,9 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	-- What's the outcome we're speculating on here?
 	outcome RFQHUB_OUTCOME NOT NULL,
 	-- The Maker bundle this was combined with.
-	maker_id INTEGER
+	maker_id INTEGER,
+	-- The user provided signature for this blob:
+	user_sig BYTES64 NOT NULL UNIQUE
 );
 
 CREATE TABLE rfqhub_bundles_maker_1 (

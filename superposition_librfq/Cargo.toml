@@ -8,9 +8,9 @@ name = "superposition_librfq"
 crate-type   = ["rlib", "cdylib"]
 
 [dependencies]
-bobcat-sdk.workspace = true
+bobcat-sdk = { workspace = true, features = ["alloc", "panic-revert", "sha512", "borsh"] }
 borsh.workspace = true
-superposition_libaccounts = "0.6.0"
+superposition_libaccounts = "0.6.1"
 superposition-assets.workspace = true
 array-concat = "0.5.5"
 const-hex.workspace = true
@@ -29,3 +29,6 @@ arbitrum = []
 
 [dev-dependencies]
 proptest = ">=1.11.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+bobcat-sdk = { version = ">=0.9.1", default-features = false, features = ["alloc", "panic-revert", "sha512", "borsh", "ed25519-dalek"] }

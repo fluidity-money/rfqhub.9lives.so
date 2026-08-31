@@ -215,7 +215,7 @@ pub fn entry_recurse_aggregate_enum(
             let (taker_leftover, taker_acc, asset) =
                 unsafe { recurse_aggregate_args(imm, args, &signable, server_sig)? };
             if is_taker {
-                let recipient = get_acc_owner(taker_acc);
+                let recipient = get_acc_owner(taker_acc)?;
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
@@ -224,7 +224,7 @@ pub fn entry_recurse_aggregate_enum(
             } else {
                 let signable_hash_u: U = signable.hash.clone().into();
                 let maker_acc: [u8; 20] = storage::hash_maker_addr::get(&signable_hash_u).into();
-                let recipient = get_acc_owner(maker_acc);
+                let recipient = get_acc_owner(maker_acc)?;
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
@@ -238,14 +238,14 @@ pub fn entry_recurse_aggregate_enum(
             let asset = storage::hash_asset::get(h);
             let (sender, asset, amt) = if is_taker {
                 let amt = storage::hash_taker_leftover::get(h, &asset);
-                let recipient = get_acc_owner(storage::hash_taker_addr::get(h).into());
+                let recipient = get_acc_owner(storage::hash_taker_addr::get(h).into())?;
                 if recipient != sender {
                     return Err(Dis::SenderNotTaker.into());
                 }
                 storage::hash_taker_leftover::set(&h, &asset.into(), &U::ZERO);
                 (sender, asset, amt)
             } else {
-                let recipient = get_acc_owner(storage::hash_maker_addr::get(h).into());
+                let recipient = get_acc_owner(storage::hash_maker_addr::get(h).into())?;
                 if recipient != sender {
                     return Err(Dis::SenderNotMaker.into());
                 }
@@ -259,10 +259,16 @@ pub fn entry_recurse_aggregate_enum(
 }
 
 pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool) -> usize {
-    // This code recursively descends inside the aggregate args, finding the
-    // correct winning amount for the maker and takers, crediting the winning
-    // addresses correctly. The amounts are then sent to the users.
-    let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
+    // TEMPORARY ARBOS DIAGNOSTIC: return Error::dis + 1 as a word rather
+    // than losing the structured error through wasm panic -> unreachable.
+    // A successful aggregate still follows the normal transfer path.
+    let (sender, asset, leftover) = match entry_recurse_aggregate_enum(imm, &args, is_taker) {
+        Ok(result) => result,
+        Err(err) => {
+            bobcat_sdk::entry::write_result_word(&U::from(err.dis as u8 + 1));
+            return 0;
+        }
+    };
     assert!(
         call_eip20::transfer(asset, sender, &leftover.into()),
         "eip20 transfer err"
@@ -306,10 +312,10 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
 
 // Get the owner of an account, or skipping it based on what's in the
 // current slot for this purpose.
-fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
+fn get_acc_owner(acc: [u8; 20]) -> Result<[u8; 20], Error> {
     #[cfg(feature = "arbos")]
     unsafe {
-        arbos_recipient_hint(acc)
+        Ok(arbos_recipient_hint(acc))
     }
     #[cfg(not(feature = "arbos"))]
     call_accounts::get_owner(acc)
