@@ -57,7 +57,8 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	-- submitted, or used in an aggregate bundle.
 	asset ADDRESS NOT NULL,
 	-- What amount are we able to use with this BundleTaker here? Based on the end
-	-- result of the aggregate, or the deposit.
+	-- result of the aggregate, or the deposit. This is the compensation we'll be paying a
+	-- maker if we're incorrect.
 	amt BIGINT NOT NULL,
 	-- Is the target of this prediction up or down?
 	is_up BOOLEAN NOT NULL,
@@ -97,14 +98,14 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	bundle_taker_id INTEGER NOT NULL,
 	-- The millisecond timestamp that we use here.
 	ms_ts INTEGER NOT NULL,
-	-- The compensation if the maker is correct.
+	-- The compensation if the taker is correct.
 	amt BIGINT NOT NULL
 	-- To keep things simple since this is complex code, we actually update this table
 	-- with this field. If the choice hasn't happened yet, then we don't proceed yet.
-	was_winner BOOLEAN,
+	was_correct BOOLEAN,
 	-- Certain fields we get from the underlying taker once, but in the case of this
-	-- table, we embed the value here of the end result timestamp:
-	timestamplet_val INTEGER,
+	-- table, we get the timestamplet value by a left join so we can make use of it here
+	timestamplet_id INTEGER,
 	-- The server side aggregation signature if this maker was chosen as the winner,
 	-- for the aggregate bundle we create. We get the timestamplet fields by looking
 	-- up the taker.
@@ -137,49 +138,36 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 -- directly:
 
 -- rfqhub_bundles_maker_1(
-	1,				id
-	current_timestamp,	created timestamp
-	NULL,			updated timestamp
-	<acc addr>,		acc addr
-	1,				NULL, <ms ts>, 8000, NULL, NULL, NULL);
+-- 	1,				id
+-- 	current_timestamp,	created timestamp
+-- 	NULL,			updated timestamp
+-- 	<acc addr>,		acc addr
+-- 	1,				user id
+-- 	NULL,			where did the liquidity come from here? NULL for onramping
+-- 	<ms ts>,			the ms timestamp we use here
+-- 	8000,			the compensation if the maker is incorrect.
+-- 	NULL,			was this maker correct in the end? NULL if it hasn't happened yet
+-- 	NULL,			the timestamplet id if we're at the point where we needed it
+-- 	NULL			the server signature if the aggregate happened for this taker + maker combo
+-- );
 
 -- Where we would run the auction until we're not able to anymore, at which point we would
 -- choose the winner. We would update the table accordingly.
 
-CREATE FUNCTION rfqhub_get_current_bundles_amt_1 (
-	user_addr ADDRESS,
-	asset ADDRESS
-)
-RETURNS BIGINT
-LANGUAGE plpgsql
-AS $$
-BEGIN
-
-END;
-
--- And the results of the outstanding bundles are used to subtract from this:
-
-CREATE FUNCTION rfqhub_get_balance_1 (
-	user_addr ADDRESS,
-	asset ADDRESS
-)
-RETURNS BIGINT
-LANGUAGE plpgsql
-AS $$
-DECLARE
-	last_amt HUGEINT;
-	open_bundles HUGEINT;
-BEGIN
-
-END:
-
--- And
-
-CREATE FUNCTION rfqhub_create_bundle_1 (
+CREATE FUNCTION rfqhub_create_bundle_onramping_1 (
 	user_addr ADDRESS,
 	asset ADDRESS,
 	min_bundle_amt HUGEINT,
 	max_bundle_amt HUGEINT
 )
+RETURNS BIGINT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	last_balance_changed HUGEINT;
+	taker_bundle_bal HUGEINT;
+	maker_bundle_bal HUGEINT;
+BEGIN;
+END;
 
 -- migrate:down
