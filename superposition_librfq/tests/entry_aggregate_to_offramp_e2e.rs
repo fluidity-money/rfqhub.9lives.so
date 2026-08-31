@@ -1,4 +1,4 @@
-#[cfg(feature = "proptest")]
+#[cfg(all(feature = "proptest", feature = "arbitrary", feature = "std"))]
 mod test {
     use proptest::prelude::*;
 
@@ -66,6 +66,10 @@ mod test {
                 });
             })
             */
+        }
+
+        #[test]
+        fn test_extended_form(inverted in any::<InvertedAggregate>()) {
         }
     }
 }

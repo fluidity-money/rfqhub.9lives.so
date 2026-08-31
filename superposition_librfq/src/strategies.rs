@@ -239,6 +239,15 @@ pub fn inverted_aggregate() -> BoxedStrategy<InvertedAggregate> {
         .boxed()
 }
 
+impl proptest::arbitrary::Arbitrary for InvertedAggregate {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        inverted_aggregate()
+    }
+}
+
 fn sig() -> impl Strategy<Value = Sig> {
     any::<[u8; 64]>()
 }

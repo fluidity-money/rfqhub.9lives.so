@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-cargo test --features testing,proptest
+cargo test --features std,proptest,arbitrary
 
 export SPN_DEPLOY_TARGET=arbos
 
