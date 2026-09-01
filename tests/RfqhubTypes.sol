@@ -28,14 +28,16 @@ struct OnchainPotArgs {
 
 enum OnrampingSourceKind {
     OnchainPot,
-    AggregatedResult,
-    OnchainPotAggregatedResult
+    AggregatedResult
 }
 
 struct OnrampingSource {
     OnrampingSourceKind kind;
     OnchainPotArgs onchainPot;
+    // UTF-8 JSON for the recursive AggregateEnum stored in
+    // AggregatedResultArgs.from.
     bytes aggregatedResult;
+    uint64 amtToTake;
 }
 
 struct BundleTakerArgs {
@@ -53,7 +55,7 @@ struct BundleTaker {
 }
 
 struct BundleMakerArgs {
-    uint64 amt;
+    OnrampingSource src;
     BundleTaker taker;
     bytes6 msTs;
     address acc;
@@ -140,10 +142,9 @@ struct Args {
 /// in tests.
 ///
 /// Rust has boxed recursive enum members (`Box<AggregateEnum>` inside
-/// `OnrampingSource`). Solidity cannot directly express an infinitely recursive
-/// value type, so those boxed recursive members are represented as raw Borsh
-/// bytes (`aggregatedResult`) to be decoded or forwarded by the test harness as
-/// needed. Rust `Sig = [u8; 64]` is represented as `bytes` and should be
+/// `AggregatedResultArgs`). Solidity cannot directly express an infinitely
+/// recursive value type, so that member is represented as UTF-8 JSON in
+/// `aggregatedResult`. Rust `Sig = [u8; 64]` is represented as `bytes` and should be
 /// exactly 64 bytes long.
 ///
 /// `toJson` produces JSON matching `serde_json::to_string` output so the CLI
@@ -310,7 +311,7 @@ library RfqhubTypes {
 
     function _bundleMakerArgs(BundleMakerArgs memory a) internal pure returns (string memory) {
         return string.concat(
-            "{\"amt\":", _u2s(uint256(a.amt)),
+            "{\"src\":", _onrampingSource(a.src),
             ",\"taker\":", _bundleTaker(a.taker),
             ",\"ms_ts\":", _u8Arr6(a.msTs),
             ",\"acc\":", _u8Arr20(a.acc), "}"
@@ -339,16 +340,11 @@ library RfqhubTypes {
         if (s.kind == OnrampingSourceKind.OnchainPot) {
             return string.concat("{\"OnchainPot\":", _onchainPotArgs(s.onchainPot), "}");
         }
-        // AggregatedResult / OnchainPotAggregatedResult: the boxed recursive
-        // AggregateEnum is opaque bytes here. Serialize as hex — the test
-        // harness must supply structured data if full serde fidelity is needed.
-        if (s.kind == OnrampingSourceKind.AggregatedResult) {
-            return string.concat("{\"AggregatedResult\":\"", _hex(s.aggregatedResult), "\"}");
-        }
+        // The boxed recursive AggregateEnum is supplied as raw UTF-8 JSON.
         return string.concat(
-            "{\"OnchainPotAggregatedResult\":[",
-            _onchainPotArgs(s.onchainPot), ",\"",
-            _hex(s.aggregatedResult), "\"]}"
+            "{\"AggregatedResult\":{\"from\":",
+            string(s.aggregatedResult),
+            ",\"amt_to_take\":", _u2s(uint256(s.amtToTake)), "}}"
         );
     }
 

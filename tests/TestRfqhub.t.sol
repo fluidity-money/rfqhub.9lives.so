@@ -95,6 +95,16 @@ contract TestRfqhub is Test {
         vm.store(c, slot, bytes32(amt));
     }
 
+    // Seed storage::global_bal(USDC). It is the second item in storage.rs,
+    // so its slot is slot_map(USDC, U(1)). AggregateToOfframp decrements this
+    // ledger by the amount transferred to the winner.
+    function _setGlobalBal(uint256 amt) internal {
+        bytes32 slot = keccak256(
+            abi.encodePacked(uint256(uint160(USDC)), uint256(1))
+        );
+        vm.store(c, slot, bytes32(amt));
+    }
+
     // Read back an onramped USDC balance via the contract's `Balance` entry
     // (writes storage::onramped_bal::get as a word). Used to confirm the
     // vm.store-seeded balances are actually visible to the stylus runtime.
@@ -128,6 +138,7 @@ contract TestRfqhub is Test {
         // Fund both parties' onramped balances directly (as the Rust test does).
         _setOnrampedBal(erik, 500);
         _setOnrampedBal(alex, 200);
+        _setGlobalBal(700);
 
         // Confirm the stylus runtime can actually read the seeded balances
         // (i.e. vm.store lands in the slot the stylus storage resolves).
@@ -150,9 +161,12 @@ contract TestRfqhub is Test {
         aggArgs.maker.args.taker.sig = new bytes(64);
 
         // --- maker: Alex ---
+        aggArgs.maker.args.src.kind = OnrampingSourceKind.OnchainPot;
+        aggArgs.maker.args.src.onchainPot.accAddr = alex;
+        aggArgs.maker.args.src.onchainPot.amt = 200;
+        aggArgs.maker.args.src.onchainPot.asset = Asset.USDC;
         aggArgs.maker.args.msTs = T0;
         aggArgs.maker.args.acc = alex;
-        aggArgs.maker.args.amt = 200;
         aggArgs.maker.sig = new bytes(64);
 
         // --- timestamplet: Bitcoin price 101 at expiry timestamp 1 ---
