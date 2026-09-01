@@ -4,9 +4,13 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use bobcat_sdk::{host::set_contract_address, maths::U, storage::flush_guard_fresh};
+use bobcat_sdk::{maths::U, storage::flush_guard_fresh};
 
-use crate::std_eip20;
+#[cfg(feature = "std")]
+use bobcat_sdk::host::set_contract_address;
+
+#[cfg(feature = "std")]
+use superposition_librfq::std_eip20;
 
 #[test]
 fn test_erik_alex_after_already_same_blob() {
@@ -39,10 +43,14 @@ fn test_erik_alex_after_already_same_blob() {
         };
         let alex_1 = BundleMaker {
             args: BundleMakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: alex_addr,
+                    amt: 200,
+                    asset,
+                }),
                 taker: erik_1,
                 ms_ts: [1u8; 6],
                 acc: alex_addr,
-                amt: 200,
             },
             sig: [0u8; 64],
         };
@@ -56,12 +64,13 @@ fn test_erik_alex_after_already_same_blob() {
         };
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Box::new(
-                    Aggregate {
+                src: OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                    from: Box::new(AggregateEnum::Args(Box::new(Aggregate {
                         args: agg_1,
                         server_sig: [0u8; 64],
-                    },
-                )))),
+                    }))),
+                    amt_to_take: 700,
+                }),
                 expiry: expiry_2,
                 ms_ts: [2u8; 6],
                 is_up: false,
@@ -72,10 +81,14 @@ fn test_erik_alex_after_already_same_blob() {
         };
         let alex_2 = BundleMaker {
             args: BundleMakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: alex_addr,
+                    amt: 300,
+                    asset,
+                }),
                 taker: erik_2,
                 ms_ts: [3u8; 6],
                 acc: alex_addr,
-                amt: 300,
             },
             sig: [0u8; 64],
         };
@@ -127,10 +140,14 @@ fn test_inline_reinvest_consumes_inner_leftover() {
         };
         let alex_1 = BundleMaker {
             args: BundleMakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: maker,
+                    amt: 200,
+                    asset,
+                }),
                 taker: erik_1,
                 ms_ts: [1u8; 6],
                 acc: maker,
-                amt: 200,
             },
             sig: [0u8; 64],
         };
@@ -147,12 +164,13 @@ fn test_inline_reinvest_consumes_inner_leftover() {
         // 700 + 300 = 1000.
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Args(Box::new(
-                    Aggregate {
+                src: OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                    from: Box::new(AggregateEnum::Args(Box::new(Aggregate {
                         args: agg_1,
                         server_sig: [0u8; 64],
-                    },
-                )))),
+                    }))),
+                    amt_to_take: 700,
+                }),
                 expiry: expiry_2,
                 ms_ts: [2u8; 6],
                 is_up: false,
@@ -163,10 +181,14 @@ fn test_inline_reinvest_consumes_inner_leftover() {
         };
         let alex_2 = BundleMaker {
             args: BundleMakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: maker,
+                    amt: 300,
+                    asset,
+                }),
                 taker: erik_2,
                 ms_ts: [3u8; 6],
                 acc: maker,
-                amt: 300,
             },
             sig: [0u8; 64],
         };
@@ -191,6 +213,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
         let inner_hash: U = signable_2
             .maker
             .taker_args
+            .src
             .aggregated_res
             .as_ref()
             .expect("inline reinvest carries an aggregated_res")
@@ -258,10 +281,14 @@ fn test_erik_alex_after_posted_blob() {
         };
         let alex_1 = BundleMaker {
             args: BundleMakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: alex_addr,
+                    amt: 200,
+                    asset,
+                }),
                 taker: erik_1,
                 ms_ts: [1u8; 6],
                 acc: alex_addr,
-                amt: 200,
             },
             sig: [0u8; 64],
         };
@@ -279,9 +306,10 @@ fn test_erik_alex_after_posted_blob() {
         });
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
-                src: OnrampingSource::AggregatedResult(Box::new(AggregateEnum::Hash(
-                    signable_1.hash.into(),
-                ))),
+                src: OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                    from: Box::new(AggregateEnum::Hash(signable_1.hash.into())),
+                    amt_to_take: 700,
+                }),
                 expiry: expiry_2,
                 ms_ts: [2u8; 6],
                 is_up: false,
@@ -292,10 +320,14 @@ fn test_erik_alex_after_posted_blob() {
         };
         let alex_2 = BundleMaker {
             args: BundleMakerArgs {
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: alex_addr,
+                    amt: 300,
+                    asset,
+                }),
                 taker: erik_2,
                 ms_ts: [3u8; 6],
                 acc: alex_addr,
-                amt: 300,
             },
             sig: [0u8; 64],
         };
@@ -322,6 +354,7 @@ fn test_erik_alex_after_posted_blob() {
 // (the payout is exactly backed by the pool already deducted from the
 // participants' onramped balances).
 #[test]
+#[cfg(feature = "std")]
 fn test_maker_win_offramp_pays_principal() {
     flush_guard_fresh(|| {
         set_contract_address([0x22; 20]);
@@ -359,7 +392,11 @@ fn test_maker_win_offramp_pays_principal() {
         };
         let alex_maker = BundleMaker {
             args: BundleMakerArgs {
-                amt: maker_amt,
+                src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                    acc_addr: maker,
+                    amt: maker_amt,
+                    asset,
+                }),
                 taker: erik_taker,
                 ms_ts: [1u8; 6],
                 acc: maker,

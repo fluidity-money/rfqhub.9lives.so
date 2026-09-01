@@ -181,6 +181,9 @@ class Database:
 
 	def set_aggregate_fields(
 		self,
+		onboarding_amts,
+		bundle_taker_acc,
+		bundle_maker_acc,
 		bundle_taker_id,
 		bundle_maker_id,
 		end_price_amt,
@@ -198,14 +201,15 @@ class Database:
 			or nothing if you reinvest your winnings. A future system might
 			let someone fork out what they have partially.
 			"""
-			bundle_taker.end_source_amt = bundle_taker.amt + bundle_maker.amt - amt_to_onramping_amt
-			# This has poor state hygiene of course:
-			if bundle_taker.end_source_amt < 0:
-				raise BadEndSourceAmount
+			# This has poor hygiene, if someone were to ask for more, this
+			# would go negative. But this is a test:
+			bundle_taker.end_source_amt = bundle_taker.amt + bundle_maker.amt - taker_to_leave_leftover
 			bundle_maker.end_source_amt = 0
+			o.onboarded[bundle_taker_acc] += taker_to_leave_leftover
 		else:
 			bundle_taker.end_source_amt = 0
-			bundle_maker.end_source_amt = bundle_taker.amt + bundle_maker.amt
+			bundle_maker.end_source_amt = bundle_taker.amt + bundle_maker.amt - maker_to_leave_leftover
+			o.onboarded[bundle_maker_acc] += maker_to_leave_leftover
 
 	def mark_as_offramped(
 		self,
@@ -261,7 +265,16 @@ if __name__ == "__main__":
 	"""
 	We set the aggreate fields here for the result. This lets us reuse this soon.
 	"""
-	db.set_aggregate_fields(bundle_taker_id, bundle_maker_id, 101)
+	db.set_aggregate_fields(
+		o,
+		"Erik",
+		"Alex",
+		bundle_taker_id,
+		bundle_maker_id,
+		101,
+		0,
+		0
+	)
 	"""
 	We ask the system for a signature in this example (which would actually produce
 	the aggregate type her), so they can offramp:
@@ -291,7 +304,16 @@ if __name__ == "__main__":
 	)
 	bundle_maker_id = db.add_bundle_maker(alex)
 	db.pick_maker(bundle_taker_id, bundle_maker_id)
-	db.set_aggregate_fields(bundle_taker_id, bundle_maker_id, 101)
+	db.set_aggregate_fields(
+		o,
+		"Erik",
+		"Alex",
+		bundle_taker_id,
+		bundle_maker_id,
+		101,
+		0,
+		0
+	)
 	"""
 	Unlike in the test this is based on, the taker here is going to reinvest the
 	amount to bundle a new trade against Shahmeer.
@@ -317,7 +339,21 @@ if __name__ == "__main__":
 	)
 	bundle_maker_id = db.add_bundle_maker(shahmeer)
 	db.pick_maker(bundle_taker_id, bundle_maker_id)
-	db.set_aggregate_fields(bundle_taker_id, bundle_maker_id, 101)
+	"""
+	Unlike in the first example, we're going to take about $200 from Erik's winning
+	position:
+	"""
+	db.set_aggregate_fields(
+		o,
+		"Erik",
+		"Alex",
+		bundle_taker_id,
+		bundle_maker_id,
+		101,
+		200,
+		0
+	)
 	(erik_won, shahmeer_won) = db.mark_as_offramped(bundle_taker_id, bundle_maker_id)
-	assert(erik_won == 1000)
+	assert(erik_won == 800)
 	assert(shahmeer_won == 0)
+	assert(o.onboarded["Erik"] == 200)

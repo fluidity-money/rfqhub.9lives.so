@@ -57,7 +57,16 @@ mod test {
                 panic!("inverted traces must convert to inline aggregate arguments");
             };
             let actual = aggregate.args.maker.args;
-            assert_eq!(actual.amt, expected.maker_amt);
+            match actual.src {
+                OnrampingSource::OnchainPot(ref pot) => {
+                    assert_eq!(pot.amt, expected.maker_amt);
+                    assert_eq!(pot.acc_addr, expected.maker_acc);
+                    assert_eq!(pot.asset, trace.initial_taker.asset);
+                }
+                OnrampingSource::AggregatedResult(_) => {
+                    panic!("generated makers must use their on-chain pots")
+                }
+            }
             assert_eq!(actual.ms_ts, expected.maker_ms_ts);
             assert_eq!(actual.taker.args.expiry, expected.expiry);
             assert_eq!(actual.taker.args.ms_ts, expected.taker_ms_ts);
@@ -75,13 +84,10 @@ mod test {
             );
 
             converted = match actual.taker.args.src {
-                OnrampingSource::AggregatedResult(previous) => *previous,
+                OnrampingSource::AggregatedResult(previous) => *previous.from,
                 OnrampingSource::OnchainPot(pot) => {
                     assert_eq!(pot, trace.initial_taker);
                     return;
-                }
-                OnrampingSource::OnchainPotAggregatedResult(_, _) => {
-                    panic!("the trace converter must produce a linear aggregate chain")
                 }
             };
         }

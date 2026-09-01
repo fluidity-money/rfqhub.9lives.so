@@ -46,12 +46,17 @@ mod test {
     fn aggregate_from_submission(
         submission: &InvertedSubmission,
         source: OnrampingSource,
+        asset: Asset,
     ) -> Aggregate {
         Aggregate {
             args: AggregateArgs {
                 maker: BundleMaker {
                     args: BundleMakerArgs {
-                        amt: submission.maker_amt,
+                        src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                            acc_addr: submission.maker_acc,
+                            amt: submission.maker_amt,
+                            asset,
+                        }),
                         taker: BundleTaker {
                             args: BundleTakerArgs {
                                 src: source,
@@ -193,7 +198,7 @@ mod test {
                 let mut final_result = None;
 
                 for (index, submission) in submissions.iter().enumerate() {
-                    let aggregate = aggregate_from_submission(submission, source);
+                    let aggregate = aggregate_from_submission(submission, source, asset);
                     let is_last = index + 1 == submissions.len();
                     // Always post the first game separately when possible, ensuring
                     // later chunks exercise an on-chain hash. Remaining boundaries
@@ -235,14 +240,16 @@ mod test {
 
                         latest_hash = Some(posted_hash);
                         final_result = Some(result);
-                        source = OnrampingSource::AggregatedResult(Box::new(
-                            AggregateEnum::Hash(posted_hash),
-                        ));
+                        source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                            from: Box::new(AggregateEnum::Hash(posted_hash)),
+                            amt_to_take: submission.price_move.expected_return,
+                        });
                     } else {
                         // Keep this node inline in the next posted chunk.
-                        source = OnrampingSource::AggregatedResult(Box::new(
-                            AggregateEnum::Args(Box::new(aggregate)),
-                        ));
+                        source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                            from: Box::new(AggregateEnum::Args(Box::new(aggregate))),
+                            amt_to_take: submission.price_move.expected_return,
+                        });
                     }
                 }
 
