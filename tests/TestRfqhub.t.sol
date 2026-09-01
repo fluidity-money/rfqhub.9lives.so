@@ -30,7 +30,7 @@ contract Sha512Mock {
     }
 }
 
-contract Rfqhub9LIVES is Test {
+contract TestRfqhub is Test {
     using RfqhubTypes for address;
 
     // Canonical USDC asset address, mirroring superposition-assets `Asset::USDC`.

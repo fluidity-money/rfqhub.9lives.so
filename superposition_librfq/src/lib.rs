@@ -77,7 +77,7 @@ pub struct FillerArgs {
 
 /// Onramping topic that's emitted on the underlying balance changing
 /// due to onrampind and offramping.
-pub const TOPIC_BALANCE_CHANGED: U = const_keccak256(b"BalanceChanged(address,address,uint256)");
+pub const TOPIC_BALANCE_CHANGED: U = const_keccak256(b"BalanceChanged(address,address,uint64,unt256)");
 
 /// Global balance for the asset given has changed.
 pub const TOPIC_GLOBAL_BALANCE_CHANGED: U =

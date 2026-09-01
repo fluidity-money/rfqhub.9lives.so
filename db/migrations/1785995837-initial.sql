@@ -47,12 +47,9 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	acc_addr ADDRESS NOT NULL,
 	-- Count of the bundle per user derived from rfqhub_bundles_taker_user_count_1.
 	user_id INTEGER NOT NULL UNIQUE,
-	-- Is this BundleTaker able to be used for an aggregate bundle? NULL if we're not
-	-- done finding the winner for it yet.
-	is_spendable BOOLEAN,
 	-- Did this BundleTaker come from an onboarding source, or did it come
 	-- from an aggregate bundle? NULL if it's the onboarding source.
-	from_res INTEGER,
+	source INTEGER,
 	-- The asset is derived from the answer that we see after the aggregate is either
 	-- submitted, or used in an aggregate bundle.
 	asset ADDRESS NOT NULL,
@@ -66,14 +63,19 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	price_target BIGINT NOT NULL,
 	-- What's the outcome we're speculating on here?
 	outcome RFQHUB_OUTCOME NOT NULL,
-	-- The Maker bundle this was combined with, updated on set.
+	-- The Maker bundle this was combined with, updated on set to make it easier to
+	-- interact with the database.
 	maker_id INTEGER,
 	-- The millisecond timestamp that we use here to prevent abuse.
 	ms_ts INTEGER NOT NULL,
 	-- When does this option expire and the choice needs to be given according to the user?
 	expiry TIMESTAMP NOT NULL,
 	-- The user provided signature for this blob:
-	user_sig BYTES64 NOT NULL UNIQUE
+	user_sig BYTES64 NOT NULL UNIQUE,
+	-- Was this offramped?
+	was_offramped BOOLEAN NOT NULL DEFAULT FALSE,
+	--- The end source amount after the allocation happened at the end of the game.
+	end_source_amt INTEGER
 );
 
 CREATE TABLE rfqhub_bundles_maker_user_count_1 (
@@ -93,8 +95,8 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	-- The source of where the finances come from that we have here. If NULL, then it
 	-- must be an onramping amount. If it's something, this must be the aggregated
 	-- bundle.
-	from_res INTEGER,
-	-- The BundleTaker that this is derivative of with the maker.
+	source INTEGER,
+	-- The BundleTaker this was intended for.
 	bundle_taker_id INTEGER NOT NULL,
 	-- The millisecond timestamp that we use here.
 	ms_ts INTEGER NOT NULL,
@@ -103,13 +105,19 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	-- To keep things simple since this is complex code, we actually update this table
 	-- with this field. If the choice hasn't happened yet, then we don't proceed yet.
 	was_correct BOOLEAN,
+	-- Was this bundle chosen in the end to be the other side to a BundleTaker?
+	was_chosen BOOLEAN,
 	-- Certain fields we get from the underlying taker once, but in the case of this
 	-- table, we get the timestamplet value by a left join so we can make use of it here
 	timestamplet_id INTEGER,
 	-- The server side aggregation signature if this maker was chosen as the winner,
 	-- for the aggregate bundle we create. We get the timestamplet fields by looking
 	-- up the taker.
-	server_sig BYTES64
+	server_sig BYTES64,
+	-- Was this offramped?
+	was_offramped BOOLEAN NOT NULL DEFAULT FALSE,
+	--- The end source amount after the allocation happened at the end of the game.
+	end_source_amt INTEGER
 );
 
 -- As an example, if we were to create a row for someone that's just
@@ -121,7 +129,6 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 -- 	NULL,			updated timestamp
 -- 	<acc addr>,		acc addr
 -- 	1,				the count for the user for pagination
--- 	NULL,			is this spendable? answer; no, it's incomplete.
 -- 	NULL,			was this derived from a bundle? NULL if onramping
 -- 	<usdc>,			the asset in use here
 -- 	100,				the amount we're using
@@ -154,20 +161,39 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 -- Where we would run the auction until we're not able to anymore, at which point we would
 -- choose the winner. We would update the table accordingly.
 
-CREATE FUNCTION rfqhub_create_bundle_onramping_1 (
-	user_addr ADDRESS,
+CREATE VIEW rfqhub_bundle_taker_amt_1 AS
+	SELECT acc_addr, SUM(amt) AS amt, asset
+	FROM rfqhub_bundles_taker_1
+	WHERE
+
+-- Create the bundle that can be used later by the makers:
+
+CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
+	acc_addr ADDRESS,
 	asset ADDRESS,
-	min_bundle_amt HUGEINT,
-	max_bundle_amt HUGEINT
+	min_bundle_amt INTEGER,
+	max_bundle_amt INTEGER,
+	is_up BOOLEAN,
+	price_target BIGINT,
+	outcome RFQHUB_OUTCOME,
+	ms_ts INTEGER,
+	expiry TIMESTAMP,
+	user_sig BYTES64
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
 AS $$
-DECLARE
-	last_balance_changed HUGEINT;
-	taker_bundle_bal HUGEINT;
-	maker_bundle_bal HUGEINT;
 BEGIN;
 END;
+
+-- This function is when someone submits a BundleMaker that may or may not be chosen in the end.
+
+CREATE FUNCTION rfqhub_create_bundle_maker_onramping_1 (
+	acc_addr ADDRESS,
+	taker_bundle_id INTEGER,
+	min_bundle_amt INTEGER,
+	max_bundle_amt INTEGER,
+	ms_ts INTEGER
+)
 
 -- migrate:down
