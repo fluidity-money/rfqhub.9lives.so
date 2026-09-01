@@ -20,6 +20,8 @@ pub enum Dis {
     ExchangeErr,
     AccountNonexistent,
     AccountError,
+    InconsistentAsset,
+    InconsistentAccount,
 }
 
 #[derive(Clone, PartialEq)]

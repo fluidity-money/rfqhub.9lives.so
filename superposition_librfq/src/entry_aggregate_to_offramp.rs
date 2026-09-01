@@ -1,9 +1,10 @@
 use crate::{
-    AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker, BundleTakerArgs, Imm,
-    OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_eip20,
+    call_eip20,
     error::{Dis, Error, ErrorData},
-    signable::{Hash, SignableAggregateArgs, SignableBundleTakerArgs},
-    storage,
+    events::event_emit_bal_update,
+    signable::{Hash, SignableAggregateArgs},
+    storage, AggregateArgs, AggregateEnum, AggregatedResultArgs, BundleMaker, BundleMakerArgs,
+    BundleTaker, BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,
 };
 
 #[cfg(not(feature = "arbos"))]
@@ -22,7 +23,7 @@ use bobcat_sdk::{
 pub unsafe fn recurse_aggregate_src(
     imm: &Imm,
     src: &OnrampingSource,
-    signable: &SignableBundleTakerArgs,
+    aggregated_res: Option<&SignableAggregateArgs>,
 ) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
     match src {
         OnrampingSource::OnchainPot(OnchainPotArgs {
@@ -32,42 +33,52 @@ pub unsafe fn recurse_aggregate_src(
         }) => {
             let asset_u: U = asset.addr().into();
             let amt_u = U::from(*amt);
-            storage::onramped_bal::checked_sub_res(
+            let user_bal = storage::onramped_bal::checked_sub_res(
                 &asset_u,
                 &acc_addr.into(),
                 &amt_u,
-                "onchain pot for taker",
+                "onchain pot source",
             )?;
+            event_emit_bal_update(
+                *acc_addr,
+                asset.addr(),
+                user_bal,
+                storage::global_bal::get(&asset_u),
+            );
             Ok((*amt, *acc_addr, asset.addr()))
         }
-        OnrampingSource::AggregatedResult(r) => {
-            match &**r {
+        OnrampingSource::AggregatedResult(AggregatedResultArgs { from, amt_to_take }) => {
+            let (available, acc, asset, source_hash) = match from.as_ref() {
                 AggregateEnum::Args(agg) => unsafe {
-                    if let Some(ref res) = signable.aggregated_res {
-                        let result = recurse_aggregate_args(imm, &agg.args, res, &agg.server_sig)?;
-                        let inner_hash: U = res.hash.clone().into();
-                        let inner_asset = storage::hash_asset::get(&inner_hash);
-                        storage::hash_taker_leftover::set(&inner_hash, &inner_asset, &U::ZERO);
-                        Ok(result)
-                    } else {
-                        Err(Dis::InconsistentSignable.into())
-                    }
+                    let res = aggregated_res.ok_or(Dis::InconsistentSignable)?;
+                    let (available, acc, asset) =
+                        recurse_aggregate_args(imm, &agg.args, res, &agg.server_sig)?;
+                    (available, acc, asset, res.hash.clone().into())
                 },
-                // Since we use storage to get what is available to be spent,
-                // consume the withdrawable amount from the posted result.
                 AggregateEnum::Hash(h) => {
                     let asset = storage::hash_asset::get(h);
-                    let taker_leftover = storage::hash_taker_leftover::get(h, &asset);
-                    storage::hash_taker_leftover::set(h, &asset, &U::ZERO);
-                    Ok((
-                        taker_leftover.into(),
+                    (
+                        storage::hash_taker_leftover::get(h, &asset).into(),
                         storage::hash_taker_addr::get(h).into(),
                         asset.into(),
-                    ))
+                        *h,
+                    )
                 }
-            }
+            };
+            let amount_to_onramp = available
+                .checked_sub(*amt_to_take)
+                .ok_or(Dis::CheckedSubUnderflow)?;
+            let asset_u = U::from(asset);
+            storage::hash_taker_leftover::set(&source_hash, &asset_u, &U::ZERO);
+            let user_bal = storage::onramped_bal::checked_add_res(
+                &asset_u,
+                &acc.into(),
+                &amount_to_onramp.into(),
+                "aggregated result remainder to onramped bal",
+            )?;
+            event_emit_bal_update(acc, asset, user_bal, storage::global_bal::get(&asset_u));
+            Ok((*amt_to_take, acc, asset))
         }
-        OnrampingSource::OnchainPotAggregatedResult(_, _) => todo!(),
     }
 }
 
@@ -88,7 +99,7 @@ pub unsafe fn recurse_aggregate_args(
             BundleMaker {
                 args:
                     BundleMakerArgs {
-                        amt: maker_amt,
+                        src: ref maker_src,
                         taker:
                             BundleTaker {
                                 args:
@@ -141,8 +152,22 @@ pub unsafe fn recurse_aggregate_args(
             }),
         });
     }
-    let (taker_amt, taker_acc, asset) =
-        unsafe { recurse_aggregate_src(imm, src, &signable.maker.taker_args)? };
+    let (taker_amt, taker_acc, asset) = unsafe {
+        recurse_aggregate_src(
+            imm,
+            src,
+            signable.maker.taker_args.src.aggregated_res.as_deref(),
+        )?
+    };
+    let (maker_amt, maker_src_acc, maker_asset) = unsafe {
+        recurse_aggregate_src(imm, maker_src, signable.maker.src.aggregated_res.as_deref())?
+    };
+    if maker_src_acc != maker_acc {
+        return Err(Dis::InconsistentAccount.into());
+    }
+    if maker_asset != asset {
+        return Err(Dis::InconsistentAsset.into());
+    }
     let taker_acc_u: U = taker_acc.into();
     let maker_acc_u: U = maker_acc.into();
     storage::ms_ts::exchange_res(&taker_acc_u, &taker_ms_ts.into(), "taker ms ts")?;
@@ -165,16 +190,8 @@ pub unsafe fn recurse_aggregate_args(
         (true, true) | (false, false) => true,
         _ => false,
     };
-    // We also need to make sure the maker actually has the funds for this trade:
     let asset_u = U::from(asset);
-    let maker_amt_u = U::from(maker_amt);
     let maker_acc_u = U::from(maker_acc);
-    storage::onramped_bal::checked_sub_res(
-        &asset_u,
-        &maker_acc_u,
-        &maker_amt_u,
-        "maker take onramped bal",
-    )?;
     storage::hash_taker_addr::set(&signable_hash_u, &taker_acc_u);
     storage::hash_maker_addr::set(&signable_hash_u, &maker_acc_u);
     let taker_leftover = if did_taker_win {
@@ -263,8 +280,27 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
     let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
+    let hash = match &args {
+        AggregateEnum::Args(agg) => SignableAggregateArgs::from(&agg.args).hash.into(),
+        AggregateEnum::Hash(hash) => *hash,
+    };
+    let acc_addr: [u8; 20] = if is_taker {
+        storage::hash_taker_addr::get(&hash).into()
+    } else {
+        storage::hash_maker_addr::get(&hash).into()
+    };
+    let asset_u = U::from(asset);
+    let leftover_u = U::from(leftover);
+    let global_bal =
+        storage::global_bal::checked_sub_res(&asset_u, &leftover_u, "aggregate offramp").unwrap();
+    event_emit_bal_update(
+        acc_addr,
+        asset,
+        storage::onramped_bal::get(&asset_u, &acc_addr.into()),
+        global_bal,
+    );
     assert!(
-        call_eip20::transfer(asset, sender, &leftover.into()),
+        call_eip20::transfer(asset, sender, &leftover_u),
         "eip20 transfer err"
     );
     0

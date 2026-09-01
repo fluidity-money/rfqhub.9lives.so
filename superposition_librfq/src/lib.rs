@@ -95,13 +95,22 @@ pub struct OnchainPotArgs {
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
+pub struct AggregatedResultArgs {
+    pub from: Box<AggregateEnum>,
+    /// Amount to take from the aggregated result from before. The rest
+    /// should be committed to the Onboarding pot. The same user
+    /// experience as before is that this can only be consumed once.
+    pub amt_to_take: u64,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub enum OnrampingSource {
     /// Take the liquidity from the pot that the user already sent to the contract.
     OnchainPot(OnchainPotArgs),
     /// Take the liquidity from the result that we have here.
-    AggregatedResult(Box<AggregateEnum>),
-    /// Combination of the aggregated result from before and an onramping amount. TODO.
-    OnchainPotAggregatedResult(OnchainPotArgs, Box<AggregateEnum>),
+    AggregatedResult(AggregatedResultArgs),
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
@@ -136,7 +145,7 @@ pub struct BundleTaker {
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub struct BundleMakerArgs {
     /// The compensation for if the taker is correct:
-    pub amt: u64,
+    pub src: OnrampingSource,
     /// The taker this is a part of:
     pub taker: BundleTaker,
     /// The nonce that we use here.

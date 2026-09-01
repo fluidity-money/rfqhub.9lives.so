@@ -131,6 +131,14 @@ class BundleMaker:
 	"""
 	end_source_amt = 0
 
+	"""
+	The amount elected to be returned to the pot after the user constructed
+	AggregatedResultArgs with the amount being less than the end_source_amt.
+	These are not considered to be in the pot, with the system preferring to rely
+	on the event that's emitted instead, so this is purely informational.
+	"""
+	amt_to_onramping_amt = 0
+
 	def __init__(
 		self,
 		acc_addr,
@@ -175,7 +183,9 @@ class Database:
 		self,
 		bundle_taker_id,
 		bundle_maker_id,
-		end_price_amt):
+		end_price_amt,
+		taker_to_leave_leftover,
+		maker_to_leave_leftover):
 		bundle_taker = self.bundle_takers[bundle_taker_id]
 		bundle_maker = self.bundle_makers[bundle_maker_id]
 		bundle_maker.end_price_amt = end_price_amt
@@ -188,7 +198,10 @@ class Database:
 			or nothing if you reinvest your winnings. A future system might
 			let someone fork out what they have partially.
 			"""
-			bundle_taker.end_source_amt = bundle_taker.amt + bundle_maker.amt
+			bundle_taker.end_source_amt = bundle_taker.amt + bundle_maker.amt - amt_to_onramping_amt
+			# This has poor state hygiene of course:
+			if bundle_taker.end_source_amt < 0:
+				raise BadEndSourceAmount
 			bundle_maker.end_source_amt = 0
 		else:
 			bundle_taker.end_source_amt = 0

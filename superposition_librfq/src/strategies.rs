@@ -81,7 +81,11 @@ impl InvertedAggregate {
                 args: AggregateArgs {
                     maker: BundleMaker {
                         args: BundleMakerArgs {
-                            amt: submission.maker_amt,
+                            src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                                acc_addr: submission.maker_acc,
+                                amt: submission.maker_amt,
+                                asset: self.initial_taker.asset,
+                            }),
                             taker: BundleTaker {
                                 args: BundleTakerArgs {
                                     src: source,
@@ -106,7 +110,10 @@ impl InvertedAggregate {
                 },
                 server_sig: submission.server_sig,
             }));
-            source = OnrampingSource::AggregatedResult(Box::new(next.clone()));
+            source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                from: Box::new(next.clone()),
+                amt_to_take: submission.price_move.expected_return,
+            });
             aggregate = Some(next);
         }
 
@@ -262,17 +269,13 @@ fn onramping_source_strategy() -> BoxedStrategy<OnrampingSource> {
         RECURSIVE_MAX_SIZE,
         RECURSIVE_ITEMS_PER_COLLECTION,
         |inner| {
-            prop_oneof![
-                aggregate_enum_strategy_with_source(inner.clone())
-                    .prop_map(|args| { OnrampingSource::AggregatedResult(Box::new(args)) }),
-                (
-                    any::<OnchainPotArgs>(),
-                    aggregate_enum_strategy_with_source(inner)
-                )
-                    .prop_map(|(pot, args)| {
-                        OnrampingSource::OnchainPotAggregatedResult(pot, Box::new(args))
-                    },),
-            ]
+            (aggregate_enum_strategy_with_source(inner), any::<u64>())
+                .prop_map(|(from, amt_to_take)| {
+                    OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                        from: Box::new(from),
+                        amt_to_take,
+                    })
+                })
         },
     )
     .boxed()
@@ -312,13 +315,13 @@ fn bundle_maker_args_strategy(
     src: BoxedStrategy<OnrampingSource>,
 ) -> BoxedStrategy<BundleMakerArgs> {
     (
-        any::<u64>(),
+        any::<OnchainPotArgs>().prop_map(OnrampingSource::OnchainPot),
         bundle_taker_strategy(src),
         any::<[u8; 6]>(),
         any::<[u8; 20]>(),
     )
-        .prop_map(|(amt, taker, ms_ts, acc)| BundleMakerArgs {
-            amt,
+        .prop_map(|(src, taker, ms_ts, acc)| BundleMakerArgs {
+            src,
             taker,
             ms_ts,
             acc,

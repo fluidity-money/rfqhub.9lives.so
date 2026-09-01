@@ -14,8 +14,8 @@
 use borsh::BorshSerialize;
 
 use crate::{
-    AggregateArgs, AggregateEnum, BundleMaker, BundleMakerArgs, BundleTaker, BundleTakerArgs,
-    OfframpArgs, OnrampingSource, Outcome,
+    AggregateArgs, AggregateEnum, AggregatedResultArgs, BundleMaker, BundleMakerArgs, BundleTaker,
+    BundleTakerArgs, OfframpArgs, OnrampingSource, Outcome,
 };
 
 use array_concat::concat_arrays;
@@ -57,8 +57,14 @@ pub enum PreDiscriminant {
 }
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
-pub struct SignableBundleTakerArgs {
+pub struct SignableOnrampingSource {
     pub aggregated_res: Option<Box<SignableAggregateArgs>>,
+    pub hash: Hash,
+}
+
+#[derive(BorshSerialize, Clone, PartialEq, Debug)]
+pub struct SignableBundleTakerArgs {
+    pub src: SignableOnrampingSource,
     pub hash: Hash,
 }
 
@@ -75,11 +81,11 @@ pub struct InnerBundleTakerArgs {
 pub struct InnerBundleMaker {
     pub ms_ts: [u8; 6],
     pub acc: [u8; 20],
-    pub amt: u64,
 }
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct SignableBundleMakerArgs {
+    pub src: SignableOnrampingSource,
     pub taker_args: SignableBundleTakerArgs,
     pub hash: Hash,
 }
@@ -122,27 +128,29 @@ impl From<&AggregateArgs> for SignableAggregateArgs {
 impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
     fn from(
         BundleMakerArgs {
+            src,
             taker: BundleTaker { args, .. },
             ms_ts,
             acc,
-            amt,
         }: &BundleMakerArgs,
     ) -> Self {
         let taker_pre = SignableBundleTakerArgs::from(args);
+        let src = SignableOnrampingSource::from(src);
         let content = sha512(
             &borsh::to_vec(&InnerBundleMaker {
                 ms_ts: *ms_ts,
                 acc: *acc,
-                amt: *amt,
             })
             .unwrap(),
         );
-        let pre: [u8; 1 + 64 + 32] = concat_arrays!(
+        let pre: [u8; 1 + 64 + 32 + 32] = concat_arrays!(
             [PreDiscriminant::BundleMakerArgs as u8],
             content,
+            src.hash.clone().into(),
             taker_pre.hash.clone().into()
         );
         Self {
+            src,
             taker_args: taker_pre,
             hash: Hash::JustInTime(sha512(&pre)),
         }
@@ -160,21 +168,7 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             outcome,
         }: &BundleTakerArgs,
     ) -> Self {
-        let (onramping_pre, onramping_hash) = match src {
-            OnrampingSource::OnchainPot(args) => (
-                None,
-                Hash::JustInTime(sha512(&borsh::to_vec(&args).unwrap())),
-            ),
-            OnrampingSource::AggregatedResult(args) => match *args.clone() {
-                AggregateEnum::Args(agg) => {
-                    let pre = SignableAggregateArgs::from(&agg.args);
-                    let hash = pre.hash.clone();
-                    (Some(Box::new(pre)), hash)
-                }
-                AggregateEnum::Hash(u) => (None, Hash::Onchain(u)),
-            },
-            OnrampingSource::OnchainPotAggregatedResult(_, _) => todo!(),
-        };
+        let src = SignableOnrampingSource::from(src);
         let content = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
                 expiry: *expiry,
@@ -188,11 +182,38 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
         let pre: [u8; 1 + 64 + 32] = concat_arrays!(
             [PreDiscriminant::BundleTakerArgs as u8],
             content,
-            onramping_hash.into()
+            src.hash.clone().into()
         );
         Self {
-            aggregated_res: onramping_pre,
+            src,
             hash: Hash::JustInTime(sha512(&pre)),
+        }
+    }
+}
+
+impl From<&OnrampingSource> for SignableOnrampingSource {
+    fn from(src: &OnrampingSource) -> Self {
+        match src {
+            OnrampingSource::OnchainPot(args) => Self {
+                aggregated_res: None,
+                hash: Hash::JustInTime(sha512(&borsh::to_vec(args).unwrap())),
+            },
+            OnrampingSource::AggregatedResult(AggregatedResultArgs { from, amt_to_take }) => {
+                let (aggregated_res, aggregate_hash) = match from.as_ref() {
+                    AggregateEnum::Args(agg) => {
+                        let pre = SignableAggregateArgs::from(&agg.args);
+                        let hash = pre.hash.clone();
+                        (Some(Box::new(pre)), hash)
+                    }
+                    AggregateEnum::Hash(u) => (None, Hash::Onchain(*u)),
+                };
+                let pre: [u8; 32 + 8] =
+                    concat_arrays!(aggregate_hash.into(), amt_to_take.to_le_bytes());
+                Self {
+                    aggregated_res,
+                    hash: Hash::JustInTime(sha512(&pre)),
+                }
+            }
         }
     }
 }

@@ -37,12 +37,6 @@ type OnrampingSource struct {
 	Enum                       borsh.Enum `borsh_enum:"true"`
 	OnchainPot                 OnchainPotArgs
 	AggregatedResult           *AggregateEnum
-	OnchainPotAggregatedResult OnchainPotAggregatedResultArgs
-}
-
-type OnchainPotAggregatedResultArgs struct {
-	OnchainPot OnchainPotArgs
-	Aggregate  *AggregateEnum
 }
 
 type BundleTakerArgs struct {
