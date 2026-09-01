@@ -34,13 +34,21 @@ mod test {
 
     fn assert_expected_returns(trace: &InvertedAggregate) {
         let mut available = trace.initial_taker.amt;
-        for submission in trace.submissions() {
+        for (index, submission) in trace.submissions().enumerate() {
+            if index == 0 {
+                assert_eq!(submission.taker_amt, trace.initial_taker.amt);
+            } else {
+                assert!(submission.taker_amt <= available);
+            }
             let did_taker_win = match submission.price_move.direction {
                 PriceDirection::Up => submission.timestamplet_val > submission.price_target,
                 PriceDirection::Down => submission.timestamplet_val <= submission.price_target,
             };
             available = if did_taker_win {
-                available.checked_add(submission.maker_amt).unwrap()
+                submission
+                    .taker_amt
+                    .checked_add(submission.maker_amt)
+                    .unwrap()
             } else {
                 0
             };
@@ -84,7 +92,10 @@ mod test {
             );
 
             converted = match actual.taker.args.src {
-                OnrampingSource::AggregatedResult(previous) => *previous.from,
+                OnrampingSource::AggregatedResult(previous) => {
+                    assert_eq!(previous.amt_to_take, expected.taker_amt);
+                    *previous.from
+                }
                 OnrampingSource::OnchainPot(pot) => {
                     assert_eq!(pot, trace.initial_taker);
                     return;

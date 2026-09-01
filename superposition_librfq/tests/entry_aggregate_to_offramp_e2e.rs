@@ -185,7 +185,7 @@ mod test {
                     *balance = balance.checked_add(submission.maker_amt).unwrap();
                 }
                 let total_deposited = deposits.values().copied().sum::<u64>();
-                for (account, amount) in deposits {
+                for (&account, &amount) in &deposits {
                     onramp(asset, account, amount);
                 }
                 assert_eq!(
@@ -196,6 +196,8 @@ mod test {
                 let mut source = OnrampingSource::OnchainPot(inverted.initial_taker.clone());
                 let mut latest_hash = None;
                 let mut final_result = None;
+                let mut expected_onramped = deposits;
+                let mut next_unsettled = 0;
 
                 for (index, submission) in submissions.iter().enumerate() {
                     let aggregate = aggregate_from_submission(submission, source, asset);
@@ -238,17 +240,52 @@ mod test {
                             U::from(submission.price_move.expected_return)
                         );
 
+                        // Apply every newly settled node to the off-chain ledger model.
+                        // A recursive source consumes only `taker_amt`; the balance of
+                        // the prior result is returned to the original taker's onramp.
+                        for settled_index in next_unsettled..=index {
+                            let settled = &submissions[settled_index];
+                            *expected_onramped.get_mut(&settled.maker_acc).unwrap() -=
+                                settled.maker_amt;
+                            if settled_index == 0 {
+                                *expected_onramped
+                                    .get_mut(&inverted.initial_taker.acc_addr)
+                                    .unwrap() -= inverted.initial_taker.amt;
+                            } else {
+                                let prior_return = submissions[settled_index - 1]
+                                    .price_move
+                                    .expected_return;
+                                *expected_onramped
+                                    .get_mut(&inverted.initial_taker.acc_addr)
+                                    .unwrap() += prior_return - settled.taker_amt;
+                            }
+                        }
+                        next_unsettled = index + 1;
+                        for (&account, &expected) in &expected_onramped {
+                            assert_eq!(
+                                storage::onramped_bal::get(&asset.u(), &U::from(account)),
+                                U::from(expected),
+                                "onramped balance differs for account {account:?}",
+                            );
+                        }
+
                         latest_hash = Some(posted_hash);
                         final_result = Some(result);
+                        let amt_to_take = submissions
+                            .get(index + 1)
+                            .map_or(submission.price_move.expected_return, |next| next.taker_amt);
                         source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
                             from: Box::new(AggregateEnum::Hash(posted_hash)),
-                            amt_to_take: submission.price_move.expected_return,
+                            amt_to_take,
                         });
                     } else {
                         // Keep this node inline in the next posted chunk.
+                        let amt_to_take = submissions
+                            .get(index + 1)
+                            .map_or(submission.price_move.expected_return, |next| next.taker_amt);
                         source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
                             from: Box::new(AggregateEnum::Args(Box::new(aggregate))),
-                            amt_to_take: submission.price_move.expected_return,
+                            amt_to_take,
                         });
                     }
                 }

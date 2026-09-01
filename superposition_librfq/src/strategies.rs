@@ -45,6 +45,8 @@ pub struct InvertedSubmission {
     pub price_move: ExpectedPriceMove,
     pub price_target: u64,
     pub outcome: Outcome,
+    /// Amount taken from the prior result for this submission's taker stake.
+    pub taker_amt: u64,
     pub maker_amt: u64,
     pub maker_acc: [u8; 20],
     pub taker_sig: Sig,
@@ -73,10 +75,16 @@ impl InvertedAggregate {
 
     /// Convert the chronological model back into the recursive contract ABI.
     pub fn to_aggregate_enum(&self) -> AggregateEnum {
-        let mut source = OnrampingSource::OnchainPot(self.initial_taker.clone());
         let mut aggregate = None;
 
         for submission in self.submissions() {
+            let source = match aggregate.take() {
+                Some(previous) => OnrampingSource::AggregatedResult(AggregatedResultArgs {
+                    from: Box::new(previous),
+                    amt_to_take: submission.taker_amt,
+                }),
+                None => OnrampingSource::OnchainPot(self.initial_taker.clone()),
+            };
             let next = AggregateEnum::Args(Box::new(Aggregate {
                 args: AggregateArgs {
                     maker: BundleMaker {
@@ -110,10 +118,6 @@ impl InvertedAggregate {
                 },
                 server_sig: submission.server_sig,
             }));
-            source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
-                from: Box::new(next.clone()),
-                amt_to_take: submission.price_move.expected_return,
-            });
             aggregate = Some(next);
         }
 
@@ -127,6 +131,7 @@ struct InvertedSubmissionSeed {
     direction: PriceDirection,
     price_target: u64,
     outcome: Outcome,
+    taker_amt_selector: u64,
     maker_amt: u64,
     maker_acc: [u8; 20],
     taker_sig: Sig,
@@ -145,6 +150,7 @@ fn inverted_submission_seed() -> impl Strategy<Value = InvertedSubmissionSeed> {
         any::<bool>(),
         any::<u64>(),
         any::<Outcome>(),
+        any::<u64>(),
         1..=INVERTED_MAX_AMOUNT,
         any::<[u8; 20]>(),
         sig(),
@@ -157,6 +163,7 @@ fn inverted_submission_seed() -> impl Strategy<Value = InvertedSubmissionSeed> {
                 is_up,
                 price_target,
                 outcome,
+                taker_amt_selector,
                 maker_amt,
                 maker_acc,
                 taker_sig,
@@ -171,6 +178,7 @@ fn inverted_submission_seed() -> impl Strategy<Value = InvertedSubmissionSeed> {
                 },
                 price_target,
                 outcome,
+                taker_amt_selector,
                 maker_amt,
                 maker_acc,
                 taker_sig,
@@ -205,12 +213,17 @@ pub fn inverted_aggregate() -> BoxedStrategy<InvertedAggregate> {
 
             for (index, seed) in seeds.into_iter().enumerate() {
                 let start = base_time + index as u64 * 5;
+                let taker_amt = if index == 0 {
+                    initial_taker.amt
+                } else {
+                    seed.taker_amt_selector % (expected_return + 1)
+                };
                 let did_taker_win = match seed.direction {
                     PriceDirection::Up => seed.timestamplet_val > seed.price_target,
                     PriceDirection::Down => seed.timestamplet_val <= seed.price_target,
                 };
                 expected_return = if did_taker_win {
-                    expected_return
+                    taker_amt
                         .checked_add(seed.maker_amt)
                         .expect("generated amounts are bounded")
                 } else {
@@ -227,6 +240,7 @@ pub fn inverted_aggregate() -> BoxedStrategy<InvertedAggregate> {
                     },
                     price_target: seed.price_target,
                     outcome: seed.outcome,
+                    taker_amt,
                     maker_amt: seed.maker_amt,
                     maker_acc: seed.maker_acc,
                     taker_sig: seed.taker_sig,
