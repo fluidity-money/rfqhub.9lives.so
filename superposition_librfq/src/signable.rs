@@ -70,7 +70,7 @@ pub struct SignableBundleTakerArgs {
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct InnerBundleTakerArgs {
-    pub expiry: [u8; 6],
+    pub expiry: u32,
     pub ms_ts: [u8; 6],
     pub is_up: bool,
     pub price_target: u64,

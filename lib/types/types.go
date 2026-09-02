@@ -41,7 +41,7 @@ type OnrampingSource struct {
 
 type BundleTakerArgs struct {
 	Src         OnrampingSource
-	Expiry      [6]byte
+	Expiry      uint32
 	MsTs        [6]byte
 	IsUp        bool
 	PriceTarget uint64
@@ -73,7 +73,7 @@ type OfframpArgs struct {
 }
 
 type Timestamplet struct {
-	TimestampletTime    [6]byte
+	TimestampletTime    uint32
 	TimestampletOutcome Outcome
 	TimestampletVal     uint64
 }

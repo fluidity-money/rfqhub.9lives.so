@@ -6,6 +6,27 @@ import {Test} from "../forge-lib/forge-std/src/Test.sol";
 import "./RfqhubTypes.sol";
 
 contract RfqhubTypesTest is Test {
+    function test_u32TimestampsSerializeAsJsonNumbers() public pure {
+        BundleTakerArgs memory taker;
+        taker.src.kind = OnrampingSourceKind.OnchainPot;
+        taker.expiry = 4_294_967_295;
+        taker.outcome = Outcome.BitcoinPrice;
+
+        assertEq(
+            RfqhubTypes._bundleTakerArgs(taker),
+            "{\"src\":{\"OnchainPot\":{\"acc_addr\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"amt\":0,\"asset\":\"USDC\"}},\"expiry\":4294967295,\"ms_ts\":[0,0,0,0,0,0],\"is_up\":false,\"price_target\":0,\"outcome\":\"BitcoinPrice\"}"
+        );
+
+        Timestamplet memory timestamplet;
+        timestamplet.timestampletTime = 1;
+        timestamplet.timestampletOutcome = Outcome.BitcoinPrice;
+
+        assertEq(
+            RfqhubTypes._timestamplet(timestamplet),
+            "{\"timestamplet_time\":1,\"timestamplet_outcome\":\"BitcoinPrice\",\"timestamplet_val\":0}"
+        );
+    }
+
     function test_offrampJsonIncludesAssetTimestampAndAccountAddress() public pure {
         Args memory args;
         args.kind = ArgsKind.Offramp;

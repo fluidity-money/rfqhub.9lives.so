@@ -9,8 +9,8 @@ import (
 	"strconv"
 )
 
-type AuctionResult struct {
-	// Leftover amount that can be spent by this user.
+type AuctionCreatedResult struct {
+	// Leftover amount that can still be spent by this user.
 	LeftoverBal string `json:"leftoverBal"`
 	// The amount that was spent in the creation of this auction.
 	AmountSpent string `json:"amountSpent"`

@@ -20,7 +20,10 @@ import (
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
+	"github.com/fluidity-money/superposition-assets"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
@@ -115,6 +118,9 @@ VALUES ($1, $2)`,
 // OnrampAmount is the resolver for the onrampAmount field.
 func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return "", fmt.Errorf("not authed in the handler")
+	}
 	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
 	if !ok {
 		return "", fmt.Errorf("bad eoa address")
@@ -180,9 +186,127 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 	return h.Hex(), nil
 }
 
-// CreateAuctionFromOnrampedAmount is the resolver for the createAuctionFromOnrampedAmount field.
-func (r *mutationResolver) CreateAuctionFromOnrampedAmount(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error) {
-	panic(fmt.Errorf("not implemented: CreateAuctionFromOnrampedAmount - createAuctionFromOnrampedAmount"))
+// CreateAuctionFromOnrampedAmountServerSig is the resolver for the createAuctionFromOnrampedAmountServerSig field.
+func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) (*model.AuctionCreatedResult, error) {
+	snowflake, _ := ctx.Value("snowflake").(int)
+	// Create an auction from a BundleTaker by taking what we can
+	// from the database, then constructing the blob signature
+	// ourselves and putting it into the database.
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return nil, fmt.Errorf("not authed in the handler")
+	}
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return nil, fmt.Errorf("bad eoa address")
+	}
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	accAddrStr := strings.ToLower(accAddr.String())
+	minAmount_, err := strconv.ParseUint(minAmount, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("min amount: %v", err)
+	}
+	maxAmount_, err := strconv.ParseUint(maxAmount, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("max amount: %v", err)
+	}
+	priceTarget_, err := strconv.ParseUint(priceTarget, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("price target: %v", err)
+	}
+	if expiry < 0 {
+		return nil, fmt.Errorf("expiry negative")
+	}
+	msTs := pickMsTs()
+	msTsI := msTsBytesToInt(msTs)
+	outcome_ := modelOutcomeToOutcome(outcome)
+	row := r.Db.QueryRow(`
+SELECT rfqhub_create_bundle_taker_onramping_1(
+	$1,
+	$2,
+	$3,
+	$4,
+	$5,
+	$6,
+	$7,
+	$8,
+	$9
+)`,
+		accAddrStr,
+		superposition_assets.AssetUsdc.Address(),
+		minAmount_,
+		maxAmount_,
+		isUp,
+		priceTarget_,
+		outcome_,
+		msTsI,
+		expiry,
+	)
+	var (
+		bundleTakerId int
+		amt           uint64
+	)
+	if err := row.Scan(&bundleTakerId, &amt); err != nil {
+		slog.Error("Error creating a BundleTaker in the database",
+			"err", err,
+			"acc addr", accAddrStr,
+			"min amount", minAmount_,
+			"max amount", maxAmount_,
+			"price target", priceTarget_,
+			"expiry", expiry,
+			"msTs", msTsI,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("error creating BundleTaker")
+	}
+	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs {
+		Enum: types.ClientSigningArgsBundleTaker,
+		BundleTaker: types.BundleTakerArgs{
+			Src: types.OnrampingSource{
+				Enum: types.OnrampingSourceOnchainPot,
+				OnchainPot: types.OnchainPotArgs{
+					AccAddr: accAddr,
+					Amt:     amt,
+				},
+			},
+			Expiry: uint32(expiry),
+			IsUp: isUp,
+			PriceTarget: priceTarget_,
+			Outcome: outcome_,
+		},
+	})
+	if err != nil {
+		slog.Error("Error signing a BundleTaker",
+			"err", err,
+			"acc addr", accAddrStr,
+			"min amount", minAmount_,
+			"max amount", maxAmount_,
+			"price target", priceTarget_,
+			"expiry", expiry,
+			"msTs", msTsI,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("failed to sign bundle")
+	}
+	userSigX := hex.EncodeToString(userSig[:])
+	_, err = r.Db.Exec(
+		"SELECT rfqhub_set_bundle_taker_user_sig_1($1, $2)",
+		bundleTakerId,
+		userSigX,
+	)
+	if err != nil {
+		slog.Error("Error tagging a BundleTaker",
+			"err", err,
+			"acc addr", accAddrStr,
+			"min amount", minAmount_,
+			"max amount", maxAmount_,
+			"price target", priceTarget_,
+			"expiry", expiry,
+			"msTs", msTsI,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("failed to tag the bundle with the signature")
+	}
+	return nil, nil
 }
 
 // Balance is the resolver for the balance field.

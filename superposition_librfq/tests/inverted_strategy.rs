@@ -2,8 +2,8 @@
 mod test {
     use proptest::prelude::*;
     use superposition_librfq::{
+        strategies::{inverted_aggregate, InvertedAggregate, PriceDirection},
         AggregateEnum, OnrampingSource,
-        strategies::{InvertedAggregate, PriceDirection, inverted_aggregate},
     };
 
     fn as_u64(value: [u8; 6]) -> u64 {
@@ -20,7 +20,7 @@ mod test {
             let taker_ms_ts = as_u64(submission.taker_ms_ts);
             let maker_ms_ts = as_u64(submission.maker_ms_ts);
             let submitted_at = as_u64(submission.submitted_at);
-            let expiry = as_u64(submission.expiry);
+            let expiry = u64::from(submission.expiry);
 
             assert!(taker_ms_ts < maker_ms_ts);
             assert!(maker_ms_ts <= submitted_at);

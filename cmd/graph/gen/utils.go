@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"log/slog"
 	"math/big"
+	"encoding/binary"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
+	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 )
 
 const ProgDalek = "/usr/local/bin/ed25519-dalek-ph"
@@ -71,4 +75,19 @@ func pickMsTs() (b [6]byte) {
 	u := new(big.Int).SetInt64(time.Now().Unix())
 	copy(b[:], u.Bytes())
 	return
+}
+
+func msTsBytesToInt(b [6]byte) uint64 {
+	var x [8]byte
+	copy(x[2:], b[:])
+	v, _ := binary.Uvarint(x[:])
+	return v
+}
+
+func modelOutcomeToOutcome(x model.Outcome) types.Outcome {
+	switch x {
+	case "BitcoinPrice":
+		return types.OutcomeBitcoinPrice
+	}
+	panic("bad outcome")
 }

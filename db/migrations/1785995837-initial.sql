@@ -64,7 +64,7 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	maker_id INTEGER,
 	ms_ts BIGINT NOT NULL,
 	expiry TIMESTAMP NOT NULL,
-	user_sig BYTES64 NOT NULL UNIQUE,
+	user_sig BYTES64 UNIQUE,
 	was_offramped BOOLEAN NOT NULL DEFAULT FALSE,
 	end_source_amt BIGINT CHECK (end_source_amt >= 0),
 	UNIQUE (acc_addr, user_id)
@@ -251,8 +251,7 @@ CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
 	p_price_target BIGINT,
 	p_outcome RFQHUB_OUTCOME,
 	p_ms_ts BIGINT,
-	p_expiry TIMESTAMP,
-	p_user_sig BYTES64
+	p_expiry INTEGER
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
@@ -293,15 +292,51 @@ BEGIN
 
 	INSERT INTO rfqhub_bundles_taker_1 (
 		acc_addr, user_id, source, asset, amt, is_up, price_target,
-		outcome, ms_ts, expiry, user_sig
+		outcome, ms_ts, expiry
 	)
 	VALUES (
 		p_acc_addr, v_user_id, NULL, p_asset, v_amt, p_is_up,
-		p_price_target, p_outcome, p_ms_ts, p_expiry, p_user_sig
+		p_price_target, p_outcome, p_ms_ts,
+		TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC'
 	)
 	RETURNING id INTO v_bundle_taker_id;
 
 	RETURN QUERY SELECT v_bundle_taker_id, v_amt;
+END;
+$$;
+
+-- Onramped taker bundles are created before the final amount is known, so the
+-- user signature is attached after creation once that amount has been signed.
+-- Replaying the same signature is harmless; replacing it is not allowed.
+CREATE FUNCTION rfqhub_set_bundle_taker_user_sig_1 (
+	p_bundle_taker_id INTEGER,
+	p_user_sig BYTES64
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	v_user_sig BYTES64;
+BEGIN
+	IF p_user_sig IS NULL THEN
+		RAISE EXCEPTION 'taker user signature cannot be null';
+	END IF;
+
+	SELECT t.user_sig INTO STRICT v_user_sig
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = p_bundle_taker_id
+	FOR UPDATE;
+
+	IF v_user_sig IS NOT NULL AND v_user_sig <> p_user_sig THEN
+		RAISE EXCEPTION 'taker % user signature is already set', p_bundle_taker_id;
+	END IF;
+
+	IF v_user_sig IS NULL THEN
+		UPDATE rfqhub_bundles_taker_1
+		SET user_sig = p_user_sig,
+			updated_by = CURRENT_TIMESTAMP
+		WHERE id = p_bundle_taker_id;
+	END IF;
 END;
 $$;
 
@@ -312,7 +347,7 @@ CREATE FUNCTION rfqhub_create_bundle_taker_from_aggregate_1 (
 	p_price_target BIGINT,
 	p_outcome RFQHUB_OUTCOME,
 	p_ms_ts BIGINT,
-	p_expiry TIMESTAMP,
+	p_expiry INTEGER,
 	p_user_sig BYTES64
 )
 RETURNS TABLE (
@@ -370,7 +405,7 @@ BEGIN
 	VALUES (
 		v_source.acc_addr, v_user_id, p_source_taker_id, v_source.asset,
 		p_amt_to_take, p_is_up, p_price_target, p_outcome, p_ms_ts,
-		p_expiry, p_user_sig
+		TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC', p_user_sig
 	)
 	RETURNING id INTO v_bundle_taker_id;
 

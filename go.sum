@@ -78,6 +78,8 @@ github.com/fluidity-money/9lives.so v0.0.0-20260819021726-b5f7948fa300 h1:M1umRT
 github.com/fluidity-money/9lives.so v0.0.0-20260819021726-b5f7948fa300/go.mod h1:qFqJI7WPo/CZX+RJ6u+YcdBY8x3O3PMTpiPF+MzzQDE=
 github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685 h1:94JbnoMVUH2EGY5E1Z9SCLVSj4/jr6AEJOepzK6YHY4=
 github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685/go.mod h1:eN09XYW+IS7AaMwDq9PXnZIsXb0oA0VRfM0grQnfxco=
+github.com/fluidity-money/superposition-assets v0.0.0-20260902132450-936e984ea17c h1:9ub1rw3R+BFO6PvsTkmng3840CoIMhBp+SlbMVkPGQI=
+github.com/fluidity-money/superposition-assets v0.0.0-20260902132450-936e984ea17c/go.mod h1:ej95AmAf8Q5FHYIfLMq+cyqS4aXIiVowwR0zQZTDeuI=
 github.com/getsentry/sentry-go v0.28.1 h1:zzaSm/vHmGllRM6Tpx1492r0YDzauArdBfkJRtY6P5k=
 github.com/getsentry/sentry-go v0.28.1/go.mod h1:1fQZ+7l7eeJ3wYi82q5Hg8GqAPgefRq+FP/QhafYVgg=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=

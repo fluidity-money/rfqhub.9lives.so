@@ -42,7 +42,7 @@ struct OnrampingSource {
 
 struct BundleTakerArgs {
     OnrampingSource src;
-    bytes6 expiry;
+    uint32 expiry;
     bytes6 msTs;
     bool isUp;
     uint64 priceTarget;
@@ -74,7 +74,7 @@ struct OfframpArgs {
 }
 
 struct Timestamplet {
-    bytes6 timestampletTime;
+    uint32 timestampletTime;
     Outcome timestampletOutcome;
     uint64 timestampletVal;
 }
@@ -155,6 +155,7 @@ struct Args {
 ///   - Newtype enum variants → `{"VariantName":<inner>}`
 ///   - Tuple enum variants  → `{"VariantName":[<items>]}`
 ///   - `[u8; N]` without `const_hex` → JSON array of ints: `[0,0,...]`
+///   - `u32` timestamps → decimal JSON numbers
 ///   - `Sig` ([u8; 64]) with `const_hex` → `"0x..."` hex string
 ///   - `U` ([u8; 32]) → JSON array of 32 ints
 ///   - `Asset`/`Outcome` → bare string variant name
@@ -328,7 +329,7 @@ library RfqhubTypes {
     function _bundleTakerArgs(BundleTakerArgs memory a) internal pure returns (string memory) {
         return string.concat(
             "{\"src\":", _onrampingSource(a.src),
-            ",\"expiry\":", _u8Arr6(a.expiry),
+            ",\"expiry\":", _u2s(uint256(a.expiry)),
             ",\"ms_ts\":", _u8Arr6(a.msTs),
             ",\"is_up\":", _b2s(a.isUp),
             ",\"price_target\":", _u2s(uint256(a.priceTarget)),
@@ -350,7 +351,7 @@ library RfqhubTypes {
 
     function _timestamplet(Timestamplet memory t) internal pure returns (string memory) {
         return string.concat(
-            "{\"timestamplet_time\":", _u8Arr6(t.timestampletTime),
+            "{\"timestamplet_time\":", _u2s(uint256(t.timestampletTime)),
             ",\"timestamplet_outcome\":\"", _outcomeStr(t.timestampletOutcome),
             "\",\"timestamplet_val\":", _u2s(uint256(t.timestampletVal)), "}"
         );

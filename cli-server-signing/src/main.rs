@@ -18,7 +18,7 @@ use ed25519_dalek::SigningKey;
 fn main() {
     let key = SigningKey::from_bytes(
         &const_hex::decode_to_array::<_, 32>(
-            var("SPN_SUPERPOSITION_KEY")
+            var("SPN_ACCOUNTS_PRIVATE_KEY")
                 .unwrap()
                 .trim_start_matches("0x"),
         )

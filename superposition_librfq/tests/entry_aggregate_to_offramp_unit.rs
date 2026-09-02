@@ -17,8 +17,8 @@ fn test_erik_alex_after_already_same_blob() {
     flush_guard_fresh(|| {
         // In this example, Erik is reinvesting his profits to play the
         // game with Alex again.
-        let expiry_1 = [0, 0, 0, 0, 0, 1];
-        let expiry_2 = [0, 0, 0, 0, 0, 2];
+        let expiry_1 = 1;
+        let expiry_2 = 2;
         let outcome = Outcome::BitcoinPrice;
         let alex_addr = [0u8; 20];
         let erik_addr = [1u8; 20];
@@ -57,7 +57,7 @@ fn test_erik_alex_after_already_same_blob() {
         let agg_1 = AggregateArgs {
             maker: alex_1,
             timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 1],
+                timestamplet_time: 1,
                 timestamplet_outcome: outcome,
                 timestamplet_val: 101,
             },
@@ -95,7 +95,7 @@ fn test_erik_alex_after_already_same_blob() {
         let agg_2 = AggregateArgs {
             maker: alex_2,
             timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 2],
+                timestamplet_time: 2,
                 timestamplet_outcome: outcome,
                 timestamplet_val: 40,
             },
@@ -113,8 +113,8 @@ fn test_inline_reinvest_consumes_inner_leftover() {
         let taker = [1u8; 20]; // erik
         let maker = [0u8; 20]; // alex
         let asset = Asset::USDC;
-        let expiry_1 = [0, 0, 0, 0, 0, 1];
-        let expiry_2 = [0, 0, 0, 0, 0, 2];
+        let expiry_1 = 1;
+        let expiry_2 = 2;
         let outcome = Outcome::BitcoinPrice;
 
         // The pool: taker deposits 500, maker stakes 200 (game 1) + 300 (game 2).
@@ -256,8 +256,8 @@ fn test_erik_alex_after_posted_blob() {
         // In this example, Erik is reinvesting profits from a result that was
         // already posted on-chain, so the second aggregate refers to the first
         // aggregate by hash instead of inlining the same blob again.
-        let expiry_1 = [0, 0, 0, 0, 0, 1];
-        let expiry_2 = [0, 0, 0, 0, 0, 2];
+        let expiry_1 = 1;
+        let expiry_2 = 2;
         let outcome = Outcome::BitcoinPrice;
         let alex_addr = [0u8; 20];
         let erik_addr = [1u8; 20];
@@ -295,7 +295,7 @@ fn test_erik_alex_after_posted_blob() {
         let agg_1 = AggregateArgs {
             maker: alex_1,
             timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 1],
+                timestamplet_time: 1,
                 timestamplet_outcome: outcome,
                 timestamplet_val: 101,
             },
@@ -334,7 +334,7 @@ fn test_erik_alex_after_posted_blob() {
         let agg_2 = AggregateArgs {
             maker: alex_2,
             timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 2],
+                timestamplet_time: 2,
                 timestamplet_outcome: outcome,
                 timestamplet_val: 40,
             },
@@ -382,7 +382,7 @@ fn test_maker_win_offramp_pays_principal() {
                     amt: taker_amt,
                     asset,
                 }),
-                expiry: [0, 0, 0, 0, 0, 9],
+                expiry: 9,
                 ms_ts: [0u8; 6],
                 is_up: true,
                 price_target: 100,
@@ -406,7 +406,7 @@ fn test_maker_win_offramp_pays_principal() {
         let agg = AggregateArgs {
             maker: alex_maker,
             timestamplet: Timestamplet {
-                timestamplet_time: [0, 0, 0, 0, 0, 9],
+                timestamplet_time: 9,
                 timestamplet_outcome: outcome,
                 // is_up && val > target → taker would win; 40 > 100 is false, so the
                 // taker LOSES and the maker wins.

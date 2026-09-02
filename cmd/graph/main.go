@@ -29,6 +29,15 @@ import (
 	ethCommon "github.com/ethereum/go-ethereum/common"
 )
 
+const (
+	// EnvTimescaleUri to use as the database for private key loading
+	// and authentication key loading.
+	EnvTimescaleUri = "SPN_TIMESCALE"
+
+	// EnvAccPrivateKey to execute transactions on the behalf of users with.
+	EnvAccPrivateKey = "SPN_ACCOUNTS_PRIVATE_KEY"
+)
+
 type authMiddleware struct {
 	db          *sql.DB
 	srv         http.Handler
@@ -112,7 +121,10 @@ WHERE eoa_addr = $1 AND secret = $2`,
 }
 
 func main() {
-	db, err := sql.Open("postgres", os.Getenv("SPN_TIMESCALE_URL"))
+	if _, err := hex.DecodeString(os.Getenv(EnvAccPrivateKey)); err != nil {
+		log.Fatalf("accounts private key needs to be set: %v", err)
+	}
+	db, err := sql.Open("postgres", os.Getenv(EnvTimescaleUri))
 	if err != nil {
 		panic(err)
 	}

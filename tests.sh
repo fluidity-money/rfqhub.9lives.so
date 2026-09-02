@@ -4,7 +4,7 @@ cargo test --features std,proptest,arbitrary
 
 export SPN_DEPLOY_TARGET=arbos
 
-make rfqhub-cli
+make rfqhub-cli-borsh
 
 make -B rfqhub.9lives.so.wasm
 

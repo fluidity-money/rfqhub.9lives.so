@@ -121,7 +121,7 @@ pub struct BundleTakerArgs {
     /// Onramping source that we're using for loading the user in.
     pub src: OnrampingSource,
     /// The timestamp for when this RFQ market has expired.
-    pub expiry: [u8; 6],
+    pub expiry: u32,
     /// The nonce that we use here. A millisecond timestamp.
     pub ms_ts: [u8; 6],
     /// Whether the taker wants the asset to go up or down.
@@ -184,7 +184,7 @@ pub struct OfframpArgs {
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub struct Timestamplet {
     /// The timestamp for the value of this asset at the time given.
-    pub timestamplet_time: [u8; 6],
+    pub timestamplet_time: u32,
     /// The outcome in use at the timestamplet.
     pub timestamplet_outcome: Outcome,
     /// The value of the asset at the time given.

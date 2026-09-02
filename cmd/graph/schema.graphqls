@@ -25,9 +25,9 @@ input Permit {
   permitS: String!
 }
 
-type AuctionResult {
+type AuctionCreatedResult {
   """
-  Leftover amount that can be spent by this user.
+  Leftover amount that can still be spent by this user.
   """
   leftoverBal: String!,
 
@@ -54,9 +54,11 @@ type Mutation {
   onrampAmount(amt: String!, permit: Permit, isDryrun: Boolean): String!,
 
   """
-  Create an BundleTaker auction, and starting to receive BundleMaker combinations.
+  Create an BundleTaker auction, and starting to receive BundleMaker combinations. Use the
+  server provided signature for an account that's managed by the server instead of
+  validating a signature and an amount.
   """
-  createAuctionFromOnrampedAmount(
+  createAuctionFromOnrampedAmountServerSig(
     """
     The minimum amount of the outstanding balance we can spend here.
     """
@@ -76,6 +78,6 @@ type Mutation {
     """
     The timestamp that we use for expiry of the market.
     """
-    expiry: String!
-  ): AuctionResult!
+    expiry: Int!
+  ): AuctionCreatedResult!
 }

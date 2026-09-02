@@ -9,6 +9,7 @@ require (
 	github.com/ethereum/go-ethereum v1.17.5
 	github.com/fluidity-money/9lives.so v0.0.0-20260819021726-b5f7948fa300
 	github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685
+	github.com/fluidity-money/superposition-assets v0.0.0-20260902132450-936e984ea17c
 	github.com/lib/pq v1.12.3
 	github.com/near/borsh-go v0.3.1
 	github.com/vektah/gqlparser/v2 v2.5.36

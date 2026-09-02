@@ -39,8 +39,8 @@ contract TestRfqhub is Test {
     // Superposition SHA-512 precompile used by SignableAggregateArgs hashing.
     address internal constant SHA512 = 0x1F4350205A556587fF3a1F2CB627613685dAcB73;
 
-    // Timestamps used by the test: expiry/timestamplet = [0,0,0,0,0,1], zero else.
-    bytes6 internal constant T1 = bytes6(hex"000000000001");
+    // Timestamps used by the test: expiry/timestamplet = 1, byte-array nonce = zero.
+    uint32 internal constant T1 = 1;
     bytes6 internal constant T0 = bytes6(hex"000000000000");
 
     // Namespace the arbos-featured build of the contract uses to resolve an
@@ -81,12 +81,12 @@ contract TestRfqhub is Test {
     // Seed the contract's onramped balance for `account` directly, mirroring
     // how the Rust unit test calls `storage::onramped_bal::set`.
     // `onramped_bal(asset, account)` derives its slot as
-    //   slot_map(account, slot_map(asset, SLOT)), SLOT = 2 (storage counter),
+    //   slot_map(account, slot_map(asset, SLOT)), SLOT = 3 (storage counter),
     // and slot_map(x, y) = keccak256(x.0 || y.0) with 32-byte (right-aligned) U.
     function _setOnrampedBal(address account, uint256 amt) internal {
-        // inner = slot_map(USDC_as_U, U(2))
+        // inner = slot_map(USDC_as_U, U(3))
         bytes32 inner = keccak256(
-            abi.encodePacked(uint256(uint160(USDC)), uint256(2))
+            abi.encodePacked(uint256(uint160(USDC)), uint256(3))
         );
         // slot  = slot_map(account_as_U, inner)
         bytes32 slot = keccak256(
@@ -95,12 +95,12 @@ contract TestRfqhub is Test {
         vm.store(c, slot, bytes32(amt));
     }
 
-    // Seed storage::global_bal(USDC). It is the second item in storage.rs,
-    // so its slot is slot_map(USDC, U(1)). AggregateToOfframp decrements this
+    // Seed storage::global_bal(USDC). It follows paused and version in storage.rs,
+    // so its slot is slot_map(USDC, U(2)). AggregateToOfframp decrements this
     // ledger by the amount transferred to the winner.
     function _setGlobalBal(uint256 amt) internal {
         bytes32 slot = keccak256(
-            abi.encodePacked(uint256(uint160(USDC)), uint256(1))
+            abi.encodePacked(uint256(uint160(USDC)), uint256(2))
         );
         vm.store(c, slot, bytes32(amt));
     }
@@ -153,7 +153,7 @@ contract TestRfqhub is Test {
         aggArgs.maker.args.taker.args.src.onchainPot.accAddr = erik;
         aggArgs.maker.args.taker.args.src.onchainPot.amt = 500;
         aggArgs.maker.args.taker.args.src.onchainPot.asset = Asset.USDC;
-        aggArgs.maker.args.taker.args.expiry = T1; // [0,0,0,0,0,1]
+        aggArgs.maker.args.taker.args.expiry = T1;
         aggArgs.maker.args.taker.args.msTs = T0;
         aggArgs.maker.args.taker.args.isUp = true;
         aggArgs.maker.args.taker.args.priceTarget = 100;

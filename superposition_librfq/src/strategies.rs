@@ -9,7 +9,7 @@ const RECURSIVE_MAX_SIZE: u32 = 64;
 const RECURSIVE_ITEMS_PER_COLLECTION: u32 = 4;
 const INVERTED_MAX_SUBMISSIONS: usize = 8;
 const INVERTED_MAX_AMOUNT: u64 = 1_000_000_000_000;
-const MAX_U48: u64 = (1_u64 << 48) - 1;
+const MAX_EXPIRY: u64 = u32::MAX as u64;
 
 /// Direction recorded by the off-chain model for one RFQ settlement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub struct ExpectedPriceMove {
 #[derive(Clone, Debug, PartialEq)]
 pub struct InvertedSubmission {
     pub submitted_at: [u8; 6],
-    pub expiry: [u8; 6],
+    pub expiry: u32,
     pub taker_ms_ts: [u8; 6],
     pub maker_ms_ts: [u8; 6],
     pub price_move: ExpectedPriceMove,
@@ -199,7 +199,7 @@ pub fn inverted_aggregate() -> BoxedStrategy<InvertedAggregate> {
         any::<[u8; 20]>(),
         1..=INVERTED_MAX_AMOUNT,
         any::<Asset>(),
-        0..=(MAX_U48 - (INVERTED_MAX_SUBMISSIONS as u64 * 5)),
+        0..=(MAX_EXPIRY - (INVERTED_MAX_SUBMISSIONS as u64 * 5)),
         vec(inverted_submission_seed(), 1..=INVERTED_MAX_SUBMISSIONS),
     )
         .prop_map(|(acc_addr, amt, asset, base_time, seeds)| {
@@ -233,7 +233,7 @@ pub fn inverted_aggregate() -> BoxedStrategy<InvertedAggregate> {
                     taker_ms_ts: u48(start),
                     maker_ms_ts: u48(start + 1),
                     submitted_at: u48(start + 2),
-                    expiry: u48(start + 3),
+                    expiry: (start + 3) as u32,
                     price_move: ExpectedPriceMove {
                         direction: seed.direction,
                         expected_return,
@@ -301,7 +301,7 @@ fn bundle_taker_args_strategy(
 ) -> BoxedStrategy<BundleTakerArgs> {
     (
         src,
-        any::<[u8; 6]>(),
+        any::<u32>(),
         any::<[u8; 6]>(),
         any::<bool>(),
         any::<u64>(),
@@ -351,7 +351,7 @@ fn bundle_maker_strategy(src: BoxedStrategy<OnrampingSource>) -> BoxedStrategy<B
 }
 
 fn timestamplet_strategy() -> BoxedStrategy<Timestamplet> {
-    (any::<[u8; 6]>(), any::<Outcome>(), any::<u64>())
+    (any::<u32>(), any::<Outcome>(), any::<u64>())
         .prop_map(
             |(timestamplet_time, timestamplet_outcome, timestamplet_val)| Timestamplet {
                 timestamplet_time,

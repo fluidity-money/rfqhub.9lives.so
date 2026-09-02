@@ -18,9 +18,8 @@ const (
 	ProgServerSigningPath = "/usr/local/bin/rfqhub-cli-client-signing"
 )
 
-func ServerSignAggregate(key [32]byte, args types.Args) (sig [64]byte, err error) {
+func ServerSignAggregate(args types.Args) (sig [64]byte, err error) {
 	cmd := exec.Command(ProgServerSigningPath)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("SPN_SUPERPOSITION_KEY=%x", key))
 	var bufIn, bufOut bytes.Buffer
 	if err := json.NewEncoder(&bufIn).Encode(args); err != nil {
 		return sig, fmt.Errorf("encoding: %v", args)
@@ -36,9 +35,8 @@ func ServerSignAggregate(key [32]byte, args types.Args) (sig [64]byte, err error
 	return
 }
 
-func ClientSignClientArgs(key [32]byte, args types.ClientSigningArgs) (sig [64]byte, err error) {
+func ClientSignClientArgs(args types.ClientSigningArgs) (sig [64]byte, err error) {
 	cmd := exec.Command(ProgClientSigningPath)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("SPN_SUPERPOSITION_KEY=%x", key))
 	var bufIn, bufOut bytes.Buffer
 	if err := json.NewEncoder(&bufIn).Encode(args); err != nil {
 		return sig, fmt.Errorf("encoding: %v", args)
