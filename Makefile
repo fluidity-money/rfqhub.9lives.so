@@ -11,7 +11,7 @@ wasm: rfqhub.9lives.so.wasm
 
 OUT_WASM := target/wasm32-unknown-unknown/release/contract.wasm
 
-OUT_CLI := target/release/cli
+OUT_CLI_SERVER_SIGNING := target/release/cli-server-signing
 
 ${OUT_WASM}: $(shell find Cargo.* superposition_librfq contract -type f)
 	@cargo build \
@@ -24,13 +24,13 @@ rfqhub.9lives.so.wasm: ${OUT_WASM}
 	@./wasm-post.sh ${OUT_WASM} rfqhub.9lives.so.wasm
 	@./check-codesize.sh rfqhub.9lives.so.wasm
 
-${OUT_CLI}: $(shell find Cargo.* superposition_librfq cli -type f)
+${OUT_CLI_SERVER_SIGNING}: $(shell find Cargo.* superposition_librfq cli-server-signing -type f)
 	@cargo build --release
 
-cli: rfqhub-cli
+cli: rfqhub-cli-signing
 
-rfqhub-cli: ${OUT_CLI}
-	@cp ${OUT_CLI} rfqhub-cli
+rfqhub-cli-server-signing: ${OUT_CLI_SERVER_SIGNING}
+	@cp ${OUT_CLI_SERVER_SIGNING} rfqhub-cli-server-signing
 
 clean:
 	@cargo clean

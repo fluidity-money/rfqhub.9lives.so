@@ -3,5 +3,7 @@ rfqhub.9lives.so.wasm
 *.wasm1
 target
 out
-rfqhub-cli
+rfqhub-cli-server-signing
+rfqhub-cli-borsh
+rfqhub-cli-user-signing
 cache

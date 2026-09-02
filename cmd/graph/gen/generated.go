@@ -277,10 +277,15 @@ type Mutation {
     isDryrun: Boolean
   ): Boolean!
 
+  """
+  Onramp some funds from the owner of this account.
+  """
   onrampAmount(amt: String!): Boolean!
 
   """
-  Create an auction for a taker position, returning the
+  Create an auction for a taker position, returning the amount that was spent, and the
+  leftover balance. The server will start to find makers to append to the taker position,
+  selecting the one that offers the best amount.
   """
   createAuction(
     """

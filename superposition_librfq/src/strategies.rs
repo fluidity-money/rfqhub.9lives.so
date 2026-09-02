@@ -283,13 +283,14 @@ fn onramping_source_strategy() -> BoxedStrategy<OnrampingSource> {
         RECURSIVE_MAX_SIZE,
         RECURSIVE_ITEMS_PER_COLLECTION,
         |inner| {
-            (aggregate_enum_strategy_with_source(inner), any::<u64>())
-                .prop_map(|(from, amt_to_take)| {
+            (aggregate_enum_strategy_with_source(inner), any::<u64>()).prop_map(
+                |(from, amt_to_take)| {
                     OnrampingSource::AggregatedResult(AggregatedResultArgs {
                         from: Box::new(from),
                         amt_to_take,
                     })
-                })
+                },
+            )
         },
     )
     .boxed()

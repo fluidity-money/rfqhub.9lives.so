@@ -1,0 +1,12 @@
+[package]
+name = "cli-server-signing"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_json = "1.0.151"
+superposition_librfq = { path = "../superposition_librfq", features = ["std", "serde"] }
+const-hex.workspace = true
+borsh.workspace = true
+ed25519-dalek = "3.0.0"
+bobcat-sdk = { workspace = true, features = ["ed25519-dalek", "borsh"] }

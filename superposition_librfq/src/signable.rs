@@ -18,25 +18,25 @@ use crate::{
     BundleTakerArgs, OfframpArgs, OnrampingSource, Outcome,
 };
 
+use bobcat_sdk::precompiles::superposition::BcSha512;
+
 use array_concat::concat_arrays;
 
 use bobcat_sdk::{maths::U, precompiles::superposition::sha512, storage::keccak256};
 
 use alloc::boxed::Box;
 
-pub type JustInTime = [u8; 64];
-
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub enum Hash {
     Onchain(U),
-    JustInTime(JustInTime),
+    JustInTime(BcSha512),
 }
 
 impl From<Hash> for [u8; 32] {
     fn from(x: Hash) -> Self {
         match x {
             Hash::Onchain(U(u)) => u,
-            Hash::JustInTime(x) => *keccak256(&x),
+            Hash::JustInTime(BcSha512(x)) => *keccak256(&x),
         }
     }
 }
@@ -98,7 +98,7 @@ pub struct SignableAggregateArgs {
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct SignableOfframpArgs {
-    pub hash: JustInTime,
+    pub hash: BcSha512,
 }
 
 impl From<&AggregateArgs> for SignableAggregateArgs {
@@ -112,7 +112,7 @@ impl From<&AggregateArgs> for SignableAggregateArgs {
         }: &AggregateArgs,
     ) -> Self {
         let maker = SignableBundleMakerArgs::from(maker_args);
-        let timestamplet = sha512(&borsh::to_vec(&timestamplet).unwrap());
+        let BcSha512(timestamplet) = sha512(&borsh::to_vec(&timestamplet).unwrap());
         let pre: [u8; 1 + 32 + 64] = concat_arrays!(
             [PreDiscriminant::AggregateEnum as u8],
             maker.hash.clone().into(),
@@ -136,7 +136,7 @@ impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
     ) -> Self {
         let taker_pre = SignableBundleTakerArgs::from(args);
         let src = SignableOnrampingSource::from(src);
-        let content = sha512(
+        let BcSha512(content) = sha512(
             &borsh::to_vec(&InnerBundleMaker {
                 ms_ts: *ms_ts,
                 acc: *acc,
@@ -169,7 +169,7 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
         }: &BundleTakerArgs,
     ) -> Self {
         let src = SignableOnrampingSource::from(src);
-        let content = sha512(
+        let BcSha512(content) = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
                 expiry: *expiry,
                 ms_ts: *ms_ts,
@@ -222,7 +222,7 @@ impl From<&OfframpArgs> for SignableOfframpArgs {
     fn from(args: &OfframpArgs) -> Self {
         let pre: [u8; 1 + 64] = concat_arrays!(
             [PreDiscriminant::OfframpArgs as u8],
-            sha512(&borsh::to_vec(args).unwrap())
+            sha512(&borsh::to_vec(args).unwrap()).0
         );
         Self { hash: sha512(&pre) }
     }

@@ -253,6 +253,8 @@ macro_rules! storage {
 }
 
 storage! {
+    // Was this paused due to some issue?
+    paused(),
     // The version number of this contract release.
     version(),
     // Global deposits from users.

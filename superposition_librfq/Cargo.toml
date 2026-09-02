@@ -23,7 +23,7 @@ serde = { version = "1.0.229", default-features = false, features = ["derive"], 
 std = ["bobcat-sdk/std"]
 arbitrary = ["dep:arbitrary", "std", "superposition-assets/arbitrary", "bobcat-sdk/arbitrary"]
 proptest = ["dep:proptest", "dep:proptest-derive", "std", "superposition-assets/proptest", "bobcat-sdk/proptest"]
-serde = ["dep:serde", "bobcat-sdk/serde", "const-hex/serde", "const-hex/alloc"]
+serde = ["dep:serde", "bobcat-sdk/serde", "const-hex/alloc"]
 arbos = []
 arbitrum = []
 
@@ -31,4 +31,4 @@ arbitrum = []
 proptest = ">=1.11.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-bobcat-sdk = { version = ">=0.9.1", default-features = false, features = ["alloc", "panic-revert", "sha512", "borsh", "ed25519-dalek"] }
+bobcat-sdk = { workspace = true, default-features = false, features = ["alloc", "panic-revert", "sha512", "borsh", "ed25519-dalek"] }
