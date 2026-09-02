@@ -30,7 +30,6 @@ type OnchainPotArgs struct {
 const (
 	OnrampingSourceOnchainPot borsh.Enum = iota
 	OnrampingSourceAggregatedResult
-	OnrampingSourceOnchainPotAggregatedResult
 )
 
 type OnrampingSource struct {

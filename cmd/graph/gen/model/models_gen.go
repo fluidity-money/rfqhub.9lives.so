@@ -14,6 +14,8 @@ type AuctionCreatedResult struct {
 	LeftoverBal string `json:"leftoverBal"`
 	// The amount that was spent in the creation of this auction.
 	AmountSpent string `json:"amountSpent"`
+	// The BundleTaker identifier for use soon.
+	BundleID int `json:"bundleId"`
 }
 
 type CreateAccount struct {
@@ -25,6 +27,17 @@ type CreateAccount struct {
 }
 
 type Mutation struct {
+}
+
+type OpenAuction struct {
+	ID string `json:"id"`
+	// Open to be won if this user is predicting incorrectly.
+	OpenToBeWon string `json:"openToBeWon"`
+}
+
+type OpenAuctions struct {
+	ID           string         `json:"id"`
+	OpenAuctions []*OpenAuction `json:"openAuctions"`
 }
 
 type Permit struct {

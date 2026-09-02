@@ -38,6 +38,7 @@ type DirectiveRoot struct {
 type ComplexityRoot struct {
 	AuctionCreatedResult struct {
 		AmountSpent func(childComplexity int) int
+		BundleID    func(childComplexity int) int
 		LeftoverBal func(childComplexity int) int
 	}
 
@@ -47,8 +48,19 @@ type ComplexityRoot struct {
 		OnrampAmount                             func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
 	}
 
+	OpenAuction struct {
+		ID          func(childComplexity int) int
+		OpenToBeWon func(childComplexity int) int
+	}
+
+	OpenAuctions struct {
+		ID           func(childComplexity int) int
+		OpenAuctions func(childComplexity int) int
+	}
+
 	Query struct {
-		Balance func(childComplexity int, addr string) int
+		Balance      func(childComplexity int, addr string) int
+		OpenAuctions func(childComplexity int) int
 	}
 }
 
@@ -63,6 +75,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Balance(ctx context.Context, addr string) (string, error)
+	OpenAuctions(ctx context.Context) (*model.OpenAuctions, error)
 }
 
 // endregion ************************** generated!.gotpl **************************
@@ -89,6 +102,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AuctionCreatedResult.AmountSpent(childComplexity), true
+	case "AuctionCreatedResult.bundleId":
+		if e.ComplexityRoot.AuctionCreatedResult.BundleID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AuctionCreatedResult.BundleID(childComplexity), true
 	case "AuctionCreatedResult.leftoverBal":
 		if e.ComplexityRoot.AuctionCreatedResult.LeftoverBal == nil {
 			break
@@ -130,6 +149,32 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Mutation.OnrampAmount(childComplexity, args["amt"].(string), args["permit"].(*model.Permit), args["isDryrun"].(*bool)), true
 
+	case "OpenAuction.id":
+		if e.ComplexityRoot.OpenAuction.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.ID(childComplexity), true
+	case "OpenAuction.openToBeWon":
+		if e.ComplexityRoot.OpenAuction.OpenToBeWon == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.OpenToBeWon(childComplexity), true
+
+	case "OpenAuctions.id":
+		if e.ComplexityRoot.OpenAuctions.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuctions.ID(childComplexity), true
+	case "OpenAuctions.openAuctions":
+		if e.ComplexityRoot.OpenAuctions.OpenAuctions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuctions.OpenAuctions(childComplexity), true
+
 	case "Query.balance":
 		if e.ComplexityRoot.Query.Balance == nil {
 			break
@@ -141,6 +186,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Balance(childComplexity, args["addr"].(string)), true
+
+	case "Query.openAuctions":
+		if e.ComplexityRoot.Query.OpenAuctions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.OpenAuctions(childComplexity), true
 
 	}
 	return 0, false
@@ -232,11 +284,29 @@ enum Outcome {
     BitcoinPrice,
 }
 
+type OpenAuction {
+  id: ID!,
+  """
+  Open to be won if this user is predicting incorrectly.
+  """
+  openToBeWon: String!
+}
+
+type OpenAuctions {
+  id: ID!,
+  openAuctions: [OpenAuction!]!
+}
+
 type Query {
   """
   Get the balance that can be spent after it was onramped.
   """
   balance(addr: String!): String!
+
+  """
+  Currently outstanding auctions that need a user to submit BundleMakers.
+  """
+  openAuctions: OpenAuctions!
 }
 
 input CreateAccount {
@@ -264,6 +334,11 @@ type AuctionCreatedResult {
   The amount that was spent in the creation of this auction.
   """
   amountSpent: String!,
+
+  """
+  The BundleTaker identifier for use soon.
+  """
+  bundleId: Int!
 }
 
 type Mutation {
@@ -324,8 +399,30 @@ func (ec *executionContext) childFields_AuctionCreatedResult(ctx context.Context
 		return ec.fieldContext_AuctionCreatedResult_leftoverBal(ctx, field)
 	case "amountSpent":
 		return ec.fieldContext_AuctionCreatedResult_amountSpent(ctx, field)
+	case "bundleId":
+		return ec.fieldContext_AuctionCreatedResult_bundleId(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type AuctionCreatedResult", field.Name)
+}
+
+func (ec *executionContext) childFields_OpenAuction(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_OpenAuction_id(ctx, field)
+	case "openToBeWon":
+		return ec.fieldContext_OpenAuction_openToBeWon(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type OpenAuction", field.Name)
+}
+
+func (ec *executionContext) childFields_OpenAuctions(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_OpenAuctions_id(ctx, field)
+	case "openAuctions":
+		return ec.fieldContext_OpenAuctions_openAuctions(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type OpenAuctions", field.Name)
 }
 
 func (ec *executionContext) childFields___Directive(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -700,6 +797,29 @@ func (ec *executionContext) fieldContext_AuctionCreatedResult_amountSpent(_ cont
 	return graphql.NewScalarFieldContext("AuctionCreatedResult", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _AuctionCreatedResult_bundleId(ctx context.Context, field graphql.CollectedField, obj *model.AuctionCreatedResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AuctionCreatedResult_bundleId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BundleID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AuctionCreatedResult_bundleId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AuctionCreatedResult", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
 func (ec *executionContext) _Mutation_createAccountExec(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -832,6 +952,107 @@ func (ec *executionContext) fieldContext_Mutation_createAuctionFromOnrampedAmoun
 	return fc, nil
 }
 
+func (ec *executionContext) _OpenAuction_id(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_openToBeWon(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_openToBeWon(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OpenToBeWon, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_openToBeWon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuctions_id(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuctions) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuctions_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuctions_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuctions", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuctions_openAuctions(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuctions) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuctions_openAuctions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OpenAuctions, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []*model.OpenAuction) graphql.Marshaler {
+			return ec.marshalNOpenAuction2ᚕᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuctionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuctions_openAuctions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OpenAuctions",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_OpenAuction(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_balance(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -872,6 +1093,38 @@ func (ec *executionContext) fieldContext_Query_balance(ctx context.Context, fiel
 	if fc.Args, err = ec.field_Query_balance_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_openAuctions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_openAuctions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().OpenAuctions(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.OpenAuctions) graphql.Marshaler {
+			return ec.marshalNOpenAuctions2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuctions(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_openAuctions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_OpenAuctions(ctx, field)
+		},
 	}
 	return fc, nil
 }
@@ -2150,6 +2403,11 @@ func (ec *executionContext) _AuctionCreatedResult(ctx context.Context, sel ast.S
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "bundleId":
+			out.Values[i] = ec._AuctionCreatedResult_bundleId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -2233,6 +2491,92 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 	return out
 }
 
+var openAuctionImplementors = []string{"OpenAuction"}
+
+func (ec *executionContext) _OpenAuction(ctx context.Context, sel ast.SelectionSet, obj *model.OpenAuction) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, openAuctionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OpenAuction")
+		case "id":
+			out.Values[i] = ec._OpenAuction_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "openToBeWon":
+			out.Values[i] = ec._OpenAuction_openToBeWon(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var openAuctionsImplementors = []string{"OpenAuctions"}
+
+func (ec *executionContext) _OpenAuctions(ctx context.Context, sel ast.SelectionSet, obj *model.OpenAuctions) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, openAuctionsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OpenAuctions")
+		case "id":
+			out.Values[i] = ec._OpenAuctions_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "openAuctions":
+			out.Values[i] = ec._OpenAuctions_openAuctions(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -2263,6 +2607,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_balance(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "openAuctions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_openAuctions(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -2737,6 +3103,22 @@ func (ec *executionContext) unmarshalNCreateAccount2githubᚗcomᚋfluidityᚑmo
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
+	res, err := graphql.UnmarshalID(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalID(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
 	res, err := graphql.UnmarshalInt(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -2751,6 +3133,46 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNOpenAuction2ᚕᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuctionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.OpenAuction) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNOpenAuction2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuction(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOpenAuction2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuction(ctx context.Context, sel ast.SelectionSet, v *model.OpenAuction) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OpenAuction(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOpenAuctions2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuctions(ctx context.Context, sel ast.SelectionSet, v model.OpenAuctions) graphql.Marshaler {
+	return ec._OpenAuctions(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOpenAuctions2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuctions(ctx context.Context, sel ast.SelectionSet, v *model.OpenAuctions) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OpenAuctions(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNOutcome2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOutcome(ctx context.Context, v any) (model.Outcome, error) {

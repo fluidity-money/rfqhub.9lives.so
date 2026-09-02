@@ -255,7 +255,8 @@ CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
-	amt BIGINT
+	amt BIGINT,
+	leftover_bal BIGINT
 )
 LANGUAGE plpgsql
 AS $$
@@ -301,7 +302,7 @@ BEGIN
 	)
 	RETURNING id INTO v_bundle_taker_id;
 
-	RETURN QUERY SELECT v_bundle_taker_id, v_amt;
+	RETURN QUERY SELECT v_bundle_taker_id, v_amt, v_available - v_amt;
 END;
 $$;
 

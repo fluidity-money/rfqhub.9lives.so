@@ -20,10 +20,10 @@ import (
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
-	"github.com/fluidity-money/superposition-assets"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
+	superposition_assets "github.com/fluidity-money/superposition-assets"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
@@ -243,9 +243,9 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 	)
 	var (
 		bundleTakerId int
-		amt           uint64
+		amt, leftover uint64
 	)
-	if err := row.Scan(&bundleTakerId, &amt); err != nil {
+	if err := row.Scan(&bundleTakerId, &amt, &leftover); err != nil {
 		slog.Error("Error creating a BundleTaker in the database",
 			"err", err,
 			"acc addr", accAddrStr,
@@ -258,7 +258,7 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 		)
 		return nil, fmt.Errorf("error creating BundleTaker")
 	}
-	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs {
+	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
 		Enum: types.ClientSigningArgsBundleTaker,
 		BundleTaker: types.BundleTakerArgs{
 			Src: types.OnrampingSource{
@@ -268,10 +268,10 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 					Amt:     amt,
 				},
 			},
-			Expiry: uint32(expiry),
-			IsUp: isUp,
+			Expiry:      uint32(expiry),
+			IsUp:        isUp,
 			PriceTarget: priceTarget_,
-			Outcome: outcome_,
+			Outcome:     outcome_,
 		},
 	})
 	if err != nil {
@@ -306,6 +306,7 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 		)
 		return nil, fmt.Errorf("failed to tag the bundle with the signature")
 	}
+	// TODO: return the leftover, the amt, the bundle id
 	return nil, nil
 }
 
@@ -330,6 +331,11 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 		return "", fmt.Errorf("spendable error")
 	}
 	return amt.String(), nil
+}
+
+// OpenAuctions is the resolver for the openAuctions field.
+func (r *queryResolver) OpenAuctions(ctx context.Context) (*model.OpenAuctions, error) {
+	panic(fmt.Errorf("not implemented: OpenAuctions - openAuctions"))
 }
 
 // Mutation returns MutationResolver implementation.

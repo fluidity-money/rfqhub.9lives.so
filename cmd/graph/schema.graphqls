@@ -3,11 +3,29 @@ enum Outcome {
     BitcoinPrice,
 }
 
+type OpenAuction {
+  id: ID!,
+  """
+  Open to be won if this user is predicting incorrectly.
+  """
+  openToBeWon: String!
+}
+
+type OpenAuctions {
+  id: ID!,
+  openAuctions: [OpenAuction!]!
+}
+
 type Query {
   """
   Get the balance that can be spent after it was onramped.
   """
   balance(addr: String!): String!
+
+  """
+  Currently outstanding auctions that need a user to submit BundleMakers.
+  """
+  openAuctions: OpenAuctions!
 }
 
 input CreateAccount {
@@ -35,6 +53,11 @@ type AuctionCreatedResult {
   The amount that was spent in the creation of this auction.
   """
   amountSpent: String!,
+
+  """
+  The BundleTaker identifier for use soon.
+  """
+  bundleId: Int!
 }
 
 type Mutation {
