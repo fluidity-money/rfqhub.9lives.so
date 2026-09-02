@@ -10,3 +10,4 @@ ed25519-dalek = "3.0.0"
 serde = "1.0.229"
 serde_json = "1.0.151"
 superposition_librfq = { version = "0.1.0", path = "../superposition_librfq" }
+superposition_libaccounts = { workspace = true, features = ["signing"] }

@@ -42,9 +42,9 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CreateAccountExec func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
-		CreateAuction     func(childComplexity int, minAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) int
-		OnrampAmount      func(childComplexity int, amt string) int
+		CreateAccountExec               func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
+		CreateAuctionFromOnrampedAmount func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) int
+		OnrampAmount                    func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
 	}
 
 	Query struct {
@@ -58,8 +58,8 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error)
-	OnrampAmount(ctx context.Context, amt string) (bool, error)
-	CreateAuction(ctx context.Context, minAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error)
+	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
+	CreateAuctionFromOnrampedAmount(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error)
 }
 type QueryResolver interface {
 	Balance(ctx context.Context, addr string) (string, error)
@@ -107,17 +107,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["amt"].(string), args["isDryrun"].(*bool)), true
-	case "Mutation.createAuction":
-		if e.ComplexityRoot.Mutation.CreateAuction == nil {
+	case "Mutation.createAuctionFromOnrampedAmount":
+		if e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmount == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_createAuction_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_createAuctionFromOnrampedAmount_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAuction(childComplexity, args["minAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(string)), true
+		return e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmount(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(string)), true
 	case "Mutation.onrampAmount":
 		if e.ComplexityRoot.Mutation.OnrampAmount == nil {
 			break
@@ -128,7 +128,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.OnrampAmount(childComplexity, args["amt"].(string)), true
+		return e.ComplexityRoot.Mutation.OnrampAmount(childComplexity, args["amt"].(string), args["permit"].(*model.Permit), args["isDryrun"].(*bool)), true
 
 	case "Query.balance":
 		if e.ComplexityRoot.Query.Balance == nil {
@@ -278,20 +278,23 @@ type Mutation {
   ): Boolean!
 
   """
-  Onramp some funds from the owner of this account.
+  Onramp an amount using the router.
   """
-  onrampAmount(amt: String!): Boolean!
+  onrampAmount(amt: String!, permit: Permit, isDryrun: Boolean): String!,
 
   """
-  Create an auction for a taker position, returning the amount that was spent, and the
-  leftover balance. The server will start to find makers to append to the taker position,
-  selecting the one that offers the best amount.
+  Create an BundleTaker auction, and starting to receive BundleMaker combinations.
   """
-  createAuction(
+  createAuctionFromOnrampedAmount(
     """
     The minimum amount of the outstanding balance we can spend here.
     """
     minAmount: String!,
+
+    """"
+    The maximum amount to take from the available onramped liquidity.
+    """
+    maxAmount: String!
 
     isUp: Boolean!,
 
@@ -477,7 +480,7 @@ func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Co
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_createAuction_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_createAuctionFromOnrampedAmount_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "minAmount",
@@ -488,38 +491,46 @@ func (ec *executionContext) field_Mutation_createAuction_args(ctx context.Contex
 		return nil, err
 	}
 	args["minAmount"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "isUp",
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "maxAmount",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["maxAmount"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "isUp",
 		func(ctx context.Context, v any) (bool, error) {
 			return ec.unmarshalNBoolean2bool(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["isUp"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "priceTarget",
+	args["isUp"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "priceTarget",
 		func(ctx context.Context, v any) (string, error) {
 			return ec.unmarshalNString2string(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["priceTarget"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "outcome",
+	args["priceTarget"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "outcome",
 		func(ctx context.Context, v any) (model.Outcome, error) {
 			return ec.unmarshalNOutcome2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOutcome(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["outcome"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "expiry",
+	args["outcome"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "expiry",
 		func(ctx context.Context, v any) (string, error) {
 			return ec.unmarshalNString2string(ctx, v)
 		})
 	if err != nil {
 		return nil, err
 	}
-	args["expiry"] = arg4
+	args["expiry"] = arg5
 	return args, nil
 }
 
@@ -534,6 +545,22 @@ func (ec *executionContext) field_Mutation_onrampAmount_args(ctx context.Context
 		return nil, err
 	}
 	args["amt"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "permit",
+		func(ctx context.Context, v any) (*model.Permit, error) {
+			return ec.unmarshalOPermit2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐPermit(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["permit"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "isDryrun",
+		func(ctx context.Context, v any) (*bool, error) {
+			return ec.unmarshalOBoolean2ᚖbool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["isDryrun"] = arg2
 	return args, nil
 }
 
@@ -725,11 +752,11 @@ func (ec *executionContext) _Mutation_onrampAmount(ctx context.Context, field gr
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().OnrampAmount(ctx, fc.Args["amt"].(string))
+			return ec.Resolvers.Mutation().OnrampAmount(ctx, fc.Args["amt"].(string), fc.Args["permit"].(*model.Permit), fc.Args["isDryrun"].(*bool))
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
-			return ec.marshalNBoolean2bool(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
 		},
 		true,
 		true,
@@ -742,7 +769,7 @@ func (ec *executionContext) fieldContext_Mutation_onrampAmount(ctx context.Conte
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	defer func() {
@@ -759,17 +786,17 @@ func (ec *executionContext) fieldContext_Mutation_onrampAmount(ctx context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_createAuction(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_createAuctionFromOnrampedAmount(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_createAuction(ctx, field)
+			return ec.fieldContext_Mutation_createAuctionFromOnrampedAmount(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAuction(ctx, fc.Args["minAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(string))
+			return ec.Resolvers.Mutation().CreateAuctionFromOnrampedAmount(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuctionResult) graphql.Marshaler {
@@ -779,7 +806,7 @@ func (ec *executionContext) _Mutation_createAuction(ctx context.Context, field g
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Mutation_createAuction(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_createAuctionFromOnrampedAmount(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -796,7 +823,7 @@ func (ec *executionContext) fieldContext_Mutation_createAuction(ctx context.Cont
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_createAuction_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_createAuctionFromOnrampedAmount_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2176,9 +2203,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "createAuction":
+		case "createAuctionFromOnrampedAmount":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_createAuction(ctx, field)
+				return ec._Mutation_createAuctionFromOnrampedAmount(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

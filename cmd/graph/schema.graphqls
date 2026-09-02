@@ -49,20 +49,23 @@ type Mutation {
   ): Boolean!
 
   """
-  Onramp some funds from the owner of this account.
+  Onramp an amount using the router.
   """
-  onrampAmount(amt: String!): Boolean!
+  onrampAmount(amt: String!, permit: Permit, isDryrun: Boolean): String!,
 
   """
-  Create an auction for a taker position, returning the amount that was spent, and the
-  leftover balance. The server will start to find makers to append to the taker position,
-  selecting the one that offers the best amount.
+  Create an BundleTaker auction, and starting to receive BundleMaker combinations.
   """
-  createAuction(
+  createAuctionFromOnrampedAmount(
     """
     The minimum amount of the outstanding balance we can spend here.
     """
     minAmount: String!,
+
+    """"
+    The maximum amount to take from the available onramped liquidity.
+    """
+    maxAmount: String!
 
     isUp: Boolean!,
 

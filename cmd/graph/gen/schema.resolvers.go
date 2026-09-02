@@ -113,13 +113,76 @@ VALUES ($1, $2)`,
 }
 
 // OnrampAmount is the resolver for the onrampAmount field.
-func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string) (bool, error) {
-	panic(fmt.Errorf("not implemented: OnrampAmount - onrampAmount"))
+func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error) {
+	snowflake, _ := ctx.Value("snowflake").(int)
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return "", fmt.Errorf("bad eoa address")
+	}
+	amt_, err := strconv.ParseUint(amt, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("bad amt")
+	}
+	//minimum amount > amt
+	if r.MinimumAmount > amt_ {
+		return "", fmt.Errorf("below the minimum amount (%v)", amt)
+	}
+	msTs := pickMsTs()
+	solveArgsSigArgs, err := convertor.CreateSolveArgsSigArgs(
+		ProgDalek,
+		r.RfqhubAddr,
+		acc_types.AssetUsdc,
+		amt_,
+		permit,
+		msTs,
+	)
+	if err != nil {
+		return "", fmt.Errorf("mint tagging: %v", err)
+	}
+	privKey, sender, err := acc_db.PickPrivateKey(ctx, r.Db)
+	if err != nil {
+		log.Fatalf("error picking private key: %v", err)
+	}
+	isDryrun_ := isDryrun != nil && *isDryrun
+	h, gasLimit, err := acc_client.SendArguments(
+		ctx,
+		r.Client,
+		r.ChainId,
+		privKey,
+		*sender,
+		r.AccountsFactoryAddr,
+		acc_types.Args{
+			Enum: acc_types.ArgsSolve,
+			Solve: acc_types.Solve{
+				Args: []acc_types.SolveArgsSigArgs{*solveArgsSigArgs},
+			},
+		},
+		isDryrun_,
+	)
+	if err != nil {
+		slog.Error("error minting",
+			"sender", sender,
+			"solve", solveArgsSigArgs,
+			"err", err,
+			"snowflake", snowflake,
+		)
+		if !isIgnorable(err) {
+			activateSoftAlarm(r.UrlAlarm, snowflake, fmt.Errorf(
+				"onramping, eoa: %v, sender: %v, err: %v",
+				eoa,
+				sender,
+				err,
+			))
+		}
+		return "", fmt.Errorf("last error sending: %v", err)
+	}
+	trackTx(r.Db, eoa.String(), h.Hex(), gasLimit, "mint")
+	return h.Hex(), nil
 }
 
-// CreateAuction is the resolver for the createAuction field.
-func (r *mutationResolver) CreateAuction(ctx context.Context, minAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error) {
-	panic(fmt.Errorf("not implemented: CreateAuction - createAuction"))
+// CreateAuctionFromOnrampedAmount is the resolver for the createAuctionFromOnrampedAmount field.
+func (r *mutationResolver) CreateAuctionFromOnrampedAmount(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry string) (*model.AuctionResult, error) {
+	panic(fmt.Errorf("not implemented: CreateAuctionFromOnrampedAmount - createAuctionFromOnrampedAmount"))
 }
 
 // Balance is the resolver for the balance field.

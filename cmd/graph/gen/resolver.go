@@ -15,4 +15,5 @@ type Resolver struct {
 	MinimumAmount                   uint64
 	AccPubKey                       [32]byte
 	Client                          *ethclient.Client
+	UrlAlarm string
 }
