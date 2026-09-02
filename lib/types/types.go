@@ -34,9 +34,9 @@ const (
 )
 
 type OnrampingSource struct {
-	Enum                       borsh.Enum `borsh_enum:"true"`
-	OnchainPot                 OnchainPotArgs
-	AggregatedResult           *AggregateEnum
+	Enum             borsh.Enum `borsh_enum:"true"`
+	OnchainPot       OnchainPotArgs
+	AggregatedResult *AggregateEnum
 }
 
 type BundleTakerArgs struct {
@@ -136,4 +136,15 @@ type Args struct {
 	OnrampingFromBal   OnrampingFromBalArgs
 	Offramp            OfframpVariantArgs
 	AggregateToOfframp AggregateToOfframpArgs
+}
+
+const (
+	ClientSigningArgsBundleTaker borsh.Enum = iota
+	ClientSigningArgsBundleMaker
+)
+
+type ClientSigningArgs struct {
+	Enum        borsh.Enum `borsh_enum:"true"`
+	BundleTaker BundleTakerArgs
+	BundleMaker BundleMakerArgs
 }

@@ -1,6 +1,5 @@
-// cli-signing: Take the Args derivative structure, but ignoring any
-// existing signatures that are at the surface level, overriding what's
-// there using the key we have here.
+// cli-server-signing: Take the Args derivative structure and produce a
+// signature that can be passed to sender to generate calldata with.
 
 use std::{
     env::{args, var},

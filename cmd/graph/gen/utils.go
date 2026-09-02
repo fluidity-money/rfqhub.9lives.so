@@ -2,13 +2,13 @@ package gen
 
 import (
 	"bytes"
-	"time"
-	"math/big"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const ProgDalek = "/usr/local/bin/ed25519-dalek-ph"

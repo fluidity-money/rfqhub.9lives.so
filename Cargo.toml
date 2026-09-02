@@ -1,5 +1,5 @@
 [workspace]
-members = ["superposition_librfq", "contract", "cli-borsh", "cli-server-signing"]
+members = ["superposition_librfq", "contract", "cli-borsh", "cli-server-signing", "cli-client-signing"]
 resolver = "3"
 
 [workspace.dependencies]

@@ -417,6 +417,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cli-client-signing"
+version = "0.1.0"
+dependencies = [
+ "bobcat-sdk",
+ "const-hex",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "superposition_librfq",
+]
+
+[[package]]
 name = "cli-server-signing"
 version = "0.1.0"
 dependencies = [

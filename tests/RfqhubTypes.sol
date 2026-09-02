@@ -388,7 +388,7 @@ library RfqhubTypes {
 
     // ──────────────────── sendCalldata ────────────────────
 
-    /// @notice Serializes `args` to serde JSON, invokes `rfqhub-cli` via FFI
+    /// @notice Serializes `args` to serde JSON, invokes `rfqhub-cli-borsh` via FFI
     ///         to get borsh-encoded hex, decodes it, and low-level calls `target`.
     /// @return success  Whether the call reverted.
     /// @return result   Return data (or revert reason on failure).
@@ -397,7 +397,7 @@ library RfqhubTypes {
         returns (bool success, bytes memory result)
     {
         string[] memory ffi = new string[](2);
-        ffi[0] = "./rfqhub-cli";
+        ffi[0] = "./rfqhub-cli-borsh";
         ffi[1] = toJson(args);
         // Foundry's vm.ffi auto-detects hex output and decodes it, so the
         // returned bytes are already the raw borsh payload — no further

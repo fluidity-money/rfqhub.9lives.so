@@ -5,5 +5,5 @@ target
 out
 rfqhub-cli-server-signing
 rfqhub-cli-borsh
-rfqhub-cli-user-signing
+rfqhub-cli-client-signing
 cache
