@@ -2,12 +2,15 @@
 // existing signatures that are at the surface level, overriding what's
 // there using the key we have here.
 
-use std::env::{args, var};
+use std::{
+    env::{args, var},
+    io::stdin,
+};
 
 use bobcat_sdk::precompiles::superposition::ed25519_sign_post;
 
 use superposition_librfq::{
-    Aggregate, Args, AggregateEnum,
+    Aggregate, AggregateEnum, Args,
     signable::{Hash, SignableAggregateArgs, SignableOfframpArgs},
 };
 
@@ -22,8 +25,12 @@ fn main() {
         )
         .unwrap(),
     );
-    let arg1 = args().nth(1).unwrap();
-    let args = serde_json::from_str::<Args>(&arg1).unwrap();
+    let args: Args = if let Some(x) = args().nth(1) {
+        serde_json::from_str::<_>(&x)
+    } else {
+        serde_json::from_reader::<_, _>(stdin())
+    }
+    .unwrap();
     println!(
         "{}",
         const_hex::encode(&match args {
