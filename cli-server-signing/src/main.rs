@@ -33,7 +33,7 @@ fn main() {
     .unwrap();
     println!(
         "{}",
-        const_hex::encode(&match args {
+        const_hex::encode(match args {
             Args::Offramp { args, .. } => {
                 ed25519_sign_post(key, SignableOfframpArgs::from(&args).hash)
             }
