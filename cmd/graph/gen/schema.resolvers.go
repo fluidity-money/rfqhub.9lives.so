@@ -311,6 +311,26 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 	return nil, nil
 }
 
+// InspectBundleTakerID is the resolver for the inspectBundleTakerId field.
+func (r *mutationResolver) InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error) {
+	panic(fmt.Errorf("not implemented: InspectBundleTakerID - inspectBundleTakerId"))
+}
+
+// ConcludeAndAggregate is the resolver for the concludeAndAggregate field.
+func (r *mutationResolver) ConcludeAndAggregate(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
+	panic(fmt.Errorf("not implemented: ConcludeAndAggregate - concludeAndAggregate"))
+}
+
+// CancelAuction is the resolver for the cancelAuction field.
+func (r *mutationResolver) CancelAuction(ctx context.Context, bundleTakerID int) (bool, error) {
+	panic(fmt.Errorf("not implemented: CancelAuction - cancelAuction"))
+}
+
+// SubmitBundleMakerFromOnrampedAmountServerSig is the resolver for the submitBundleMakerFromOnrampedAmountServerSig field.
+func (r *mutationResolver) SubmitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error) {
+	panic(fmt.Errorf("not implemented: SubmitBundleMakerFromOnrampedAmountServerSig - submitBundleMakerFromOnrampedAmountServerSig"))
+}
+
 // Balance is the resolver for the balance field.
 func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error) {
 	// This function sums the recorded outstanding balances against

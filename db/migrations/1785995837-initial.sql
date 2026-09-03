@@ -99,6 +99,7 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	bundle_taker_id INTEGER NOT NULL REFERENCES rfqhub_bundles_taker_1 (id),
 	ms_ts BIGINT NOT NULL,
 	amt BIGINT NOT NULL CHECK (amt >= 0),
+	min_taker_amt BIGINT NOT NULL CHECK (min_taker_amt > 0),
 	was_correct BOOLEAN,
 	was_chosen BOOLEAN,
 	timestamplet_id INTEGER REFERENCES rfqhub_timestamplets_1 (id),
@@ -431,6 +432,7 @@ CREATE FUNCTION rfqhub_create_bundle_maker_onramping_1 (
 	p_bundle_taker_id INTEGER,
 	p_min_amt BIGINT,
 	p_max_amt BIGINT,
+	p_min_taker_amt BIGINT,
 	p_ms_ts BIGINT,
 	p_user_sig BYTES64
 )
@@ -459,6 +461,12 @@ BEGIN
 	IF v_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_taker.maker_id;
 	END IF;
+	IF p_min_taker_amt IS NULL OR p_min_taker_amt <= 0 THEN
+		RAISE EXCEPTION 'maker minimum taker amount must be positive: %', p_min_taker_amt;
+	END IF;
+	IF v_taker.amt < p_min_taker_amt THEN
+		RAISE EXCEPTION 'taker offer % is below maker minimum %', v_taker.amt, p_min_taker_amt;
+	END IF;
 
 	INSERT INTO rfqhub_onramped_balances_1 (acc_addr, asset, amt)
 	VALUES (p_acc_addr, v_taker.asset, 0)
@@ -481,11 +489,12 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_maker_1 (
-		acc_addr, user_id, source, bundle_taker_id, ms_ts, amt, user_sig
+		acc_addr, user_id, source, bundle_taker_id, ms_ts, amt,
+		min_taker_amt, user_sig
 	)
 	VALUES (
 		p_acc_addr, v_user_id, NULL, p_bundle_taker_id, p_ms_ts, v_amt,
-		p_user_sig
+		p_min_taker_amt, p_user_sig
 	)
 	RETURNING id INTO v_bundle_maker_id;
 
@@ -497,6 +506,7 @@ CREATE FUNCTION rfqhub_create_bundle_maker_from_aggregate_1 (
 	p_source_maker_id INTEGER,
 	p_bundle_taker_id INTEGER,
 	p_amt_to_take BIGINT,
+	p_min_taker_amt BIGINT,
 	p_ms_ts BIGINT,
 	p_user_sig BYTES64
 )
@@ -532,6 +542,12 @@ BEGIN
 	IF v_target_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_target_taker.maker_id;
 	END IF;
+	IF p_min_taker_amt IS NULL OR p_min_taker_amt <= 0 THEN
+		RAISE EXCEPTION 'maker minimum taker amount must be positive: %', p_min_taker_amt;
+	END IF;
+	IF v_target_taker.amt < p_min_taker_amt THEN
+		RAISE EXCEPTION 'taker offer % is below maker minimum %', v_target_taker.amt, p_min_taker_amt;
+	END IF;
 	IF v_source.end_source_amt IS NULL THEN
 		RAISE EXCEPTION 'source maker % has not been resolved', p_source_maker_id;
 	END IF;
@@ -566,11 +582,12 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_maker_1 (
-		acc_addr, user_id, source, bundle_taker_id, ms_ts, amt, user_sig
+		acc_addr, user_id, source, bundle_taker_id, ms_ts, amt,
+		min_taker_amt, user_sig
 	)
 	VALUES (
 		v_source.acc_addr, v_user_id, p_source_maker_id, p_bundle_taker_id,
-		p_ms_ts, p_amt_to_take, p_user_sig
+		p_ms_ts, p_amt_to_take, p_min_taker_amt, p_user_sig
 	)
 	RETURNING id INTO v_bundle_maker_id;
 

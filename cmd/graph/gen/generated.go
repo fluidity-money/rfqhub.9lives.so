@@ -36,16 +36,47 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	Aggregate struct {
+		BundleMaker func(childComplexity int) int
+		BundleTaker func(childComplexity int) int
+		ID          func(childComplexity int) int
+		TakerWon    func(childComplexity int) int
+	}
+
+	AggregateBundleMaker struct {
+		ID func(childComplexity int) int
+	}
+
+	AggregateBundleTaker struct {
+		ID func(childComplexity int) int
+	}
+
 	AuctionCreatedResult struct {
 		AmountSpent func(childComplexity int) int
 		BundleID    func(childComplexity int) int
 		LeftoverBal func(childComplexity int) int
 	}
 
+	BundleMakerInfo struct {
+		BundleMakerID func(childComplexity int) int
+		ID            func(childComplexity int) int
+	}
+
+	BundleTakerOwnerStatus struct {
+		Cancelled func(childComplexity int) int
+		Concluded func(childComplexity int) int
+		Earned    func(childComplexity int) int
+		ID        func(childComplexity int) int
+	}
+
 	Mutation struct {
-		CreateAccountExec                        func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
-		CreateAuctionFromOnrampedAmountServerSig func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) int
-		OnrampAmount                             func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
+		CancelAuction                                func(childComplexity int, bundleTakerID int) int
+		ConcludeAndAggregate                         func(childComplexity int, bundleTakerID int) int
+		CreateAccountExec                            func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
+		CreateAuctionFromOnrampedAmountServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) int
+		InspectBundleTakerID                         func(childComplexity int, bundleTakerID int) int
+		OnrampAmount                                 func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
+		SubmitBundleMakerFromOnrampedAmountServerSig func(childComplexity int, bundleTakerID int, minAmount string, maxAmount string) int
 	}
 
 	OpenAuction struct {
@@ -79,6 +110,10 @@ type MutationResolver interface {
 	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error)
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
 	CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) (*model.AuctionCreatedResult, error)
+	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
+	ConcludeAndAggregate(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
+	CancelAuction(ctx context.Context, bundleTakerID int) (bool, error)
+	SubmitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error)
 }
 type QueryResolver interface {
 	Balance(ctx context.Context, addr string) (string, error)
@@ -103,6 +138,45 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	_ = ec
 	switch typeName + "." + field {
 
+	case "Aggregate.bundleMaker":
+		if e.ComplexityRoot.Aggregate.BundleMaker == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Aggregate.BundleMaker(childComplexity), true
+	case "Aggregate.bundleTaker":
+		if e.ComplexityRoot.Aggregate.BundleTaker == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Aggregate.BundleTaker(childComplexity), true
+	case "Aggregate.id":
+		if e.ComplexityRoot.Aggregate.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Aggregate.ID(childComplexity), true
+	case "Aggregate.takerWon":
+		if e.ComplexityRoot.Aggregate.TakerWon == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Aggregate.TakerWon(childComplexity), true
+
+	case "AggregateBundleMaker.id":
+		if e.ComplexityRoot.AggregateBundleMaker.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AggregateBundleMaker.ID(childComplexity), true
+
+	case "AggregateBundleTaker.id":
+		if e.ComplexityRoot.AggregateBundleTaker.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AggregateBundleTaker.ID(childComplexity), true
+
 	case "AuctionCreatedResult.amountSpent":
 		if e.ComplexityRoot.AuctionCreatedResult.AmountSpent == nil {
 			break
@@ -122,6 +196,66 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.AuctionCreatedResult.LeftoverBal(childComplexity), true
 
+	case "BundleMakerInfo.bundleMakerId":
+		if e.ComplexityRoot.BundleMakerInfo.BundleMakerID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BundleMakerInfo.BundleMakerID(childComplexity), true
+	case "BundleMakerInfo.id":
+		if e.ComplexityRoot.BundleMakerInfo.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BundleMakerInfo.ID(childComplexity), true
+
+	case "BundleTakerOwnerStatus.cancelled":
+		if e.ComplexityRoot.BundleTakerOwnerStatus.Cancelled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BundleTakerOwnerStatus.Cancelled(childComplexity), true
+	case "BundleTakerOwnerStatus.concluded":
+		if e.ComplexityRoot.BundleTakerOwnerStatus.Concluded == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BundleTakerOwnerStatus.Concluded(childComplexity), true
+	case "BundleTakerOwnerStatus.earned":
+		if e.ComplexityRoot.BundleTakerOwnerStatus.Earned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BundleTakerOwnerStatus.Earned(childComplexity), true
+	case "BundleTakerOwnerStatus.id":
+		if e.ComplexityRoot.BundleTakerOwnerStatus.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BundleTakerOwnerStatus.ID(childComplexity), true
+
+	case "Mutation.cancelAuction":
+		if e.ComplexityRoot.Mutation.CancelAuction == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_cancelAuction_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CancelAuction(childComplexity, args["bundleTakerId"].(int)), true
+	case "Mutation.concludeAndAggregate":
+		if e.ComplexityRoot.Mutation.ConcludeAndAggregate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_concludeAndAggregate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConcludeAndAggregate(childComplexity, args["bundleTakerId"].(int)), true
 	case "Mutation.createAccountExec":
 		if e.ComplexityRoot.Mutation.CreateAccountExec == nil {
 			break
@@ -144,6 +278,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmountServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int)), true
+	case "Mutation.inspectBundleTakerId":
+		if e.ComplexityRoot.Mutation.InspectBundleTakerID == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_inspectBundleTakerId_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.InspectBundleTakerID(childComplexity, args["bundleTakerId"].(int)), true
 	case "Mutation.onrampAmount":
 		if e.ComplexityRoot.Mutation.OnrampAmount == nil {
 			break
@@ -155,6 +300,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.OnrampAmount(childComplexity, args["amt"].(string), args["permit"].(*model.Permit), args["isDryrun"].(*bool)), true
+	case "Mutation.submitBundleMakerFromOnrampedAmountServerSig":
+		if e.ComplexityRoot.Mutation.SubmitBundleMakerFromOnrampedAmountServerSig == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_submitBundleMakerFromOnrampedAmountServerSig_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SubmitBundleMakerFromOnrampedAmountServerSig(childComplexity, args["bundleTakerId"].(int), args["minAmount"].(string), args["maxAmount"].(string)), true
 
 	case "OpenAuction.accAddr":
 		if e.ComplexityRoot.OpenAuction.AccAddr == nil {
@@ -426,6 +582,52 @@ type AuctionCreatedResult {
   bundleId: Int!
 }
 
+type BundleMakerInfo {
+  id: ID!,
+
+  """
+  The Identifier for the BundleMaker that we can refer to later to determine if it will be
+  included. Maker offers cannot be cancelled.
+  """
+  bundleMakerId: Int!
+}
+
+type BundleTakerOwnerStatus {
+  id: ID!,
+
+  """
+  Was this BundleTaker matched to anyone?
+  """
+  concluded: Boolean!,
+
+  """
+  Was this BundleTaker cancelled?
+  """
+  cancelled: Boolean!,
+
+  """
+  The amount earned from the BundleTaker being matched with a BundleMaker, if any.
+  """
+  earned: String
+}
+
+type AggregateBundleTaker {
+  id: ID!
+}
+
+type AggregateBundleMaker {
+  id: ID!
+}
+
+type Aggregate {
+  id: ID!,
+
+  takerWon: Boolean!,
+
+  bundleTaker: AggregateBundleTaker!,
+  bundleMaker: AggregateBundleMaker!
+}
+
 type Mutation {
   """
   Create an account while onramping from bal to create a balance object.
@@ -469,6 +671,49 @@ type Mutation {
     """
     expiry: Int!
   ): AuctionCreatedResult!
+
+  """
+  Get status that's relevant for the submitter of the BundleTaker.
+  """
+  inspectBundleTakerId(bundleTakerId: Int!): BundleTakerOwnerStatus!
+
+  """
+  Permanently mark one side of the Aggregate bundle as consumed, and receive a server
+  signature for the Aggregate. Automatically decides if you're the taker or the maker,
+  and gives you results relevant to that.
+  """
+  concludeAndAggregate(bundleTakerId: Int!): Aggregate!
+
+  """
+  Cancel an auction, using the taker id to do so. Only possible to be invoked by the
+  creator of the auction. It's only possible to cancel the auction if it's within the
+  one minute window of the market existing.
+  """
+  cancelAuction(bundleTakerId: Int!): Boolean!
+
+  """
+  Submit a BundleMaker from the liquidity we have here using a server signature and an
+  onramped amount. The BundleMaker is not necessarily consumed unless it's chosen at
+  the end of the BundleTaker's life by the server or by the end user, depending on
+  the Taker's strategy for choosing. The BundleMaker here will take the opposite
+  position of the BundleTaker.
+  """
+  submitBundleMakerFromOnrampedAmountServerSig(
+    """
+    The bundle taker to point to to make this interaction work.
+    """
+    bundleTakerId: Int!,
+
+    """
+    The minimum amount of the outstanding balance we can spend here.
+    """
+    minAmount: String!,
+
+    """"
+    The maximum amount to take from the available onramped liquidity.
+    """
+    maxAmount: String!
+  ): BundleMakerInfo!
 }
 `, BuiltIn: false},
 }
@@ -477,6 +722,36 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // childFields_* functions provide shared child field context lookups.
 // Each function is generated once per unique object type, deduplicating the
 // switch statements that were previously inlined in every fieldContext_* function.
+
+func (ec *executionContext) childFields_Aggregate(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_Aggregate_id(ctx, field)
+	case "takerWon":
+		return ec.fieldContext_Aggregate_takerWon(ctx, field)
+	case "bundleTaker":
+		return ec.fieldContext_Aggregate_bundleTaker(ctx, field)
+	case "bundleMaker":
+		return ec.fieldContext_Aggregate_bundleMaker(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Aggregate", field.Name)
+}
+
+func (ec *executionContext) childFields_AggregateBundleMaker(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_AggregateBundleMaker_id(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AggregateBundleMaker", field.Name)
+}
+
+func (ec *executionContext) childFields_AggregateBundleTaker(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_AggregateBundleTaker_id(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type AggregateBundleTaker", field.Name)
+}
 
 func (ec *executionContext) childFields_AuctionCreatedResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
@@ -488,6 +763,30 @@ func (ec *executionContext) childFields_AuctionCreatedResult(ctx context.Context
 		return ec.fieldContext_AuctionCreatedResult_bundleId(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type AuctionCreatedResult", field.Name)
+}
+
+func (ec *executionContext) childFields_BundleMakerInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_BundleMakerInfo_id(ctx, field)
+	case "bundleMakerId":
+		return ec.fieldContext_BundleMakerInfo_bundleMakerId(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type BundleMakerInfo", field.Name)
+}
+
+func (ec *executionContext) childFields_BundleTakerOwnerStatus(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_BundleTakerOwnerStatus_id(ctx, field)
+	case "concluded":
+		return ec.fieldContext_BundleTakerOwnerStatus_concluded(ctx, field)
+	case "cancelled":
+		return ec.fieldContext_BundleTakerOwnerStatus_cancelled(ctx, field)
+	case "earned":
+		return ec.fieldContext_BundleTakerOwnerStatus_earned(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type BundleTakerOwnerStatus", field.Name)
 }
 
 func (ec *executionContext) childFields_OpenAuction(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -640,6 +939,34 @@ func (ec *executionContext) childFields___Type(ctx context.Context, field graphq
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) field_Mutation_cancelAuction_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["bundleTakerId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_concludeAndAggregate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["bundleTakerId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -732,6 +1059,20 @@ func (ec *executionContext) field_Mutation_createAuctionFromOnrampedAmountServer
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_inspectBundleTakerId_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["bundleTakerId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_onrampAmount_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -759,6 +1100,36 @@ func (ec *executionContext) field_Mutation_onrampAmount_args(ctx context.Context
 		return nil, err
 	}
 	args["isDryrun"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_submitBundleMakerFromOnrampedAmountServerSig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["bundleTakerId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "minAmount",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["minAmount"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "maxAmount",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["maxAmount"] = arg2
 	return args, nil
 }
 
@@ -850,6 +1221,162 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
+func (ec *executionContext) _Aggregate_id(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Aggregate_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Aggregate_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _Aggregate_takerWon(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Aggregate_takerWon(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TakerWon, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Aggregate_takerWon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _Aggregate_bundleTaker(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Aggregate_bundleTaker(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BundleTaker, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.AggregateBundleTaker) graphql.Marshaler {
+			return ec.marshalNAggregateBundleTaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleTaker(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Aggregate_bundleTaker(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Aggregate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AggregateBundleTaker(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Aggregate_bundleMaker(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Aggregate_bundleMaker(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BundleMaker, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.AggregateBundleMaker) graphql.Marshaler {
+			return ec.marshalNAggregateBundleMaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleMaker(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Aggregate_bundleMaker(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Aggregate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_AggregateBundleMaker(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AggregateBundleMaker_id(ctx context.Context, field graphql.CollectedField, obj *model.AggregateBundleMaker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AggregateBundleMaker_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AggregateBundleMaker_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AggregateBundleMaker", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _AggregateBundleTaker_id(ctx context.Context, field graphql.CollectedField, obj *model.AggregateBundleTaker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_AggregateBundleTaker_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_AggregateBundleTaker_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("AggregateBundleTaker", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
 func (ec *executionContext) _AuctionCreatedResult_leftoverBal(ctx context.Context, field graphql.CollectedField, obj *model.AuctionCreatedResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -917,6 +1444,144 @@ func (ec *executionContext) _AuctionCreatedResult_bundleId(ctx context.Context, 
 }
 func (ec *executionContext) fieldContext_AuctionCreatedResult_bundleId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AuctionCreatedResult", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _BundleMakerInfo_id(ctx context.Context, field graphql.CollectedField, obj *model.BundleMakerInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BundleMakerInfo_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BundleMakerInfo_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BundleMakerInfo", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _BundleMakerInfo_bundleMakerId(ctx context.Context, field graphql.CollectedField, obj *model.BundleMakerInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BundleMakerInfo_bundleMakerId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BundleMakerID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BundleMakerInfo_bundleMakerId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BundleMakerInfo", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _BundleTakerOwnerStatus_id(ctx context.Context, field graphql.CollectedField, obj *model.BundleTakerOwnerStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BundleTakerOwnerStatus_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNID2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BundleTakerOwnerStatus_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BundleTakerOwnerStatus", field, false, false, errors.New("field of type ID does not have child fields"))
+}
+
+func (ec *executionContext) _BundleTakerOwnerStatus_concluded(ctx context.Context, field graphql.CollectedField, obj *model.BundleTakerOwnerStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BundleTakerOwnerStatus_concluded(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Concluded, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BundleTakerOwnerStatus_concluded(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BundleTakerOwnerStatus", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _BundleTakerOwnerStatus_cancelled(ctx context.Context, field graphql.CollectedField, obj *model.BundleTakerOwnerStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BundleTakerOwnerStatus_cancelled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Cancelled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BundleTakerOwnerStatus_cancelled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BundleTakerOwnerStatus", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _BundleTakerOwnerStatus_earned(ctx context.Context, field graphql.CollectedField, obj *model.BundleTakerOwnerStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BundleTakerOwnerStatus_earned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Earned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_BundleTakerOwnerStatus_earned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BundleTakerOwnerStatus", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Mutation_createAccountExec(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -1045,6 +1710,182 @@ func (ec *executionContext) fieldContext_Mutation_createAuctionFromOnrampedAmoun
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createAuctionFromOnrampedAmountServerSig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_inspectBundleTakerId(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_inspectBundleTakerId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().InspectBundleTakerID(ctx, fc.Args["bundleTakerId"].(int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.BundleTakerOwnerStatus) graphql.Marshaler {
+			return ec.marshalNBundleTakerOwnerStatus2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐBundleTakerOwnerStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_inspectBundleTakerId(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BundleTakerOwnerStatus(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_inspectBundleTakerId_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_concludeAndAggregate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_concludeAndAggregate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConcludeAndAggregate(ctx, fc.Args["bundleTakerId"].(int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Aggregate) graphql.Marshaler {
+			return ec.marshalNAggregate2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregate(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_concludeAndAggregate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Aggregate(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_concludeAndAggregate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_cancelAuction(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_cancelAuction(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CancelAuction(ctx, fc.Args["bundleTakerId"].(int))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_cancelAuction(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_cancelAuction_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_submitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_submitBundleMakerFromOnrampedAmountServerSig(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SubmitBundleMakerFromOnrampedAmountServerSig(ctx, fc.Args["bundleTakerId"].(int), fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.BundleMakerInfo) graphql.Marshaler {
+			return ec.marshalNBundleMakerInfo2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐBundleMakerInfo(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_submitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_BundleMakerInfo(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_submitBundleMakerFromOnrampedAmountServerSig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2641,6 +3482,135 @@ func (ec *executionContext) unmarshalInputPermit(ctx context.Context, obj any) (
 
 // region    **************************** object.gotpl ****************************
 
+var aggregateImplementors = []string{"Aggregate"}
+
+func (ec *executionContext) _Aggregate(ctx context.Context, sel ast.SelectionSet, obj *model.Aggregate) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, aggregateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Aggregate")
+		case "id":
+			out.Values[i] = ec._Aggregate_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "takerWon":
+			out.Values[i] = ec._Aggregate_takerWon(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bundleTaker":
+			out.Values[i] = ec._Aggregate_bundleTaker(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bundleMaker":
+			out.Values[i] = ec._Aggregate_bundleMaker(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var aggregateBundleMakerImplementors = []string{"AggregateBundleMaker"}
+
+func (ec *executionContext) _AggregateBundleMaker(ctx context.Context, sel ast.SelectionSet, obj *model.AggregateBundleMaker) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, aggregateBundleMakerImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AggregateBundleMaker")
+		case "id":
+			out.Values[i] = ec._AggregateBundleMaker_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var aggregateBundleTakerImplementors = []string{"AggregateBundleTaker"}
+
+func (ec *executionContext) _AggregateBundleTaker(ctx context.Context, sel ast.SelectionSet, obj *model.AggregateBundleTaker) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, aggregateBundleTakerImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AggregateBundleTaker")
+		case "id":
+			out.Values[i] = ec._AggregateBundleTaker_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var auctionCreatedResultImplementors = []string{"AuctionCreatedResult"}
 
 func (ec *executionContext) _AuctionCreatedResult(ctx context.Context, sel ast.SelectionSet, obj *model.AuctionCreatedResult) graphql.Marshaler {
@@ -2666,6 +3636,102 @@ func (ec *executionContext) _AuctionCreatedResult(ctx context.Context, sel ast.S
 		case "bundleId":
 			out.Values[i] = ec._AuctionCreatedResult_bundleId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var bundleMakerInfoImplementors = []string{"BundleMakerInfo"}
+
+func (ec *executionContext) _BundleMakerInfo(ctx context.Context, sel ast.SelectionSet, obj *model.BundleMakerInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, bundleMakerInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BundleMakerInfo")
+		case "id":
+			out.Values[i] = ec._BundleMakerInfo_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bundleMakerId":
+			out.Values[i] = ec._BundleMakerInfo_bundleMakerId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var bundleTakerOwnerStatusImplementors = []string{"BundleTakerOwnerStatus"}
+
+func (ec *executionContext) _BundleTakerOwnerStatus(ctx context.Context, sel ast.SelectionSet, obj *model.BundleTakerOwnerStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, bundleTakerOwnerStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BundleTakerOwnerStatus")
+		case "id":
+			out.Values[i] = ec._BundleTakerOwnerStatus_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "concluded":
+			out.Values[i] = ec._BundleTakerOwnerStatus_concluded(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelled":
+			out.Values[i] = ec._BundleTakerOwnerStatus_cancelled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "earned":
+			out.Values[i] = ec._BundleTakerOwnerStatus_earned(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -2726,6 +3792,34 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "createAuctionFromOnrampedAmountServerSig":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createAuctionFromOnrampedAmountServerSig(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inspectBundleTakerId":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_inspectBundleTakerId(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "concludeAndAggregate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_concludeAndAggregate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelAuction":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_cancelAuction(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "submitBundleMakerFromOnrampedAmountServerSig":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_submitBundleMakerFromOnrampedAmountServerSig(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -3363,6 +4457,40 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
+func (ec *executionContext) marshalNAggregate2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregate(ctx context.Context, sel ast.SelectionSet, v model.Aggregate) graphql.Marshaler {
+	return ec._Aggregate(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAggregate2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregate(ctx context.Context, sel ast.SelectionSet, v *model.Aggregate) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Aggregate(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAggregateBundleMaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleMaker(ctx context.Context, sel ast.SelectionSet, v *model.AggregateBundleMaker) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AggregateBundleMaker(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAggregateBundleTaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleTaker(ctx context.Context, sel ast.SelectionSet, v *model.AggregateBundleTaker) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AggregateBundleTaker(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNAuctionCreatedResult2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAuctionCreatedResult(ctx context.Context, sel ast.SelectionSet, v model.AuctionCreatedResult) graphql.Marshaler {
 	return ec._AuctionCreatedResult(ctx, sel, &v)
 }
@@ -3391,6 +4519,34 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNBundleMakerInfo2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐBundleMakerInfo(ctx context.Context, sel ast.SelectionSet, v model.BundleMakerInfo) graphql.Marshaler {
+	return ec._BundleMakerInfo(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBundleMakerInfo2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐBundleMakerInfo(ctx context.Context, sel ast.SelectionSet, v *model.BundleMakerInfo) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BundleMakerInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNBundleTakerOwnerStatus2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐBundleTakerOwnerStatus(ctx context.Context, sel ast.SelectionSet, v model.BundleTakerOwnerStatus) graphql.Marshaler {
+	return ec._BundleTakerOwnerStatus(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBundleTakerOwnerStatus2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐBundleTakerOwnerStatus(ctx context.Context, sel ast.SelectionSet, v *model.BundleTakerOwnerStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BundleTakerOwnerStatus(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNCreateAccount2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐCreateAccount(ctx context.Context, v any) (model.CreateAccount, error) {

@@ -9,6 +9,21 @@ import (
 	"strconv"
 )
 
+type Aggregate struct {
+	ID          string                `json:"id"`
+	TakerWon    bool                  `json:"takerWon"`
+	BundleTaker *AggregateBundleTaker `json:"bundleTaker"`
+	BundleMaker *AggregateBundleMaker `json:"bundleMaker"`
+}
+
+type AggregateBundleMaker struct {
+	ID string `json:"id"`
+}
+
+type AggregateBundleTaker struct {
+	ID string `json:"id"`
+}
+
 type AuctionCreatedResult struct {
 	// Leftover amount that can still be spent by this user.
 	LeftoverBal string `json:"leftoverBal"`
@@ -16,6 +31,23 @@ type AuctionCreatedResult struct {
 	AmountSpent string `json:"amountSpent"`
 	// The BundleTaker identifier for use soon.
 	BundleID int `json:"bundleId"`
+}
+
+type BundleMakerInfo struct {
+	ID string `json:"id"`
+	// The Identifier for the BundleMaker that we can refer to later to determine if it will be
+	// included. Maker offers cannot be cancelled.
+	BundleMakerID int `json:"bundleMakerId"`
+}
+
+type BundleTakerOwnerStatus struct {
+	ID string `json:"id"`
+	// Was this BundleTaker matched to anyone?
+	Concluded bool `json:"concluded"`
+	// Was this BundleTaker cancelled?
+	Cancelled bool `json:"cancelled"`
+	// The amount earned from the BundleTaker being matched with a BundleMaker, if any.
+	Earned *string `json:"earned,omitempty"`
 }
 
 type CreateAccount struct {
