@@ -1,0 +1,13 @@
+
+FROM golang:alpine3.24 AS build
+
+WORKDIR /usr/src/rfqhub.9lives.so
+
+COPY go.mod go.mod
+COPY go.sum go.sum
+COPY lib/ lib/
+COPY cmd/ cmd/
+
+RUN cd cmd/graph && go build -o /bin/rfqhub-graph
+
+ENTRYPOINT ["/bin/rfqhub-graph"]

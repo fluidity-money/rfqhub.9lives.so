@@ -203,7 +203,7 @@ func getAddr(x string) ethCommon.Address {
 	if v := os.Getenv(x); ethCommon.IsHexAddress(v) {
 		return ethCommon.HexToAddress(v)
 	} else {
-		log.Fatalf("%v unset")
+		log.Fatalf("%v unset", x)
 		panic("unset")
 	}
 }
