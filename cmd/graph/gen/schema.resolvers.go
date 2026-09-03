@@ -307,8 +307,11 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 		)
 		return nil, fmt.Errorf("failed to tag the bundle with the signature")
 	}
-	// TODO: return the leftover, the amt, the bundle id
-	return nil, nil
+	return &model.AuctionCreatedResult {
+		LeftoverBal: strconv.FormatUint(leftover, 10),
+		AmountSpent: strconv.FormatUint(amt, 10),
+		BundleID: bundleTakerId,
+	}, nil
 }
 
 // InspectBundleTakerID is the resolver for the inspectBundleTakerId field.
