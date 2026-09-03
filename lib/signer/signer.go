@@ -1,11 +1,11 @@
 package signer
 
 import (
-	"os/exec"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"encoding/hex"
+	"os/exec"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 )

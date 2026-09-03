@@ -135,6 +135,41 @@ WHERE t.user_sig IS NOT NULL
 	AND t.maker_id IS NULL
 	AND t.created_by + INTERVAL '1 minute' > CURRENT_TIMESTAMP;
 
+CREATE FUNCTION rfqhub_inspect_bundle_taker_1 (
+	p_acc_addr ADDRESS,
+	p_bundle_taker_id INTEGER
+)
+RETURNS TABLE (
+	bundle_taker rfqhub_bundles_taker_1,
+	bundle_maker rfqhub_bundles_maker_1
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+	v_bundle_taker rfqhub_bundles_taker_1%ROWTYPE;
+BEGIN
+	SELECT t.* INTO v_bundle_taker
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = p_bundle_taker_id;
+
+	IF NOT FOUND THEN
+		RETURN;
+	END IF;
+	IF v_bundle_taker.acc_addr IS DISTINCT FROM p_acc_addr THEN
+		RAISE EXCEPTION 'account address does not match bundle taker %', p_bundle_taker_id;
+	END IF;
+
+	RETURN QUERY
+	SELECT v_bundle_taker, m
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = v_bundle_taker.maker_id
+	UNION ALL
+	SELECT v_bundle_taker, NULL::rfqhub_bundles_maker_1
+	WHERE v_bundle_taker.maker_id IS NULL;
+END;
+$$;
+
 -- The graph writes absolute balances from BalanceChanged events through this
 -- function, making replay and duplicate event delivery harmless.
 CREATE FUNCTION rfqhub_set_onramped_balance_1 (

@@ -3,16 +3,16 @@ package gen
 import (
 	"bytes"
 	"database/sql"
+	"encoding/binary"
 	"encoding/json"
 	"log/slog"
 	"math/big"
-	"encoding/binary"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 )
 
 const ProgDalek = "/usr/local/bin/ed25519-dalek-ph"

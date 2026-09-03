@@ -316,7 +316,22 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 
 // InspectBundleTakerID is the resolver for the inspectBundleTakerId field.
 func (r *mutationResolver) InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error) {
-	panic(fmt.Errorf("not implemented: InspectBundleTakerID - inspectBundleTakerId"))
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return nil, fmt.Errorf("not authed in the handler")
+	}
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return nil, fmt.Errorf("bad eoa address")
+	}
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	accAddrS := strings.ToLower(accAddr.String())
+	_ = r.Db.QueryRow(`
+SELECT bundle_taker, bundle_maker
+FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
+		accAddrS,
+		bundleTakerID,
+	)
+	panic("todo")
 }
 
 // ConcludeAndAggregate is the resolver for the concludeAndAggregate field.
