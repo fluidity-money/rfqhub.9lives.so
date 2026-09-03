@@ -17,7 +17,7 @@ CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	count INTEGER NOT NULL DEFAULT 0 CHECK (count >= 0)
 );
 
-CREATE TYPE RFQHUB_OUTCOME AS ENUM ('Bitcoin');
+CREATE TYPE RFQHUB_OUTCOME AS ENUM ('BitcoinPrice');
 
 -- A timestamplet is immutable once observed. Every aggregate for an outcome
 -- and expiry shares the same authoritative value.
@@ -121,6 +121,18 @@ CREATE INDEX rfqhub_bundles_maker_open_balance_idx
 ALTER TABLE rfqhub_bundles_taker_1
 	ADD CONSTRAINT rfqhub_bundles_taker_maker_fk
 	FOREIGN KEY (maker_id) REFERENCES rfqhub_bundles_maker_1 (id);
+
+-- BundleTakers remain open for maker selection for one minute after they are
+-- lodged. Unsigned takers are excluded because they cannot be submitted to the
+-- contract, and selecting a maker closes the auction immediately.
+CREATE VIEW rfqhub_bundles_taker_ongoing_1 AS
+SELECT
+	t.*,
+	t.created_by + INTERVAL '1 minute' AS auction_deadline
+FROM rfqhub_bundles_taker_1 AS t
+WHERE t.user_sig IS NOT NULL
+	AND t.maker_id IS NULL
+	AND t.created_by + INTERVAL '1 minute' > CURRENT_TIMESTAMP;
 
 -- The graph writes absolute balances from BalanceChanged events through this
 -- function, making replay and duplicate event delivery harmless.

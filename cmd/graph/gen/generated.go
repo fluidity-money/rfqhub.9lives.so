@@ -49,8 +49,15 @@ type ComplexityRoot struct {
 	}
 
 	OpenAuction struct {
-		ID          func(childComplexity int) int
-		OpenToBeWon func(childComplexity int) int
+		AccAddr       func(childComplexity int) int
+		BundleTakerID func(childComplexity int) int
+		DeadlineTs    func(childComplexity int) int
+		ExpiryTs      func(childComplexity int) int
+		ID            func(childComplexity int) int
+		IsUp          func(childComplexity int) int
+		OpenToBeWon   func(childComplexity int) int
+		Outcome       func(childComplexity int) int
+		PriceTarget   func(childComplexity int) int
 	}
 
 	OpenAuctions struct {
@@ -149,18 +156,60 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Mutation.OnrampAmount(childComplexity, args["amt"].(string), args["permit"].(*model.Permit), args["isDryrun"].(*bool)), true
 
+	case "OpenAuction.accAddr":
+		if e.ComplexityRoot.OpenAuction.AccAddr == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.AccAddr(childComplexity), true
+	case "OpenAuction.bundleTakerId":
+		if e.ComplexityRoot.OpenAuction.BundleTakerID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.BundleTakerID(childComplexity), true
+	case "OpenAuction.deadlineTs":
+		if e.ComplexityRoot.OpenAuction.DeadlineTs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.DeadlineTs(childComplexity), true
+	case "OpenAuction.expiryTs":
+		if e.ComplexityRoot.OpenAuction.ExpiryTs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.ExpiryTs(childComplexity), true
 	case "OpenAuction.id":
 		if e.ComplexityRoot.OpenAuction.ID == nil {
 			break
 		}
 
 		return e.ComplexityRoot.OpenAuction.ID(childComplexity), true
+	case "OpenAuction.isUp":
+		if e.ComplexityRoot.OpenAuction.IsUp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.IsUp(childComplexity), true
 	case "OpenAuction.openToBeWon":
 		if e.ComplexityRoot.OpenAuction.OpenToBeWon == nil {
 			break
 		}
 
 		return e.ComplexityRoot.OpenAuction.OpenToBeWon(childComplexity), true
+	case "OpenAuction.outcome":
+		if e.ComplexityRoot.OpenAuction.Outcome == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.Outcome(childComplexity), true
+	case "OpenAuction.priceTarget":
+		if e.ComplexityRoot.OpenAuction.PriceTarget == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OpenAuction.PriceTarget(childComplexity), true
 
 	case "OpenAuctions.id":
 		if e.ComplexityRoot.OpenAuctions.ID == nil {
@@ -286,10 +335,46 @@ enum Outcome {
 
 type OpenAuction {
   id: ID!,
+
   """
   Open to be won if this user is predicting incorrectly.
   """
-  openToBeWon: String!
+  openToBeWon: String!,
+
+  """
+  Owner's acc addr.
+  """
+  accAddr: String!,
+
+  """
+  Timestamp for then this bundle is considered unfilled if no-one applies with an ask.
+  """
+  deadlineTs: Int!,
+
+  """
+  Outcome that's being predicted against.
+  """
+  outcome: Outcome!,
+
+  """
+  Expiry for when this is considered safe to execute.
+  """
+  expiryTs: Int!,
+
+  """
+  Price target denominated as a integer.
+  """
+  priceTarget: String!,
+
+  """
+  Whether this position predicted that the outcome would go up or down.
+  """
+  isUp: Boolean!
+
+  """
+  ID that lets you address this bundle when making a request.
+  """
+  bundleTakerId: Int!
 }
 
 type OpenAuctions {
@@ -411,6 +496,20 @@ func (ec *executionContext) childFields_OpenAuction(ctx context.Context, field g
 		return ec.fieldContext_OpenAuction_id(ctx, field)
 	case "openToBeWon":
 		return ec.fieldContext_OpenAuction_openToBeWon(ctx, field)
+	case "accAddr":
+		return ec.fieldContext_OpenAuction_accAddr(ctx, field)
+	case "deadlineTs":
+		return ec.fieldContext_OpenAuction_deadlineTs(ctx, field)
+	case "outcome":
+		return ec.fieldContext_OpenAuction_outcome(ctx, field)
+	case "expiryTs":
+		return ec.fieldContext_OpenAuction_expiryTs(ctx, field)
+	case "priceTarget":
+		return ec.fieldContext_OpenAuction_priceTarget(ctx, field)
+	case "isUp":
+		return ec.fieldContext_OpenAuction_isUp(ctx, field)
+	case "bundleTakerId":
+		return ec.fieldContext_OpenAuction_bundleTakerId(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type OpenAuction", field.Name)
 }
@@ -996,6 +1095,167 @@ func (ec *executionContext) _OpenAuction_openToBeWon(ctx context.Context, field 
 }
 func (ec *executionContext) fieldContext_OpenAuction_openToBeWon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_accAddr(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_accAddr(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AccAddr, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_accAddr(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_deadlineTs(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_deadlineTs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DeadlineTs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_deadlineTs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_outcome(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_outcome(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Outcome, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.Outcome) graphql.Marshaler {
+			return ec.marshalNOutcome2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOutcome(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_outcome(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type Outcome does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_expiryTs(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_expiryTs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiryTs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_expiryTs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type Int does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_priceTarget(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_priceTarget(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PriceTarget, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_priceTarget(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_isUp(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_isUp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsUp, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_isUp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type Boolean does not have child fields"))
+}
+
+func (ec *executionContext) _OpenAuction_bundleTakerId(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_OpenAuction_bundleTakerId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BundleTakerID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_OpenAuction_bundleTakerId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("OpenAuction", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _OpenAuctions_id(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuctions) (ret graphql.Marshaler) {
@@ -2510,6 +2770,41 @@ func (ec *executionContext) _OpenAuction(ctx context.Context, sel ast.SelectionS
 			}
 		case "openToBeWon":
 			out.Values[i] = ec._OpenAuction_openToBeWon(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "accAddr":
+			out.Values[i] = ec._OpenAuction_accAddr(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deadlineTs":
+			out.Values[i] = ec._OpenAuction_deadlineTs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "outcome":
+			out.Values[i] = ec._OpenAuction_outcome(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiryTs":
+			out.Values[i] = ec._OpenAuction_expiryTs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "priceTarget":
+			out.Values[i] = ec._OpenAuction_priceTarget(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isUp":
+			out.Values[i] = ec._OpenAuction_isUp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bundleTakerId":
+			out.Values[i] = ec._OpenAuction_bundleTakerId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

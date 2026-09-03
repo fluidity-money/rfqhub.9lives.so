@@ -33,6 +33,20 @@ type OpenAuction struct {
 	ID string `json:"id"`
 	// Open to be won if this user is predicting incorrectly.
 	OpenToBeWon string `json:"openToBeWon"`
+	// Owner's acc addr.
+	AccAddr string `json:"accAddr"`
+	// Timestamp for then this bundle is considered unfilled if no-one applies with an ask.
+	DeadlineTs int `json:"deadlineTs"`
+	// Outcome that's being predicted against.
+	Outcome Outcome `json:"outcome"`
+	// Expiry for when this is considered safe to execute.
+	ExpiryTs int `json:"expiryTs"`
+	// Price target denominated as a integer.
+	PriceTarget string `json:"priceTarget"`
+	// Whether this position predicted that the outcome would go up or down.
+	IsUp bool `json:"isUp"`
+	// ID that lets you address this bundle when making a request.
+	BundleTakerID int `json:"bundleTakerId"`
 }
 
 type OpenAuctions struct {

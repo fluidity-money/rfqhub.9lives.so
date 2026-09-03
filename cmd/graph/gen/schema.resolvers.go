@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
 	"github.com/fluidity-money/9lives.so/lib/types/events"
@@ -335,7 +336,39 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 
 // OpenAuctions is the resolver for the openAuctions field.
 func (r *queryResolver) OpenAuctions(ctx context.Context) (*model.OpenAuctions, error) {
-	panic(fmt.Errorf("not implemented: OpenAuctions - openAuctions"))
+	rows, err := r.Db.Query(`
+SELECT acc_addr, amt, is_up, price_target, outcome, expiry, id
+FROM rfqhub_bundles_taker_ongoing_1`,
+	)
+	defer rows.Close()
+	openAuctions := model.OpenAuctions{
+		ID: fmt.Sprintf("auctions %v", time.Now()),
+	}
+	for rows.Next() {
+		o := new(model.OpenAuction)
+		var (
+			openToBeWon, priceTarget uint64
+			expiry                   time.Time
+		)
+		err = rows.Scan(
+			&o.AccAddr,
+			&openToBeWon,
+			&o.IsUp,
+			&priceTarget,
+			&o.Outcome,
+			&expiry,
+			&o.BundleTakerID,
+		)
+		if err != nil {
+			slog.Error("Error scanning open auctions", "err", err)
+			return nil, fmt.Errorf("scanning open auctions")
+		}
+		o.OpenToBeWon = strconv.FormatUint(openToBeWon, 10)
+		o.PriceTarget = strconv.FormatUint(priceTarget, 10)
+		o.ExpiryTs = int(expiry.Unix())
+		openAuctions.OpenAuctions = append(openAuctions.OpenAuctions, o)
+	}
+	return &openAuctions, nil
 }
 
 // Mutation returns MutationResolver implementation.

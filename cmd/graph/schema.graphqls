@@ -5,10 +5,46 @@ enum Outcome {
 
 type OpenAuction {
   id: ID!,
+
   """
   Open to be won if this user is predicting incorrectly.
   """
-  openToBeWon: String!
+  openToBeWon: String!,
+
+  """
+  Owner's acc addr.
+  """
+  accAddr: String!,
+
+  """
+  Timestamp for then this bundle is considered unfilled if no-one applies with an ask.
+  """
+  deadlineTs: Int!,
+
+  """
+  Outcome that's being predicted against.
+  """
+  outcome: Outcome!,
+
+  """
+  Expiry for when this is considered safe to execute.
+  """
+  expiryTs: Int!,
+
+  """
+  Price target denominated as a integer.
+  """
+  priceTarget: String!,
+
+  """
+  Whether this position predicted that the outcome would go up or down.
+  """
+  isUp: Boolean!
+
+  """
+  ID that lets you address this bundle when making a request.
+  """
+  bundleTakerId: Int!
 }
 
 type OpenAuctions {
