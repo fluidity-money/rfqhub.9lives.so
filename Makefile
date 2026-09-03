@@ -40,6 +40,9 @@ rfqhub-cli-client-signing: ${OUT_CLI_SERVER_SIGNING}
 rfqhub-cli-borsh: ${OUT_CLI_SERVER_SIGNING}
 	@cp ${OUT_CLI_BORSH} rfqhub-cli-borsh
 
+rfqhub-graph: $(shell find cmd/graph go.mod go.sum -type f)
+	@cd cmd/graph && go build -o ../../rfqhub-graph
+
 clean:
 	@cargo clean
-	@rm -f ${OUT_CLI} ${OUT_WASM}
+	@rm -f ${OUT_CLI} ${OUT_WASM} rfqhub-graph
