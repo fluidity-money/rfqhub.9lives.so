@@ -40,7 +40,7 @@ const (
 	EnvTimescaleUri = "SPN_TIMESCALE"
 
 	// EnvGethAddr to connect to make requests to Arbitrum One.
-	EnvGethAddr = "SPN_GETH_URL"
+	EnvGethAddr = "SPN_SUPERPOSITION_URL"
 
 	// EnvAccPrivateKey to execute transactions on the behalf of users with.
 	EnvAccPrivateKey = "SPN_ACCOUNTS_PRIVATE_KEY"

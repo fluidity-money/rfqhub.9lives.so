@@ -64,17 +64,6 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 #[cfg(all(feature = "arbos", feature = "arbitrum"))]
 compile_error!("arbos and arbitrum cannot both be enabled");
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
-#[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
-pub struct FillerArgs {
-    /// The amount of fUSDC that should be sent to the winner if they win.
-    pub fusdc_on_win: u64,
-    /// The sender of this blob. This is the account address. It verifies the signature
-    /// and needs to have its assets parked already in the contract.
-    pub acc_sender: [u8; 20],
-}
-
 /// Onramping topic that's emitted on the underlying balance changing
 /// due to onrampind and offramping.
 pub const TOPIC_BALANCE_CHANGED: U =
