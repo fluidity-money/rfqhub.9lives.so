@@ -43,6 +43,7 @@ fn need {
 		echo $prog': '$1' not in path' >[1=2]
 		exit 1
 	}
+	true
 }
 
 # Send a GraphQL request. Mutations require an Authorization value; the
@@ -84,6 +85,7 @@ fn require_auth {
 		eoa=`{cast wallet address --private-key $SPN_SUPERPOSITION_KEY}
 		auth=$eoa:$SPN_ACCOUNTS_SECRET
 	}
+	true
 }
 
 # Print a fresh USDC permit JSON {v,r,s,deadline} signing the owner's USDC

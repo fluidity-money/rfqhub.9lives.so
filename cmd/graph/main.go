@@ -210,7 +210,7 @@ func writeUnauthorised(w http.ResponseWriter) {
 }
 
 func getAddr(x string) ethCommon.Address {
-	if v := os.Getenv(x); !ethCommon.IsHexAddress(v) {
+	if v := os.Getenv(x); ethCommon.IsHexAddress(v) {
 		return ethCommon.HexToAddress(v)
 	} else {
 		log.Fatalf("%v unset: %v", x, v)
