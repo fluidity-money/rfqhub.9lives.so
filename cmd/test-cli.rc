@@ -1,0 +1,179 @@
+#!/usr/bin/env -S rc -e
+
+prog=`{basename $0}
+rfqhub_graph_addr=$RFQHUB_GRAPH_ADDR
+if(~ $rfqhub_graph_addr '')
+	rfqhub_graph_addr=http://localhost:8080/query
+
+fn usage {
+	echo 'usage:' >[1=2]
+	echo '  '$prog' onramp amount [dry-run]' >[1=2]
+	echo '  '$prog' onramp amount permit-deadline permit-v permit-r permit-s [dry-run]' >[1=2]
+	echo '  '$prog' taker min-amount max-amount up|down price-target expiry [outcome]' >[1=2]
+	echo '  '$prog' auctions' >[1=2]
+	echo >[1=2]
+	echo 'environment:' >[1=2]
+	echo '  RFQHUB_GRAPH_ADDR  GraphQL endpoint (default http://localhost:8080/query)' >[1=2]
+	echo '  SPN_RFQHUB_AUTH    Authorization value: eoa-address:secret; or set' >[1=2]
+	echo '  SPN_SUPERPOSITION_KEY and SPN_ACCOUNTS_SECRET to derive it' >[1=2]
+	exit 2
+}
+
+fn need {
+	if(! which $1 >/dev/null) {
+		echo $prog': '$1' not in path' >[1=2]
+		exit 1
+	}
+}
+
+# Send a GraphQL request. Mutations require SPN_RFQHUB_AUTH; the auctions
+# query is public. GraphQL errors are printed and produce a non-zero status.
+fn request {
+	need curl
+	auth=$1
+	if(~ $auth '') {
+		curl -fsS \
+			-H 'Content-Type: application/json' \
+			--data-binary @- \
+			$rfqhub_graph_addr
+	}
+	if not {
+		curl -fsS \
+			-H 'Content-Type: application/json' \
+			-H 'Authorization: '$auth \
+			--data-binary @- \
+			$rfqhub_graph_addr
+	}
+}
+
+fn render {
+	need jq
+	jq -e 'if .errors then (.errors | map(.message) | join("\n") | error) else .data end'
+}
+
+fn require_auth {
+	auth=$SPN_RFQHUB_AUTH
+	if(~ $auth '') {
+		if(~ $SPN_SUPERPOSITION_KEY '' || ~ $SPN_ACCOUNTS_SECRET '') {
+			echo $prog': set SPN_RFQHUB_AUTH=eoa-address:secret, or both' >[1=2]
+			echo 'SPN_SUPERPOSITION_KEY and SPN_ACCOUNTS_SECRET' >[1=2]
+			exit 2
+		}
+		need cast
+		eoa=`{cast wallet address --private-key $SPN_SUPERPOSITION_KEY}
+		auth=$eoa:$SPN_ACCOUNTS_SECRET
+	}
+}
+
+fn onramp {
+	need jq
+	require_auth
+	if(~ $#* 0)
+		usage
+
+	amt=$1
+	shift
+	dryrun=false
+	permit=null
+
+	switch($#*) {
+	case 0
+	case 1
+		if(! ~ $1 dry-run)
+			usage
+		dryrun=true
+	case 4 5
+		deadline=$1
+		permitv=$2
+		permitr=$3
+		permits=$4
+		shift; shift; shift; shift
+		if(~ $#* 1) {
+			if(! ~ $1 dry-run)
+				usage
+			dryrun=true
+		}
+		permit=`{jq -cn \
+			--arg deadline $deadline \
+			--arg permitv $permitv \
+			--arg permitr $permitr \
+			--arg permits $permits \
+			'{deadline: ($deadline | tonumber), permitV: ($permitv | tonumber), permitR: $permitr, permitS: $permits}'}
+	case *
+		usage
+	}
+
+	jq -cn \
+		--arg query 'mutation Onramp($amt: String!, $permit: Permit, $dryrun: Boolean) { onrampAmount(amt: $amt, permit: $permit, isDryrun: $dryrun) }' \
+		--arg amt $amt \
+		--argjson permit $permit \
+		--argjson dryrun $dryrun \
+		'{query: $query, variables: {amt: $amt, permit: $permit, dryrun: $dryrun}}' \
+		| request $auth \
+		| render
+}
+
+fn taker {
+	need jq
+	require_auth
+	if(! ~ $#* 5 6)
+		usage
+
+	minamount=$1
+	maxamount=$2
+	direction=$3
+	pricetarget=$4
+	expiry=$5
+	outcome=BitcoinPrice
+	if(~ $#* 6)
+		outcome=$6
+
+	switch($direction) {
+	case up true
+		isup=true
+	case down false
+		isup=false
+	case *
+		usage
+	}
+
+	jq -cn \
+		--arg query 'mutation CreateTaker($minAmount: String!, $maxAmount: String!, $isUp: Boolean!, $priceTarget: String!, $outcome: Outcome!, $expiry: Int!) { createAuctionFromOnrampedAmountServerSig(minAmount: $minAmount, maxAmount: $maxAmount, isUp: $isUp, priceTarget: $priceTarget, outcome: $outcome, expiry: $expiry) { leftoverBal amountSpent bundleId } }' \
+		--arg minamount $minamount \
+		--arg maxamount $maxamount \
+		--argjson isup $isup \
+		--arg pricetarget $pricetarget \
+		--arg outcome $outcome \
+		--arg expiry $expiry \
+		'{query: $query, variables: {minAmount: $minamount, maxAmount: $maxamount, isUp: $isup, priceTarget: $pricetarget, outcome: $outcome, expiry: ($expiry | tonumber)}}' \
+		| request $auth \
+		| render
+}
+
+fn auctions {
+	need jq
+	if(! ~ $#* 0)
+		usage
+
+	jq -cn \
+		--arg query 'query OpenAuctions { openAuctions { openAuctions { id openToBeWon accAddr deadlineTs outcome expiryTs priceTarget isUp bundleTakerId } } }' \
+		'{query: $query}' \
+		| request '' \
+		| render
+}
+
+switch($1) {
+case onramp
+	shift
+	onramp $*
+case taker taker-bundle
+	shift
+	taker $*
+case auctions open-auctions
+	shift
+	auctions $*
+case help -h --help ''
+	usage
+case *
+	usage
+}
