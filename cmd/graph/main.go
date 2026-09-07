@@ -36,7 +36,7 @@ import (
 var ChainId = new(big.Int).SetInt64(42161)
 
 // HttpUnixSocket that we listen on using a socket.
-const HttpUnixSocket = "/run/rfqhub.9lives.so.sock"
+const HttpUnixSocket = "/run/rfqhub.9lives.so/http.sock"
 
 const (
 	// EnvTimescaleUri to use as the database for private key loading
@@ -213,7 +213,7 @@ func getAddr(x string) ethCommon.Address {
 	if v := os.Getenv(x); ethCommon.IsHexAddress(v) {
 		return ethCommon.HexToAddress(v)
 	} else {
-		log.Fatalf("%v unset", x)
+		log.Fatalf("%v unset: %v", x, v)
 		panic("unset")
 	}
 }
