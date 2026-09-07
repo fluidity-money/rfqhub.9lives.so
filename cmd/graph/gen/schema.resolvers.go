@@ -378,6 +378,10 @@ func (r *queryResolver) OpenAuctions(ctx context.Context) (*model.OpenAuctions, 
 SELECT acc_addr, amt, is_up, price_target, outcome, expiry, id
 FROM rfqhub_bundles_taker_ongoing_1`,
 	)
+	if err != nil {
+		slog.Error("Error retrieving ongoing bundles", "err", err)
+		return nil, fmt.Errorf("error receiving ongoing bundles")
+	}
 	defer rows.Close()
 	openAuctions := model.OpenAuctions{
 		ID: fmt.Sprintf("auctions %v", time.Now()),
