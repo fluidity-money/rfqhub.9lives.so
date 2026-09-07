@@ -10,10 +10,11 @@ import (
 	"encoding/json"
 	"log"
 	"log/slog"
+	"os"
 	"math/rand"
 	"net/http"
-	"os"
 	"strings"
+	"net"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen"
 
@@ -33,6 +34,9 @@ import (
 
 // ChainId to correspond to Arbitrum.
 var ChainId = new(big.Int).SetInt64(42161)
+
+// HttpUnixSocket that we listen on using a socket.
+const HttpUnixSocket = "/run/rfqhub.9lives.so.sock"
 
 const (
 	// EnvTimescaleUri to use as the database for private key loading
@@ -190,7 +194,13 @@ func main() {
 	})
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/query", srv)
-	panic(http.ListenAndServe(os.Getenv("SPN_LISTEN_ADDR"), nil))
+	_ = os.Remove(HttpUnixSocket)
+	l, err := net.Listen("unix", HttpUnixSocket)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer l.Close()
+	panic(http.Serve(l, nil))
 }
 
 func writeUnauthorised(w http.ResponseWriter) {

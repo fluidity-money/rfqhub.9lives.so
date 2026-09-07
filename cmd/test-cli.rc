@@ -1,21 +1,40 @@
 #!/usr/bin/env -S rc -e
 
 prog=`{basename $0}
+
 rfqhub_graph_addr=$RFQHUB_GRAPH_ADDR
 if(~ $rfqhub_graph_addr '')
-	rfqhub_graph_addr=http://localhost:8080/query
+	rfqhub_graph_addr=https://rfqhub.9lives.so/query
+
+# Superposition mainnet defaults; override with the matching SPN_/RFQHUB_ vars.
+usdc_addr=$SPN_RFQHUB_USDC_ADDR
+if(~ $usdc_addr '')
+	usdc_addr=0x6c030c5CC283F791B26816f325b9C632d964F8A1
+accounts_addr=$SPN_RFQHUB_ACCOUNTS_ADDR
+if(~ $accounts_addr '')
+	accounts_addr=0xb838e2C1C9e525dFE18D35cd906aEe141ce9CfC2
+rpc_url=$SPN_SUPERPOSITION_URL
+if(~ $rpc_url '')
+	rpc_url=https://rpc.superposition.so
 
 fn usage {
 	echo 'usage:' >[1=2]
 	echo '  '$prog' onramp amount [dry-run]' >[1=2]
-	echo '  '$prog' onramp amount permit-deadline permit-v permit-r permit-s [dry-run]' >[1=2]
 	echo '  '$prog' taker min-amount max-amount up|down price-target expiry [outcome]' >[1=2]
 	echo '  '$prog' auctions' >[1=2]
 	echo >[1=2]
+	echo 'onramp signs a fresh USDC permit for SPN_SUPERPOSITION_KEY (owner ->' >[1=2]
+	echo 'accounts factory as spender) using the on-chain nonce, then submits' >[1=2]
+	echo 'onrampAmount to settle USDC into the onramped balance.' >[1=2]
+	echo >[1=2]
 	echo 'environment:' >[1=2]
-	echo '  RFQHUB_GRAPH_ADDR  GraphQL endpoint (default http://localhost:8080/query)' >[1=2]
-	echo '  SPN_RFQHUB_AUTH    Authorization value: eoa-address:secret; or set' >[1=2]
-	echo '  SPN_SUPERPOSITION_KEY and SPN_ACCOUNTS_SECRET to derive it' >[1=2]
+	echo '  RFQHUB_GRAPH_ADDR       GraphQL endpoint (default https://rfqhub.9lives.so/query)' >[1=2]
+	echo '  SPN_SUPERPOSITION_KEY   private key used to derive eoa and sign the permit' >[1=2]
+	echo '  SPN_SUPERPOSITION_URL   RPC (default https://rpc.superposition.so)' >[1=2]
+	echo '  SPN_ACCOUNTS_SECRET     account secret for Authorization; or set directly:' >[1=2]
+	echo '  SPN_RFQHUB_AUTH         full Authorization value: eoa-address:secret' >[1=2]
+	echo '  SPN_RFQHUB_USDC_ADDR    USDC contract (default 0x6c03..8A1)' >[1=2]
+	echo '  SPN_RFQHUB_ACCOUNTS_ADDR  accounts-factory spender (default 0xb838..CfC2)' >[1=2]
 	exit 2
 }
 
@@ -26,8 +45,8 @@ fn need {
 	}
 }
 
-# Send a GraphQL request. Mutations require SPN_RFQHUB_AUTH; the auctions
-# query is public. GraphQL errors are printed and produce a non-zero status.
+# Send a GraphQL request. Mutations require an Authorization value; the
+# auctions query is public. GraphQL errors are printed, non-zero exit.
 fn request {
 	need curl
 	auth=$1
@@ -51,6 +70,8 @@ fn render {
 	jq -e 'if .errors then (.errors | map(.message) | join("\n") | error) else .data end'
 }
 
+# Set $auth. Prefer an explicit SPN_RFQHUB_AUTH; otherwise derive the EOA from
+# the private key and join it to the account secret, like accounts-9lives.rc.
 fn require_auth {
 	auth=$SPN_RFQHUB_AUTH
 	if(~ $auth '') {
@@ -65,8 +86,37 @@ fn require_auth {
 	}
 }
 
+# Print a fresh USDC permit JSON {v,r,s} signing the owner's USDC allowance to
+# the accounts factory, using the on-chain nonce and a one-hour deadline.
+fn make_permit {
+	need cast
+	need make-permit
+	if(~ $SPN_SUPERPOSITION_KEY '') {
+		echo $prog': SPN_SUPERPOSITION_KEY unset (needed to sign the permit)' >[1=2]
+		exit 2
+	}
+	eoa=`{cast wallet address --private-key $SPN_SUPERPOSITION_KEY}
+	nonce=`{cast call --rpc-url $rpc_url $usdc_addr 'nonces(address)(uint256)' $eoa}
+	if(~ $nonce '') {
+		echo $prog': failed to read USDC nonce for '$eoa >[1=2]
+		exit 1
+	}
+	now=`{date +%s}
+	deadline=`{echo $now + 3600 | awk '{print $1+$3}'}
+	# make-permit PRIVKEY SPENDER NONCE TOKEN DEADLINE -> {v,r,s}; add the
+	# deadline so it can be carried into the permit input object too.
+	sig=`{make-permit $SPN_SUPERPOSITION_KEY $accounts_addr $nonce $usdc_addr $deadline}
+	jq -cn \
+		--argjson s $sig \
+		--argjson deadline $deadline \
+		'$s + {deadline: $deadline}'
+}
+
 fn onramp {
 	need jq
+	need curl
+	need cast
+	need make-permit
 	require_auth
 	if(~ $#* 0)
 		usage
@@ -74,41 +124,24 @@ fn onramp {
 	amt=$1
 	shift
 	dryrun=false
-	permit=null
-
 	switch($#*) {
 	case 0
 	case 1
 		if(! ~ $1 dry-run)
 			usage
 		dryrun=true
-	case 4 5
-		deadline=$1
-		permitv=$2
-		permitr=$3
-		permits=$4
-		shift; shift; shift; shift
-		if(~ $#* 1) {
-			if(! ~ $1 dry-run)
-				usage
-			dryrun=true
-		}
-		permit=`{jq -cn \
-			--arg deadline $deadline \
-			--arg permitv $permitv \
-			--arg permitr $permitr \
-			--arg permits $permits \
-			'{deadline: ($deadline | tonumber), permitV: ($permitv | tonumber), permitR: $permitr, permitS: $permits}'}
 	case *
 		usage
 	}
 
+	permit=`{make_permit}
+
 	jq -cn \
-		--arg query 'mutation Onramp($amt: String!, $permit: Permit, $dryrun: Boolean) { onrampAmount(amt: $amt, permit: $permit, isDryrun: $dryrun) }' \
+		--arg query 'mutation Onramp($amt: String!, $permit: Permit!, $dryrun: Boolean) { onrampAmount(amt: $amt, permit: $permit, isDryrun: $dryrun) }' \
 		--arg amt $amt \
-		--argjson permit $permit \
+		--argjson p $permit \
 		--argjson dryrun $dryrun \
-		'{query: $query, variables: {amt: $amt, permit: $permit, dryrun: $dryrun}}' \
+		'{query: $query, variables: {amt: $amt, permit: {deadline: $p.deadline, permitV: $p.v, permitR: $p.r, permitS: $p.s}, dryrun: $dryrun}}' \
 		| request $auth \
 		| render
 }
