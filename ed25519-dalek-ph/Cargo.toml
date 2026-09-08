@@ -1,0 +1,11 @@
+[package]
+name = "ed25519-dalek-ph"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+const-hex.version = "1.17.0"
+ed25519-dalek = { version = "3.0.0", default-features = false, features = ["digest"] }
+sha2 = "0.10.9"
+bobcat-sdk = { workspace = true, features = ["ed25519-dalek"] }

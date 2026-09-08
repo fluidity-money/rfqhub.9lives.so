@@ -2,8 +2,8 @@
 mod test {
     use proptest::prelude::*;
     use superposition_librfq::{
-        strategies::{inverted_aggregate, InvertedAggregate, PriceDirection},
         AggregateEnum, OnrampingSource,
+        strategies::{InvertedAggregate, PriceDirection, inverted_aggregate},
     };
 
     fn as_u64(value: [u8; 6]) -> u64 {

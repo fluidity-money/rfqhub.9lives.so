@@ -12,10 +12,10 @@ import (
 
 const (
 	// ProgClientSigningPath to invoke to get client signing performed
-	ProgClientSigningPath = "/usr/local/bin/rfqhub-cli-client-signing"
+	ProgClientSigningPath = "/bin/rfqhub-cli-client-signing"
 
 	// ProgServerSigningPath to invoke to get server signing performed
-	ProgServerSigningPath = "/usr/local/bin/rfqhub-cli-client-signing"
+	ProgServerSigningPath = "/bin/rfqhub-cli-client-signing"
 )
 
 func ServerSignAggregate(args types.Args) (sig [64]byte, err error) {

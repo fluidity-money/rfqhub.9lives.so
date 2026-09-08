@@ -15,7 +15,7 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 )
 
-const ProgDalek = "/usr/local/bin/ed25519-dalek-ph"
+const ProgDalek = "/bin/ed25519-dalek-ph"
 
 func isDryrun(x *bool) bool {
 	if x != nil && *x {

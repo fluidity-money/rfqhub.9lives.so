@@ -1,5 +1,21 @@
 
-FROM golang:alpine3.24 AS build
+FROM rust:alpine3.24 AS build-rust
+
+WORKDIR /usr/src/rfqhub.9lives.so
+
+COPY Cargo.toml Cargo.toml
+COPY Cargo.lock Cargo.lock
+COPY cli-client-signing cli-client-signing
+COPY cli-server-signing cli-server-signing
+COPY superposition_librfq superposition_librfq
+COPY ed25519-dalek-ph ed25519-dalek-ph
+COPY contract contract
+COPY cli-borsh cli-borsh
+COPY .cargo .cargo
+
+RUN cargo build --release -p cli-client-signing -p cli-server-signing -p ed25519-dalek-ph
+
+FROM golang:alpine3.24 AS build-go
 
 WORKDIR /usr/src/rfqhub.9lives.so
 
@@ -8,6 +24,14 @@ COPY go.sum go.sum
 COPY lib/ lib/
 COPY cmd/ cmd/
 
-RUN cd cmd/graph && go build -o /bin/rfqhub-graph
+RUN cd cmd/graph && go build -o ../../rfqhub-graph
+
+FROM alpine:3.24 AS runner
+
+COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/cli-client-signing /bin/cli-client-signing
+COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/cli-server-signing /bin/cli-server-signing
+COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/ed25519-dalek-ph /bin/ed25519-dalek-ph
+
+COPY --from=build-go /usr/src/rfqhub.9lives.so/rfqhub-graph /bin/rfqhub-graph
 
 ENTRYPOINT ["/bin/rfqhub-graph"]

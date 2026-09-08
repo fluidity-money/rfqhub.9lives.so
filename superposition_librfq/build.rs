@@ -31,34 +31,42 @@ fn main() {
     let commit_hash = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .output()
-        .unwrap();
-    assert!(
-        commit_hash.status.success(),
-        "`git rev-parse HEAD` failed: {}",
-        String::from_utf8_lossy(&commit_hash.stderr)
-    );
-    let commit_hash = String::from_utf8(commit_hash.stdout)
-        .unwrap()
-        .trim()
-        .to_string();
-    let bytes = commit_to_u_bytes(&commit_hash);
-    let arr = bytes
-        .iter()
-        .map(|b| format!("0x{b:02x}"))
-        .collect::<Vec<_>>()
-        .join(", ");
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|hash| hash.trim().to_string())
+        .filter(|hash| hash.len() == 40);
+    let (commit_doc, commit) = match commit_hash {
+        Some(commit_hash) => {
+            let bytes = commit_to_u_bytes(&commit_hash);
+
+            let arr = bytes
+                .iter()
+                .map(|b| format!("0x{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            (
+                format!("Hash git commit {commit_hash}"),
+                format!("U([{arr}])"),
+            )
+        }
+
+        None => ("Git commit unavailable".to_string(), "U::MAX".to_string()),
+    };
+
     let generated = format!(
         r#"use bobcat_sdk::maths::U;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Version {{
-    /// Hash git commit {commit_hash}
+    /// {commit_doc}
     pub commit: U,
 }}
 
 impl Version {{
     pub const CURRENT: Self = Self {{
-        commit: U([{arr}]),
+        commit: {commit},
     }};
 }}
 
@@ -75,7 +83,6 @@ impl From<Version> for [u8; 32] {{
 }}
 "#
     );
-
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is set by Cargo"));
     fs::write(out_dir.join("version.rs"), generated).expect("write generated version module");
 }

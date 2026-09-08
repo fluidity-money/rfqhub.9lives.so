@@ -621,6 +621,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-dalek-ph"
+version = "0.1.0"
+dependencies = [
+ "bobcat-sdk",
+ "const-hex",
+ "ed25519-dalek",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
