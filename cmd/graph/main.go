@@ -70,7 +70,6 @@ const (
 type authMiddleware struct {
 	db          *sql.DB
 	srv         http.Handler
-	adminSecret string
 }
 
 // ServeHTTP with a copy and paste from the accounts system
@@ -93,13 +92,6 @@ func (a authMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch bearer := r.Header.Get("Authorization"); bearer {
 	case "":
 		a.srv.ServeHTTP(w, r)
-	case a.adminSecret:
-		adminSecretEnabled := a.adminSecret != ""
-		a.srv.ServeHTTP(w, r.WithContext(context.WithValue(
-			r.Context(),
-			"is admin",
-			adminSecretEnabled,
-		)))
 	default:
 		bearerS := strings.Split(bearer, ":")
 		eoaPreferred_ := bearerS[0]
@@ -196,8 +188,8 @@ func main() {
 	srv.Use(extension.AutomaticPersistedQuery{
 		Cache: lru.New[string](100),
 	})
-	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
-	http.Handle("/query", srv)
+	http.Handle("/playground", playground.Handler("GraphQL playground", "/query"))
+	http.Handle("/", authMiddleware{db, srv})
 	_ = os.Remove(HttpUnixSocket)
 	l, err := net.Listen("unix", HttpUnixSocket)
 	if err != nil {
