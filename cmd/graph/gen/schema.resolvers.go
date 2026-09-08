@@ -135,6 +135,11 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 		return "", fmt.Errorf("below the minimum amount (%v)", amt)
 	}
 	msTs := pickMsTs()
+	slog.Debug("About to onramp a user using the minting infra",
+		"snowflake", snowflake,
+		"eoa", eoa,
+		"amt", amt_,
+	)
 	solveArgsSigArgs, err := convertor.CreateSolveArgsSigArgs(
 		ProgDalek,
 		r.RfqhubAddr,
@@ -142,6 +147,10 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 		amt_,
 		permit,
 		msTs,
+	)
+	slog.Debug("Done creating SolveArgsSigArgs",
+		"snowflake", snowflake,
+		"solveArgSigArgs", solveArgsSigArgs,
 	)
 	if err != nil {
 		return "", fmt.Errorf("mint tagging: %v", err)
@@ -151,6 +160,10 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 		log.Fatalf("error picking private key: %v", err)
 	}
 	isDryrun_ := isDryrun != nil && *isDryrun
+	slog.Debug("About to send arguments",
+		"snowflake", snowflake,
+		"sender", *sender,
+	)
 	h, gasLimit, err := acc_client.SendArguments(
 		ctx,
 		r.Client,

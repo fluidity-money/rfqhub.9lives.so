@@ -61,6 +61,7 @@ fn require_auth {
 	if(~ $SPN_ACCOUNTS_SECRET '') {
 		usage
 	}
+	true
 }
 
 # Print a fresh USDC permit JSON {v,r,s,deadline} signing the owner's USDC
@@ -96,6 +97,7 @@ fn onramp {
 	need cast
 	need make-permit
 	require_auth
+
 	if(~ $#* 0)
 		usage
 
@@ -117,8 +119,7 @@ fn onramp {
 		--arg amt $amt \
 		--argjson dryrun $dryrun \
 		'{query: $query, variables: {amt: $amt, permit: {deadline: .deadline, permitV: .v, permitR: .r, permitS: .s}, dryrun: $dryrun}}' \
-		| request $auth \
-		| render
+		| request $auth
 }
 
 fn taker {

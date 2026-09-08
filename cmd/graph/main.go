@@ -4,6 +4,7 @@ package main
 
 import (
 	"math/big"
+	"runtime/debug"
 	"context"
 	"database/sql"
 	"encoding/hex"
@@ -39,6 +40,9 @@ var ChainId = new(big.Int).SetInt64(42161)
 const HttpUnixSocket = "/run/rfqhub.9lives.so/http.sock"
 
 const (
+	// EnvDebug to print logs.
+	EnvDebug = "SPN_DEBUG"
+
 	// EnvTimescaleUri to use as the database for private key loading
 	// and authentication key loading.
 	EnvTimescaleUri = "SPN_TIMESCALE"
@@ -216,4 +220,29 @@ func getAddr(x string) ethCommon.Address {
 		log.Fatalf("%v unset: %v", x, v)
 		panic("unset")
 	}
+}
+
+func init() {
+	logLevel := slog.LevelInfo
+	if os.Getenv(EnvDebug) != "" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	var revision string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				revision = setting.Value
+				break
+			}
+		}
+	}
+	logger.
+		With("revision", revision).
+		With("environment", "backend").
+		With("command line", strings.Join(os.Args, ",")).
+		With("is debug", logLevel == slog.LevelDebug)
+	slog.SetDefault(logger)
 }
