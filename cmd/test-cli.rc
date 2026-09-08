@@ -58,9 +58,11 @@ fn render {
 }
 
 fn require_auth {
+	eoa=`{cast wallet address --private-key $SPN_SUPERPOSITION_KEY}
 	if(~ $SPN_ACCOUNTS_SECRET '') {
 		usage
 	}
+	auth=$eoa:$SPN_ACCOUNTS_SECRET
 	true
 }
 
@@ -70,11 +72,11 @@ fn require_auth {
 fn make_permit {
 	need cast
 	need make-permit
+	require_auth
 	if(~ $SPN_SUPERPOSITION_KEY '') {
 		echo $prog': SPN_SUPERPOSITION_KEY unset (needed to sign the permit)' >[1=2]
 		exit 2
 	}
-	eoa=`{cast wallet address --private-key $SPN_SUPERPOSITION_KEY}
 	nonce=`{cast call --rpc-url $rpc_url $usdc_addr 'nonces(address)(uint256)' $eoa}
 	if(~ $nonce '') {
 		echo $prog': failed to read USDC nonce for '$eoa >[1=2]

@@ -9,3 +9,4 @@ serde_json = "1.0.151"
 superposition_librfq = { path = "../superposition_librfq", features = ["std", "serde"] }
 const-hex.workspace = true
 borsh.workspace = true
+superposition_libaccounts.workspace = true

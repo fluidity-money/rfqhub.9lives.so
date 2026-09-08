@@ -1,6 +1,6 @@
 use ed25519_dalek::SigningKey;
 
-use bobcat_sdk::precompiles::superposition::{ed25519_sign_post, BcSha512};
+use bobcat_sdk::precompiles::superposition::{BcSha512, ed25519_sign_post};
 
 use std::io::Write;
 
@@ -11,8 +11,8 @@ fn main() {
         .try_into()
         .unwrap();
     let d = BcSha512(d);
-    let k = SigningKey::from_bytes(&
-        const_hex::decode(std::env::var("SPN_ACCOUNTS_PRIVATE_KEY").unwrap())
+    let k = SigningKey::from_bytes(
+        &const_hex::decode(std::env::var("SPN_ACCOUNTS_PRIVATE_KEY").unwrap())
             .unwrap()
             .try_into()
             .unwrap(),

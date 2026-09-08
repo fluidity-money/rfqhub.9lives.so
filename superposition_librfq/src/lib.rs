@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
+
 use bobcat_sdk::{alloc::bobcat_allocator, cd::const_keccak256, maths::U};
 
 bobcat_allocator!();
@@ -243,6 +245,12 @@ pub enum Args {
         args: AggregateEnum,
         is_taker: bool,
     },
+}
+
+impl Display for Args {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{self:?}")
+    }
 }
 
 #[cfg(feature = "proptest")]

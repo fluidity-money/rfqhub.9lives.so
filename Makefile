@@ -26,7 +26,7 @@ rfqhub.9lives.so.wasm: ${OUT_WASM}
 	@./wasm-post.sh ${OUT_WASM} rfqhub.9lives.so.wasm
 	@./check-codesize.sh rfqhub.9lives.so.wasm
 
-${OUT_CLI_SERVER_SIGNING}: $(shell find Cargo.* superposition_librfq cli-server-signing -type f)
+${OUT_CLI_SERVER_SIGNING}: $(shell find Cargo.* superposition_librfq cli-server-signing cli-borsh cli-client-signing -type f)
 	@cargo build --release
 
 cli: rfqhub-cli-server-signing rfqhub-cli-client-signing rfqhub-cli-borsh

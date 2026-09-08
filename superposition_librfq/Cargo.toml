@@ -10,7 +10,7 @@ crate-type   = ["rlib", "cdylib"]
 [dependencies]
 bobcat-sdk = { workspace = true, features = ["alloc", "panic-revert", "sha512", "borsh"] }
 borsh.workspace = true
-superposition_libaccounts = ">=0.8.0"
+superposition_libaccounts.workspace = true
 superposition-assets.workspace = true
 array-concat = "0.5.5"
 const-hex.workspace = true

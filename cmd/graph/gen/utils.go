@@ -27,7 +27,7 @@ func isDryrun(x *bool) bool {
 
 func activateSoftAlarm(url string, snowflake int, err error) {
 	if url == "" {
-		slog.Info("not alarming soft alarm")
+		slog.Info("not alarming soft alarm (it's empty)")
 		return
 	}
 	var buf bytes.Buffer
