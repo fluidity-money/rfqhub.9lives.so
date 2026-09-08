@@ -21,6 +21,9 @@ WORKDIR /usr/src/rfqhub.9lives.so
 
 COPY go.mod go.mod
 COPY go.sum go.sum
+
+RUN go get ./...
+
 COPY lib/ lib/
 COPY cmd/ cmd/
 
