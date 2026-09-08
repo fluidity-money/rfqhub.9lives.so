@@ -8,3 +8,4 @@ rfqhub-cli-borsh
 rfqhub-cli-client-signing
 cache
 rfqhub-graph
+db/db/schema.sql

@@ -2,20 +2,11 @@
 
 prog=`{basename $0}
 
-rfqhub_graph_addr=$RFQHUB_GRAPH_ADDR
-if(~ $rfqhub_graph_addr '')
-	rfqhub_graph_addr=https://rfqhub.9lives.so/query
+rfqhub_graph_addr=https://rfqhub.9lives.so/query
 
-# Superposition mainnet defaults; override with the matching SPN_/RFQHUB_ vars.
-usdc_addr=$SPN_RFQHUB_USDC_ADDR
-if(~ $usdc_addr '')
-	usdc_addr=0x6c030c5CC283F791B26816f325b9C632d964F8A1
-accounts_addr=$SPN_RFQHUB_ACCOUNTS_ADDR
-if(~ $accounts_addr '')
-	accounts_addr=0xb838e2C1C9e525dFE18D35cd906aEe141ce9CfC2
-rpc_url=$SPN_SUPERPOSITION_URL
-if(~ $rpc_url '')
-	rpc_url=https://rpc.superposition.so
+usdc_addr=0xaf88d065e77c8cC2239327C5EDb3A432268e5831
+accounts_addr=0x04cDAf344F459E7c0eE86e8088dB603aEc035c86
+rpc_url=https://arb1.arbitrum.io/rpc
 
 fn usage {
 	echo 'usage:' >[1=2]
@@ -28,13 +19,8 @@ fn usage {
 	echo 'onrampAmount to settle USDC into the onramped balance.' >[1=2]
 	echo >[1=2]
 	echo 'environment:' >[1=2]
-	echo '  RFQHUB_GRAPH_ADDR       GraphQL endpoint (default https://rfqhub.9lives.so/query)' >[1=2]
 	echo '  SPN_SUPERPOSITION_KEY   private key used to derive eoa and sign the permit' >[1=2]
-	echo '  SPN_SUPERPOSITION_URL   RPC (default https://rpc.superposition.so)' >[1=2]
 	echo '  SPN_ACCOUNTS_SECRET     account secret for Authorization; or set directly:' >[1=2]
-	echo '  SPN_RFQHUB_AUTH         full Authorization value: eoa-address:secret' >[1=2]
-	echo '  SPN_RFQHUB_USDC_ADDR    USDC contract (default 0x6c03..8A1)' >[1=2]
-	echo '  SPN_RFQHUB_ACCOUNTS_ADDR  accounts-factory spender (default 0xb838..CfC2)' >[1=2]
 	exit 2
 }
 
@@ -71,21 +57,10 @@ fn render {
 	jq -e 'if .errors then (.errors | map(.message) | join("\n") | error) else .data end'
 }
 
-# Set $auth. Prefer an explicit SPN_RFQHUB_AUTH; otherwise derive the EOA from
-# the private key and join it to the account secret, like accounts-9lives.rc.
 fn require_auth {
-	auth=$SPN_RFQHUB_AUTH
-	if(~ $auth '') {
-		if(~ $SPN_SUPERPOSITION_KEY '' || ~ $SPN_ACCOUNTS_SECRET '') {
-			echo $prog': set SPN_RFQHUB_AUTH=eoa-address:secret, or both' >[1=2]
-			echo 'SPN_SUPERPOSITION_KEY and SPN_ACCOUNTS_SECRET' >[1=2]
-			exit 2
-		}
-		need cast
-		eoa=`{cast wallet address --private-key $SPN_SUPERPOSITION_KEY}
-		auth=$eoa:$SPN_ACCOUNTS_SECRET
+	if(~ $SPN_ACCOUNTS_SECRET '') {
+		usage
 	}
-	true
 }
 
 # Print a fresh USDC permit JSON {v,r,s,deadline} signing the owner's USDC
