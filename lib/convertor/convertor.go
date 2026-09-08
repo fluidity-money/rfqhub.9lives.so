@@ -106,7 +106,7 @@ func CreateSolveArgsSigArgs(
 		return nil, fmt.Errorf("serialise borsh: %v", err)
 	}
 	var toTake [32]byte
-	if _, err := binary.Encode(toTake[:], binary.BigEndian, amt); err != nil {
+	if _, err := binary.Encode(toTake[32-8:], binary.BigEndian, amt); err != nil {
 		return nil, fmt.Errorf("encoding toTake: %v", err)
 	}
 	var msTsI [16]byte
