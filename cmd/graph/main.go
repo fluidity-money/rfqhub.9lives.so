@@ -91,8 +91,15 @@ func (a authMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), "snowflake", snowflake)
 	switch bearer := r.Header.Get("Authorization"); bearer {
 	case "":
+		slog.Debug("Serving a request without any Authorization",
+			"snowflake", snowflake,
+		)
 		a.srv.ServeHTTP(w, r)
 	default:
+		slog.Debug("Serving a request with a bearer",
+			"snowflake", snowflake,
+			"bearer", bearer,
+		)
 		bearerS := strings.Split(bearer, ":")
 		eoaPreferred_ := bearerS[0]
 		if !ethCommon.IsHexAddress(eoaPreferred_) {
