@@ -5,7 +5,7 @@ prog=`{basename $0}
 rfqhub_graph_addr=https://rfqhub.9lives.so
 
 usdc_addr=0xaf88d065e77c8cC2239327C5EDb3A432268e5831
-accounts_addr=0x04cDAf344F459E7c0eE86e8088dB603aEc035c86
+accounts_addr=0xeC9932f0862a7AFd26E258fDFE1201271ae3C3Aa
 rpc_url=https://arb1.arbitrum.io/rpc
 
 fn usage {
