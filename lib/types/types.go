@@ -34,8 +34,8 @@ const (
 
 type OnrampingSource struct {
 	Enum             borsh.Enum      `borsh_enum:"true" json:"-"`
-	OnchainPot       *OnchainPotArgs `json:"onchain_opt omitempty"`
-	AggregatedResult *AggregateEnum  `json:"aggregated_result omitempty"`
+	OnchainPot       *OnchainPotArgs `json:"onchain_opt,omitempty"`
+	AggregatedResult *AggregateEnum  `json:"aggregated_result,omitempty"`
 }
 
 type BundleTakerArgs struct {
@@ -94,8 +94,8 @@ const (
 
 type AggregateEnum struct {
 	Enum borsh.Enum `borsh_enum:"true" json:"-"`
-	Args *Aggregate `json:"args omitempty"`
-	Hash *[32]byte  `json:"hash omitempty"`
+	Args *Aggregate `json:"args,omitempty"`
+	Hash *[32]byte  `json:"hash,omitempty"`
 }
 
 const (
@@ -129,12 +129,12 @@ type AggregateToOfframpArgs struct {
 
 type Args struct {
 	Enum               borsh.Enum              `borsh_enum:"true" json:"-"`
-	Version            *struct{}               `json:"version omitempty"`
-	Source             *struct{}               `json:"source omitempty"`
-	Balance            *BalanceArgs            `json:"balance omitempty"`
-	OnrampingFromBal   *OnrampingFromBalArgs   `json:"onramping_from_bal omitempty"`
-	Offramp            *OfframpVariantArgs     `json:"offramp omitempty"`
-	AggregateToOfframp *AggregateToOfframpArgs `json:"aggregate_to_offramp omitempty"`
+	Version            *struct{}               `json:"version,omitempty"`
+	Source             *struct{}               `json:"source,omitempty"`
+	Balance            *BalanceArgs            `json:"balance,omitempty"`
+	OnrampingFromBal   *OnrampingFromBalArgs   `json:"onramping_from_bal,omitempty"`
+	Offramp            *OfframpVariantArgs     `json:"offramp,omitempty"`
+	AggregateToOfframp *AggregateToOfframpArgs `json:"aggregate_to_offramp,omitempty"`
 }
 
 const (
