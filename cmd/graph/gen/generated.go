@@ -73,7 +73,7 @@ type ComplexityRoot struct {
 		CancelAuction                                func(childComplexity int, bundleTakerID int) int
 		ConcludeAndAggregate                         func(childComplexity int, bundleTakerID int) int
 		CreateAccountExec                            func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
-		CreateAuctionFromOnrampedAmountServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) int
+		CreateAuctionFromOnrampedAmountServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, minOffer string) int
 		InspectBundleTakerID                         func(childComplexity int, bundleTakerID int) int
 		OnrampAmount                                 func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
 		SubmitBundleMakerFromOnrampedAmountServerSig func(childComplexity int, bundleTakerID int, minAmount string, maxAmount string) int
@@ -109,7 +109,7 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error)
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
-	CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) (*model.AuctionCreatedResult, error)
+	CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, minOffer string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
 	ConcludeAndAggregate(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
 	CancelAuction(ctx context.Context, bundleTakerID int) (bool, error)
@@ -277,7 +277,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmountServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int)), true
+		return e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmountServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int), args["minOffer"].(string)), true
 	case "Mutation.inspectBundleTakerId":
 		if e.ComplexityRoot.Mutation.InspectBundleTakerID == nil {
 			break
@@ -669,7 +669,12 @@ type Mutation {
     """
     The timestamp that we use for expiry of the market.
     """
-    expiry: Int!
+    expiry: Int!,
+
+    """
+    Minimum offer of amount to take from the Maker in exchange for this liquidity.
+    """
+    minOffer: String!,
   ): AuctionCreatedResult!
 
   """
@@ -1058,6 +1063,14 @@ func (ec *executionContext) field_Mutation_createAuctionFromOnrampedAmountServer
 		return nil, err
 	}
 	args["expiry"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "minOffer",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["minOffer"] = arg6
 	return args, nil
 }
 
@@ -1684,7 +1697,7 @@ func (ec *executionContext) _Mutation_createAuctionFromOnrampedAmountServerSig(c
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAuctionFromOnrampedAmountServerSig(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(int))
+			return ec.Resolvers.Mutation().CreateAuctionFromOnrampedAmountServerSig(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(int), fc.Args["minOffer"].(string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuctionCreatedResult) graphql.Marshaler {

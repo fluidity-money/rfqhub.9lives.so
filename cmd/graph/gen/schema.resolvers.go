@@ -206,7 +206,7 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 }
 
 // CreateAuctionFromOnrampedAmountServerSig is the resolver for the createAuctionFromOnrampedAmountServerSig field.
-func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int) (*model.AuctionCreatedResult, error) {
+func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, minOffer string) (*model.AuctionCreatedResult, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	// Create an auction from a BundleTaker by taking what we can
 	// from the database, then constructing the blob signature
@@ -237,6 +237,10 @@ func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.
 	if err != nil {
 		return nil, fmt.Errorf("price target: %v", err)
 	}
+	minOffer_, err := strconv.ParseUint(minOffer, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("min offer: %v", err)
+	}
 	if expiry < 0 {
 		return nil, fmt.Errorf("expiry negative")
 	}
@@ -254,7 +258,8 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	$6,
 	$7,
 	$8,
-	$9
+	$9,
+	$10
 )`,
 		accAddrStr,
 		// Temporary fix for a mistake in the code (TODO REMOVE
@@ -267,6 +272,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		outcome,
 		msTsI,
 		expiry,
+		minOffer_,
 	)
 	var (
 		bundleTakerId int

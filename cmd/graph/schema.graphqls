@@ -183,7 +183,12 @@ type Mutation {
     """
     The timestamp that we use for expiry of the market.
     """
-    expiry: Int!
+    expiry: Int!,
+
+    """
+    Minimum offer of amount to take from the Maker in exchange for this liquidity.
+    """
+    minOffer: String!,
   ): AuctionCreatedResult!
 
   """

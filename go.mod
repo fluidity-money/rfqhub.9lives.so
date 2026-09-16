@@ -7,7 +7,6 @@ tool github.com/99designs/gqlgen
 require (
 	github.com/99designs/gqlgen v0.17.94
 	github.com/ethereum/go-ethereum v1.17.5
-	github.com/fluidity-money/9lives.so v0.0.0-20260819021726-b5f7948fa300
 	github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685
 	github.com/fluidity-money/superposition-assets v0.0.0-20260902132450-936e984ea17c
 	github.com/lib/pq v1.12.3
@@ -28,6 +27,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/ethereum/c-kzg-4844/v2 v2.1.8 // indirect
 	github.com/fjl/jsonw v0.1.0 // indirect
+	github.com/getsentry/sentry-go v0.28.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -37,6 +37,10 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/prometheus/client_model v0.5.0 // indirect
+	github.com/prometheus/common v0.48.0 // indirect
+	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sosodev/duration v1.4.0 // indirect
 	github.com/supranational/blst v0.3.16 // indirect
@@ -48,6 +52,7 @@ require (
 	go.opentelemetry.io/otel v1.41.0 // indirect
 	go.opentelemetry.io/otel/metric v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

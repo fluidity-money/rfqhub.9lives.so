@@ -74,8 +74,6 @@ github.com/ferranbt/fastssz v0.1.4 h1:OCDB+dYDEQDvAgtAGnTSidK1Pe2tW3nFV40XyMkTeD
 github.com/ferranbt/fastssz v0.1.4/go.mod h1:Ea3+oeoRGGLGm5shYAeDgu6PGUlcvQhE2fILyD9+tGg=
 github.com/fjl/jsonw v0.1.0 h1:V3MyR79fjLpn/+bMgvegdGUIhoJOzjmqWcKDgcOmY1I=
 github.com/fjl/jsonw v0.1.0/go.mod h1:2KMLevM6FXEJnfhtk7naXu9vZdVfOma1GlnGdPRlumU=
-github.com/fluidity-money/9lives.so v0.0.0-20260819021726-b5f7948fa300 h1:M1umRT5PSv0iLEbY226LDNydjcxvyktI13GS5lAHdu8=
-github.com/fluidity-money/9lives.so v0.0.0-20260819021726-b5f7948fa300/go.mod h1:qFqJI7WPo/CZX+RJ6u+YcdBY8x3O3PMTpiPF+MzzQDE=
 github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685 h1:94JbnoMVUH2EGY5E1Z9SCLVSj4/jr6AEJOepzK6YHY4=
 github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685/go.mod h1:eN09XYW+IS7AaMwDq9PXnZIsXb0oA0VRfM0grQnfxco=
 github.com/fluidity-money/superposition-assets v0.0.0-20260902132450-936e984ea17c h1:9ub1rw3R+BFO6PvsTkmng3840CoIMhBp+SlbMVkPGQI=
