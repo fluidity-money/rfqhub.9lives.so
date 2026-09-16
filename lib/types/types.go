@@ -39,52 +39,52 @@ type OnrampingSource struct {
 }
 
 type BundleTakerArgs struct {
-	Src         OnrampingSource
-	Expiry      uint32
-	MsTs        [6]byte
-	IsUp        bool
-	PriceTarget uint64
-	Outcome     Outcome
+	Src         OnrampingSource `json:"src"`
+	Expiry      uint32          `json:"expiry"`
+	MsTs        [6]byte         `json:"ms_ts"`
+	IsUp        bool            `json:"is_up"`
+	PriceTarget uint64          `json:"price_target"`
+	Outcome     Outcome         `json:"outcome"`
 }
 
 type BundleTaker struct {
-	Args BundleTakerArgs
-	Sig  Sig
+	Args BundleTakerArgs `json:"args"`
+	Sig  Sig             `json:"sig"`
 }
 
 type BundleMakerArgs struct {
-	Amt   uint64
-	Taker BundleTaker
-	MsTs  [6]byte
-	Acc   [20]byte
+	Amt   uint64      `json:"amt"`
+	Taker BundleTaker `json:"taker"`
+	MsTs  [6]byte     `json:"ms_ts"`
+	Acc   [20]byte    `json:"acc"`
 }
 
 type BundleMaker struct {
-	Args BundleMakerArgs
-	Sig  Sig
+	Args BundleMakerArgs `json:"args"`
+	Sig  Sig             `json:"sig"`
 }
 
 type OfframpArgs struct {
-	Asset   Asset
-	Amt     uint64
-	MsTs    [6]byte
-	AccAddr [20]byte
+	Asset   Asset    `json:"asset"`
+	Amt     uint64   `json:"amt"`
+	MsTs    [6]byte  `json:"ms_ts"`
+	AccAddr [20]byte `json:"acc_addr"`
 }
 
 type Timestamplet struct {
-	TimestampletTime    uint32
-	TimestampletOutcome Outcome
-	TimestampletVal     uint64
+	TimestampletTime    uint32  `json:"timestamplet_time"`
+	TimestampletOutcome Outcome `json:"timestamplet_outcome"`
+	TimestampletVal     uint64  `json:"timestamplet_val"`
 }
 
 type AggregateArgs struct {
-	Maker        BundleMaker
-	Timestamplet Timestamplet
+	Maker        BundleMaker  `json:"maker"`
+	Timestamplet Timestamplet `json:"timestamplet"`
 }
 
 type Aggregate struct {
-	Args      AggregateArgs
-	ServerSig Sig
+	Args      AggregateArgs `json:"args"`
+	ServerSig Sig           `json:"server_sig"`
 }
 
 const (
@@ -108,23 +108,23 @@ const (
 )
 
 type BalanceArgs struct {
-	Asset [20]byte
-	Addr  [20]byte
+	Asset [20]byte `json:"asset"`
+	Addr  [20]byte `json:"addr"`
 }
 
 type OnrampingFromBalArgs struct {
-	Asset Asset
-	Amt   uint64
+	Asset Asset  `json:"asset"`
+	Amt   uint64 `json:"amt"`
 }
 
 type OfframpVariantArgs struct {
-	Args      OfframpArgs
-	ServerSig Sig
+	Args      OfframpArgs `json:"args"`
+	ServerSig Sig         `json:"server_sig"`
 }
 
 type AggregateToOfframpArgs struct {
-	Args    AggregateEnum
-	IsTaker bool
+	Args    AggregateEnum `json:"args"`
+	IsTaker bool          `json:"is_taker"`
 }
 
 type Args struct {
