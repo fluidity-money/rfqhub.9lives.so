@@ -433,7 +433,7 @@ SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 // OpenAuctions is the resolver for the openAuctions field.
 func (r *queryResolver) OpenAuctions(ctx context.Context) (*model.OpenAuctions, error) {
 	rows, err := r.Db.Query(`
-SELECT acc_addr, amt, is_up, price_target, outcome, expiry, id
+SELECT acc_addr, amt, is_up, price_target, outcome, expiry, id, auction_deadline
 FROM rfqhub_bundles_taker_ongoing_1`,
 	)
 	if err != nil {
@@ -448,7 +448,7 @@ FROM rfqhub_bundles_taker_ongoing_1`,
 		o := new(model.OpenAuction)
 		var (
 			openToBeWon, priceTarget uint64
-			expiry                   time.Time
+			expiry, deadline                   time.Time
 		)
 		err = rows.Scan(
 			&o.AccAddr,
@@ -458,6 +458,7 @@ FROM rfqhub_bundles_taker_ongoing_1`,
 			&o.Outcome,
 			&expiry,
 			&o.BundleTakerID,
+			&deadline,
 		)
 		if err != nil {
 			slog.Error("Error scanning open auctions", "err", err)
@@ -466,6 +467,7 @@ FROM rfqhub_bundles_taker_ongoing_1`,
 		o.OpenToBeWon = strconv.FormatUint(openToBeWon, 10)
 		o.PriceTarget = strconv.FormatUint(priceTarget, 10)
 		o.ExpiryTs = int(expiry.Unix())
+		o.DeadlineTs = int(deadline.Unix())
 		openAuctions.OpenAuctions = append(openAuctions.OpenAuctions, o)
 	}
 	return &openAuctions, nil
