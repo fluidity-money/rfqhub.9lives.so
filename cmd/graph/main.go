@@ -94,7 +94,7 @@ func (a authMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Debug("Serving a request without any Authorization",
 			"snowflake", snowflake,
 		)
-		a.srv.ServeHTTP(w, r)
+		a.srv.ServeHTTP(w, r.WithContext(ctx))
 	default:
 		slog.Debug("Serving a request with a bearer",
 			"snowflake", snowflake,

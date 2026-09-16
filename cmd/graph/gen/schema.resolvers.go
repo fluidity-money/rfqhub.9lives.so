@@ -399,7 +399,7 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 		"usdc addr", usdcAddr(),
 		"snowflake", snowflake,
 	)
-	row := r.Db.QueryRow(`
+	row := r.Db.QueryRowContext(ctx, `
 SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		addr,
 		usdcAddr(),

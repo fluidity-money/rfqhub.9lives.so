@@ -1,5 +1,11 @@
 -- migrate:up
 
+-- BalanceChanged is externally managed, but RFQHub needs the latest absolute
+-- balance for one account/asset pair on every spendable-balance lookup.
+CREATE INDEX rfqhub_events_balance_changed_latest_idx
+	ON rfqhub_events_balance_changed (account_addr, asset, id DESC)
+	INCLUDE (amount);
+
 CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	id SERIAL PRIMARY KEY,
 	addr ADDRESS NOT NULL UNIQUE,
@@ -68,7 +74,10 @@ CREATE UNIQUE INDEX rfqhub_bundles_taker_source_uq
 
 CREATE INDEX rfqhub_bundles_taker_open_balance_idx
 	ON rfqhub_bundles_taker_1 (acc_addr, asset)
-	WHERE source IS NULL AND was_offramped = FALSE;
+	INCLUDE (id, amt, created_by)
+	WHERE source IS NULL
+		AND end_source_amt IS NULL
+		AND was_offramped = FALSE;
 
 CREATE TABLE rfqhub_bundles_maker_user_count_1 (
 	id SERIAL PRIMARY KEY,
@@ -105,9 +114,16 @@ CREATE UNIQUE INDEX rfqhub_bundles_maker_source_uq
 	ON rfqhub_bundles_maker_1 (source)
 	WHERE source IS NOT NULL;
 
+CREATE INDEX rfqhub_bundles_maker_taker_idx
+	ON rfqhub_bundles_maker_1 (bundle_taker_id);
+
 CREATE INDEX rfqhub_bundles_maker_open_balance_idx
-	ON rfqhub_bundles_maker_1 (acc_addr)
-	WHERE source IS NULL AND was_offramped = FALSE;
+	ON rfqhub_bundles_maker_1 (acc_addr, bundle_taker_id)
+	INCLUDE (amt)
+	WHERE source IS NULL
+		AND was_chosen IS DISTINCT FROM FALSE
+		AND end_source_amt IS NULL
+		AND was_offramped = FALSE;
 
 ALTER TABLE rfqhub_bundles_taker_1
 	ADD CONSTRAINT rfqhub_bundles_taker_maker_fk
@@ -855,3 +871,7 @@ DROP TABLE IF EXISTS rfqhub_bundles_taker_user_count_1;
 
 DROP FUNCTION IF EXISTS rfqhub_protect_immutable_timestamplet_1();
 DROP TYPE IF EXISTS RFQHUB_OUTCOME;
+
+-- The BalanceChanged table is external, so remove only the index created by
+-- this migration and leave the table itself untouched.
+DROP INDEX IF EXISTS rfqhub_events_balance_changed_latest_idx;

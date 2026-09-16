@@ -11,7 +11,7 @@ rpc_url=https://arb1.arbitrum.io/rpc
 fn usage {
 	echo 'usage:' >[1=2]
 	echo '  '$prog' onramp amount [dry-run]' >[1=2]
-	echo '  '$prog' taker min-amount max-amount up|down price-target expiry [outcome]' >[1=2]
+	echo '  '$prog' taker min-amount max-amount up|down price-target expiry min-reward' >[1=2]
 	echo '  '$prog' auctions' >[1=2]
 	echo >[1=2]
 	echo 'onramp funds the rfqhub (owner ->' >[1=2]
@@ -108,9 +108,8 @@ fn taker {
 	direction=$3
 	pricetarget=$4
 	expiry=$5
+	min_reward=$6
 	outcome=BitcoinPrice
-	if(~ $#* 6)
-		outcome=$6
 
 	switch($direction) {
 	case up true
