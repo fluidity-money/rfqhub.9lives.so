@@ -16,7 +16,6 @@ import (
 	"time"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
-	"github.com/fluidity-money/9lives.so/lib/types/events"
 	acc_client "github.com/fluidity-money/accounts.superposition.so/lib/client"
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
@@ -395,14 +394,14 @@ SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		accAddr.String(),
 		acc_types.AssetUsdc,
 	)
-	var amt events.Number
+	var amt uint64
 	if err := row.Scan(&amt).Error; err != nil {
 		slog.Error("Failed to scan the get spendable row",
 			"err", err,
 		)
 		return "", fmt.Errorf("spendable error")
 	}
-	return amt.String(), nil
+	return strconv.FormatUint(amt, 10), nil
 }
 
 // OpenAuctions is the resolver for the openAuctions field.
