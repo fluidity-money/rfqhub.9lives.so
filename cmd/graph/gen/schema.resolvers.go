@@ -164,13 +164,19 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 		"snowflake", snowflake,
 		"sender", *sender,
 	)
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	slog.Debug("Derived the accounts address for the onramping call",
+		"eoa", eoa,
+		"acc addr", accAddr,
+		"snowflake", snowflake,
+	)
 	h, gasLimit, err := acc_client.SendArguments(
 		ctx,
 		r.Client,
 		r.ChainId,
 		privKey,
 		*sender,
-		r.AccountsFactoryAddr,
+		accAddr,
 		acc_types.Args{
 			Enum: acc_types.ArgsSolve,
 			Solve: acc_types.Solve{
