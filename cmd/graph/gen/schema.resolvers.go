@@ -392,6 +392,7 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	if !ethCommon.IsHexAddress(addr) {
 		return "", fmt.Errorf("not valid address")
 	}
+	addr = strings.ToLower(addr)
 	addr_ := ethCommon.HexToAddress(addr)
 	slog.Debug("Getting spendable for",
 		"addr", addr_,
@@ -400,16 +401,16 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	)
 	row := r.Db.QueryRowContext(ctx, `
 SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
-		addr_.String(),
+		addr,
 		usdcAddr(),
 	)
-	var amt uint64
 	if err := row.Err(); err != nil {
 		slog.Error("Failed to load the get spendable row",
 			"err", err,
 		)
 		return "", fmt.Errorf("spendable error")
 	}
+	var amt uint64
 	if err := row.Scan(&amt); err != nil {
 		slog.Error("Failed to scan the get spendable row",
 			"err", err,
