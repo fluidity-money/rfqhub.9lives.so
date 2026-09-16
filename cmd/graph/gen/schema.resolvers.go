@@ -206,7 +206,7 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 }
 
 // CreateAuctionFromOnrampedAmountServerSig is the resolver for the createAuctionFromOnrampedAmountServerSig field.
-func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, minOffer string) (*model.AuctionCreatedResult, error) {
+func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	// Create an auction from a BundleTaker by taking what we can
 	// from the database, then constructing the blob signature
@@ -241,8 +241,18 @@ func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.
 	if err != nil {
 		return nil, fmt.Errorf("min offer: %v", err)
 	}
+	curTs := int(time.Now().Unix())
+	if curTs > expiry {
+		return nil, fmt.Errorf("expiry in the past")
+	}
 	if expiry < 0 {
 		return nil, fmt.Errorf("expiry negative")
+	}
+	if deadline > expiry {
+		return nil, fmt.Errorf("deadline more than the expiry")
+	}
+	if deadline > curTs {
+		return nil, fmt.Errorf("deadline in the past")
 	}
 	msTs := pickMsTs()
 	msTsI := msTsBytesToInt(msTs)
@@ -259,7 +269,8 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	$7,
 	$8,
 	$9,
-	$10
+	$10,
+	$11
 )`,
 		accAddrStr,
 		usdcAddr(),
@@ -271,6 +282,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		msTsI,
 		expiry,
 		minOffer_,
+		deadline,
 	)
 	var (
 		bundleTakerId int

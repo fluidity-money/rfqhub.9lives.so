@@ -100,7 +100,7 @@ fn onramp {
 fn taker {
 	need jq
 	require_auth
-	if(! ~ $#* 5 6)
+	if(! ~ $#* 6)
 		usage
 
 	minamount=$1
@@ -108,7 +108,7 @@ fn taker {
 	direction=$3
 	pricetarget=$4
 	expiry=$5
-	min_reward=$6
+	min_offer=$6
 	outcome=BitcoinPrice
 
 	switch($direction) {
@@ -121,14 +121,15 @@ fn taker {
 	}
 
 	jq -cn \
-		--arg query 'mutation CreateTaker($minAmount: String!, $maxAmount: String!, $isUp: Boolean!, $priceTarget: String!, $outcome: Outcome!, $expiry: Int!) { createAuctionFromOnrampedAmountServerSig(minAmount: $minAmount, maxAmount: $maxAmount, isUp: $isUp, priceTarget: $priceTarget, outcome: $outcome, expiry: $expiry) { leftoverBal amountSpent bundleId } }' \
+		--arg query 'mutation CreateTaker($minAmount: String!, $maxAmount: String!, $isUp: Boolean!, $priceTarget: String!, $outcome: Outcome!, $expiry: Int!, $minOffer: String!) { createAuctionFromOnrampedAmountServerSig(minAmount: $minAmount, maxAmount: $maxAmount, isUp: $isUp, priceTarget: $priceTarget, outcome: $outcome, expiry: $expiry, minOffer: $minOffer) { leftoverBal amountSpent bundleId } }' \
 		--arg minamount $minamount \
 		--arg maxamount $maxamount \
 		--argjson isup $isup \
 		--arg pricetarget $pricetarget \
 		--arg outcome $outcome \
 		--arg expiry $expiry \
-		'{query: $query, variables: {minAmount: $minamount, maxAmount: $maxamount, isUp: $isup, priceTarget: $pricetarget, outcome: $outcome, expiry: ($expiry | tonumber)}}' \
+		--arg minOffer $min_offer \
+		'{query: $query, variables: {minAmount: $minamount, maxAmount: $maxamount, isUp: $isup, priceTarget: $pricetarget, outcome: $outcome, expiry: ($expiry | tonumber), minOffer: $minOffer}}' \
 		| request $auth \
 		| render
 }

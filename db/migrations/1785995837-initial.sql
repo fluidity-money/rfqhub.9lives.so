@@ -59,10 +59,12 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	outcome RFQHUB_OUTCOME NOT NULL,
 	maker_id INTEGER,
 	ms_ts BIGINT NOT NULL,
+	deadline TIMESTAMP NOT NULL,
 	expiry TIMESTAMP NOT NULL,
 	user_sig BYTES64 UNIQUE,
 	was_offramped BOOLEAN NOT NULL DEFAULT FALSE,
 	end_source_amt BIGINT CHECK (end_source_amt >= 0),
+	CHECK (deadline <= expiry),
 	UNIQUE (acc_addr, user_id)
 );
 
@@ -74,7 +76,7 @@ CREATE UNIQUE INDEX rfqhub_bundles_taker_source_uq
 
 CREATE INDEX rfqhub_bundles_taker_open_balance_idx
 	ON rfqhub_bundles_taker_1 (acc_addr, asset)
-	INCLUDE (id, amt, created_by)
+	INCLUDE (id, amt, deadline)
 	WHERE source IS NULL
 		AND end_source_amt IS NULL
 		AND was_offramped = FALSE;
@@ -129,17 +131,17 @@ ALTER TABLE rfqhub_bundles_taker_1
 	ADD CONSTRAINT rfqhub_bundles_taker_maker_fk
 	FOREIGN KEY (maker_id) REFERENCES rfqhub_bundles_maker_1 (id);
 
--- BundleTakers remain open for maker selection for one minute after they are
--- lodged. Unsigned takers are excluded because they cannot be submitted to the
--- contract, and selecting a maker closes the auction immediately.
+-- BundleTakers remain open for maker selection until their supplied deadline.
+-- Unsigned takers are excluded because they cannot be submitted to the contract,
+-- and selecting a maker closes the auction immediately.
 CREATE VIEW rfqhub_bundles_taker_ongoing_1 AS
 SELECT
 	t.*,
-	t.created_by + INTERVAL '1 minute' AS auction_deadline
+	t.deadline AS auction_deadline
 FROM rfqhub_bundles_taker_1 AS t
 WHERE t.user_sig IS NOT NULL
 	AND t.maker_id IS NULL
-	AND t.created_by + INTERVAL '1 minute' > CURRENT_TIMESTAMP;
+	AND t.deadline > CURRENT_TIMESTAMP;
 
 CREATE FUNCTION rfqhub_inspect_bundle_taker_1 (
 	p_acc_addr ADDRESS,
@@ -214,7 +216,7 @@ BEGIN
 		-- open. If at least one maker exists, keep the reservation because a
 		-- maker is expected to be selected automatically when the auction ends.
 		AND (
-			t.created_by + INTERVAL '1 minute' > CURRENT_TIMESTAMP
+			t.deadline > CURRENT_TIMESTAMP
 			OR EXISTS (
 				SELECT 1
 				FROM rfqhub_bundles_maker_1 AS candidate
@@ -299,7 +301,8 @@ CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
 	p_outcome RFQHUB_OUTCOME,
 	p_ms_ts BIGINT,
 	p_expiry INTEGER,
-	p_min_offer BIGINT
+	p_min_offer BIGINT,
+	p_deadline INTEGER
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
@@ -313,12 +316,22 @@ DECLARE
 	v_amt BIGINT;
 	v_user_id INTEGER;
 	v_bundle_taker_id INTEGER;
+	v_expiry TIMESTAMP;
+	v_deadline TIMESTAMP;
 BEGIN
 	IF p_min_amt <= 0 OR p_max_amt < p_min_amt THEN
 		RAISE EXCEPTION 'invalid taker amount range: minimum %, maximum %', p_min_amt, p_max_amt;
 	END IF;
 	IF p_min_offer IS NULL OR p_min_offer < 0 THEN
 		RAISE EXCEPTION 'taker minimum maker offer cannot be negative: %', p_min_offer;
+	END IF;
+	v_expiry := TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC';
+	IF p_deadline IS NULL THEN
+		RAISE EXCEPTION 'taker deadline cannot be null';
+	END IF;
+	v_deadline := TO_TIMESTAMP(p_deadline) AT TIME ZONE 'UTC';
+	IF v_deadline > v_expiry THEN
+		RAISE EXCEPTION 'taker deadline % cannot be after expiry %', v_deadline, v_expiry;
 	END IF;
 
 	v_available := rfqhub_get_spendable_1(p_acc_addr, p_asset);
@@ -334,12 +347,11 @@ BEGIN
 
 	INSERT INTO rfqhub_bundles_taker_1 (
 		acc_addr, user_id, source, asset, amt, min_offer, is_up, price_target,
-		outcome, ms_ts, expiry
+		outcome, ms_ts, deadline, expiry
 	)
 	VALUES (
 		p_acc_addr, v_user_id, NULL, p_asset, v_amt, p_min_offer, p_is_up,
-		p_price_target, p_outcome, p_ms_ts,
-		TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC'
+		p_price_target, p_outcome, p_ms_ts, v_deadline, v_expiry
 	)
 	RETURNING id INTO v_bundle_taker_id;
 
@@ -391,6 +403,7 @@ CREATE FUNCTION rfqhub_create_bundle_taker_from_aggregate_1 (
 	p_ms_ts BIGINT,
 	p_expiry INTEGER,
 	p_min_offer BIGINT,
+	p_deadline INTEGER,
 	p_user_sig BYTES64
 )
 RETURNS TABLE (
@@ -405,9 +418,19 @@ DECLARE
 	v_user_id INTEGER;
 	v_bundle_taker_id INTEGER;
 	v_remainder BIGINT;
+	v_expiry TIMESTAMP;
+	v_deadline TIMESTAMP;
 BEGIN
 	IF p_min_offer IS NULL OR p_min_offer < 0 THEN
 		RAISE EXCEPTION 'taker minimum maker offer cannot be negative: %', p_min_offer;
+	END IF;
+	v_expiry := TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC';
+	IF p_deadline IS NULL THEN
+		RAISE EXCEPTION 'taker deadline cannot be null';
+	END IF;
+	v_deadline := TO_TIMESTAMP(p_deadline) AT TIME ZONE 'UTC';
+	IF v_deadline > v_expiry THEN
+		RAISE EXCEPTION 'taker deadline % cannot be after expiry %', v_deadline, v_expiry;
 	END IF;
 
 	SELECT t.* INTO STRICT v_source
@@ -447,12 +470,12 @@ BEGIN
 
 	INSERT INTO rfqhub_bundles_taker_1 (
 		acc_addr, user_id, source, asset, amt, min_offer, is_up, price_target,
-		outcome, ms_ts, expiry, user_sig
+		outcome, ms_ts, deadline, expiry, user_sig
 	)
 	VALUES (
 		v_source.acc_addr, v_user_id, p_source_taker_id, v_source.asset,
 		p_amt_to_take, p_min_offer, p_is_up, p_price_target, p_outcome, p_ms_ts,
-		TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC', p_user_sig
+		v_deadline, v_expiry, p_user_sig
 	)
 	RETURNING id INTO v_bundle_taker_id;
 
@@ -492,6 +515,9 @@ BEGIN
 	FOR SHARE;
 	IF v_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_taker.maker_id;
+	END IF;
+	IF v_taker.deadline <= CURRENT_TIMESTAMP THEN
+		RAISE EXCEPTION 'taker % deadline has passed', p_bundle_taker_id;
 	END IF;
 	IF p_min_taker_amt IS NULL OR p_min_taker_amt <= 0 THEN
 		RAISE EXCEPTION 'maker minimum taker amount must be positive: %', p_min_taker_amt;
@@ -570,6 +596,9 @@ BEGIN
 
 	IF v_target_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_target_taker.maker_id;
+	END IF;
+	IF v_target_taker.deadline <= CURRENT_TIMESTAMP THEN
+		RAISE EXCEPTION 'taker % deadline has passed', p_bundle_taker_id;
 	END IF;
 	IF p_min_taker_amt IS NULL OR p_min_taker_amt <= 0 THEN
 		RAISE EXCEPTION 'maker minimum taker amount must be positive: %', p_min_taker_amt;
@@ -845,12 +874,12 @@ DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_onramping_1(
 );
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_from_aggregate_1(
 	INTEGER, BIGINT, BOOLEAN, BIGINT, RFQHUB_OUTCOME, BIGINT, INTEGER,
-	BIGINT, BYTES64
+	BIGINT, INTEGER, BYTES64
 );
 DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_user_sig_1(INTEGER, BYTES64);
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_onramping_1(
 	ADDRESS, ADDRESS, BIGINT, BIGINT, BOOLEAN, BIGINT, RFQHUB_OUTCOME,
-	BIGINT, INTEGER, BIGINT
+	BIGINT, INTEGER, BIGINT, INTEGER
 );
 DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1(
 	TIMESTAMP, RFQHUB_OUTCOME, BIGINT
