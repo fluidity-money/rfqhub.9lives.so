@@ -114,7 +114,7 @@ func CreateSolveArgsSigArgs(
 	copy(msTsI[:16-len(msTs)], msTs[:])
 	solveArgs := acc_types.SolveArgs{
 		From: []acc_types.FromArgs{{
-			Asset:  asset,
+			Asset:  acc_types.Asset(asset),
 			ToTake: toTake,
 			//MaxUnspent: [32]byte{},
 		}},
@@ -203,7 +203,7 @@ func NewPermit(
 		return nil, fmt.Errorf("permit s: %v", err)
 	}
 	return &acc_types.Permit{
-		Asset:    asset,
+		Asset:    acc_types.Asset(asset),
 		Deadline: deadline,
 		V:        v,
 		R:        r,

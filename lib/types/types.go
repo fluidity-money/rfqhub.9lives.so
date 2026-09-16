@@ -1,6 +1,9 @@
 package types
 
 import (
+	"encoding/json"
+	"fmt"
+
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
 	"github.com/near/borsh-go"
@@ -8,13 +11,41 @@ import (
 
 type Sig [64]byte
 
-type Asset = acc_types.Asset
+type Asset acc_types.Asset
+
+const (
+	AssetUsdc Asset = Asset(acc_types.AssetUsdc)
+	AssetArb  Asset = Asset(acc_types.AssetArb)
+	AssetWeth Asset = Asset(acc_types.AssetWeth)
+)
+
+func (a Asset) MarshalJSON() ([]byte, error) {
+	switch a {
+	case AssetUsdc:
+		return json.Marshal("USDC")
+	case AssetArb:
+		return json.Marshal("ARB")
+	case AssetWeth:
+		return json.Marshal("WETH")
+	default:
+		return nil, fmt.Errorf("unknown asset %d", a)
+	}
+}
 
 type Outcome uint8
 
 const (
 	OutcomeBitcoinPrice Outcome = 0
 )
+
+func (o Outcome) MarshalJSON() ([]byte, error) {
+	switch o {
+	case OutcomeBitcoinPrice:
+		return json.Marshal("BitcoinPrice")
+	default:
+		return nil, fmt.Errorf("unknown outcome %d", o)
+	}
+}
 
 type FillerArgs struct {
 	FusdcOnWin uint64   `borsh:"fusdc_on_win"`

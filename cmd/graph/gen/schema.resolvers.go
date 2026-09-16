@@ -58,7 +58,7 @@ func (r *mutationResolver) CreateAccountExec(ctx context.Context, createAccount 
 		ProgDalek,
 		r.RfqhubAddr,
 		f,
-		acc_types.AssetUsdc,
+		types.AssetUsdc,
 		amt_,
 		permit,
 		msTs,
@@ -143,7 +143,7 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 	solveArgsSigArgs, err := convertor.CreateSolveArgsSigArgs(
 		ProgDalek,
 		r.RfqhubAddr,
-		acc_types.AssetUsdc,
+		types.AssetUsdc,
 		amt_,
 		permit,
 		msTs,
