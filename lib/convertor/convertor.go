@@ -98,7 +98,7 @@ func CreateSolveArgsSigArgs(
 ) (*acc_types.SolveArgsSigArgs, error) {
 	cd, err := borsh.Serialize(types.Args{
 		Enum: types.ArgsOnrampingFromBal,
-		OnrampingFromBal: types.OnrampingFromBalArgs{
+		OnrampingFromBal: &types.OnrampingFromBalArgs{
 			Asset: asset,
 			Amt:   amt,
 		},
@@ -212,7 +212,7 @@ func NewPermit(
 }
 
 func init() {
-	for i := 0; i < 32; i++ {
+	for i := range 32 {
 		MaxBytes32[i] = math.MaxUint8
 	}
 }

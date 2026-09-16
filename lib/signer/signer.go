@@ -3,9 +3,9 @@ package signer
 import (
 	"bytes"
 	"encoding/hex"
-	"log/slog"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os/exec"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"

@@ -3,19 +3,19 @@
 package main
 
 import (
-	"math/big"
-	"runtime/debug"
 	"context"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"log"
 	"log/slog"
-	"os"
+	"math/big"
 	"math/rand"
-	"net/http"
-	"strings"
 	"net"
+	"net/http"
+	"os"
+	"runtime/debug"
+	"strings"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen"
 
@@ -68,8 +68,8 @@ const (
 )
 
 type authMiddleware struct {
-	db          *sql.DB
-	srv         http.Handler
+	db  *sql.DB
+	srv http.Handler
 }
 
 // ServeHTTP with a copy and paste from the accounts system

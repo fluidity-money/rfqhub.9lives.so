@@ -290,10 +290,10 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
 		Enum: types.ClientSigningArgsBundleTaker,
-		BundleTaker: types.BundleTakerArgs{
+		BundleTaker: &types.BundleTakerArgs{
 			Src: types.OnrampingSource{
 				Enum: types.OnrampingSourceOnchainPot,
-				OnchainPot: types.OnchainPotArgs{
+				OnchainPot: &types.OnchainPotArgs{
 					AccAddr: accAddr,
 					Amt:     amt,
 				},
