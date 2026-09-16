@@ -34,8 +34,8 @@ const (
 
 type OnrampingSource struct {
 	Enum             borsh.Enum      `borsh_enum:"true" json:"-"`
-	OnchainPot       *OnchainPotArgs `json:"onchain_opt,omitempty"`
-	AggregatedResult *AggregateEnum  `json:"aggregated_result,omitempty"`
+	OnchainPot       *OnchainPotArgs `json:"OnchainOpt,omitempty"`
+	AggregatedResult *AggregateEnum  `json:"AggregatedResult,omitempty"`
 }
 
 type BundleTakerArgs struct {
@@ -144,6 +144,6 @@ const (
 
 type ClientSigningArgs struct {
 	Enum        borsh.Enum       `borsh_enum:"true" json:"-"`
-	BundleTaker *BundleTakerArgs `json:"bundle_taker,omitempty"`
-	BundleMaker *BundleMakerArgs `json:"bundle_maker,omitempty"`
+	BundleTaker *BundleTakerArgs `json:"BundleTaker,omitempty"`
+	BundleMaker *BundleMakerArgs `json:"BundleMaker,omitempty"`
 }
