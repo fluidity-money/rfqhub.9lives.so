@@ -30,7 +30,8 @@ func ServerSignAggregate(args types.Args) (sig [64]byte, err error) {
 	if err := cmd.Run(); err != nil {
 		return sig, fmt.Errorf("running cmd: %v", err)
 	}
-	if _, err := hex.Decode(sig[:], bufOut.Bytes()); err != nil {
+	_, err = hex.Decode(sig[:], bytes.TrimSuffix(bufOut.Bytes(), []byte{'\n'}))
+	if err != nil {
 		return sig, fmt.Errorf("decode sig: %v", err)
 	}
 	return
@@ -51,7 +52,8 @@ func ClientSignClientArgs(args types.ClientSigningArgs) (sig [64]byte, err error
 		)
 		return sig, fmt.Errorf("running cmd: %v", err)
 	}
-	if _, err := hex.Decode(sig[:], bufOut.Bytes()); err != nil {
+	_, err = hex.Decode(sig[:], bytes.TrimSuffix(bufOut.Bytes(), []byte{'\n'}))
+	if err != nil {
 		return sig, fmt.Errorf("decode sig: %v", err)
 	}
 	return
