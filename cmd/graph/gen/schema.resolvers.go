@@ -389,13 +389,19 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	}
 	addr_ := ethCommon.HexToAddress(addr)
 	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, addr_)
-	row := r.Db.QueryRow(`
+	row := r.Db.QueryRowContext(ctx, `
 SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		accAddr.String(),
 		acc_types.AssetUsdc,
 	)
 	var amt uint64
-	if err := row.Scan(&amt).Error; err != nil {
+	if err := row.Err(); err != nil {
+		slog.Error("Failed to load the get spendable row",
+			"err", err,
+		)
+		return "", fmt.Errorf("spendable error")
+	}
+	if err := row.Scan(&amt); err != nil {
 		slog.Error("Failed to scan the get spendable row",
 			"err", err,
 		)
