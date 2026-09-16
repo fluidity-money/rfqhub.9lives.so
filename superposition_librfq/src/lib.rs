@@ -69,11 +69,11 @@ compile_error!("arbos and arbitrum cannot both be enabled");
 /// Onramping topic that's emitted on the underlying balance changing
 /// due to onrampind and offramping.
 pub const TOPIC_BALANCE_CHANGED: U =
-    const_keccak256(b"BalanceChanged(address,address,uint64,unt256)");
+    const_keccak256(b"BalanceChanged(address,address,uint64,uint256)");
 
 /// Global balance for the asset given has changed.
 pub const TOPIC_GLOBAL_BALANCE_CHANGED: U =
-    const_keccak256(b"GlobalBalanceChanged(address,uint256,uint256)");
+    const_keccak256(b"GlobalBalanceChanged(address,address,uint64,uint256)");
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
