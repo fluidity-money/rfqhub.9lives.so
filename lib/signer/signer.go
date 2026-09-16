@@ -3,6 +3,7 @@ package signer
 import (
 	"bytes"
 	"encoding/hex"
+	"log/slog"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -15,7 +16,7 @@ const (
 	ProgClientSigningPath = "/bin/rfqhub-cli-client-signing"
 
 	// ProgServerSigningPath to invoke to get server signing performed
-	ProgServerSigningPath = "/bin/rfqhub-cli-client-signing"
+	ProgServerSigningPath = "/bin/rfqhub-cli-server-signing"
 )
 
 func ServerSignAggregate(args types.Args) (sig [64]byte, err error) {
@@ -41,9 +42,13 @@ func ClientSignClientArgs(args types.ClientSigningArgs) (sig [64]byte, err error
 	if err := json.NewEncoder(&bufIn).Encode(args); err != nil {
 		return sig, fmt.Errorf("encoding: %v", args)
 	}
+	input := bufIn.Bytes()
 	cmd.Stdin = &bufIn
 	cmd.Stdout = &bufOut
 	if err := cmd.Run(); err != nil {
+		slog.Debug("Error running signing client arguments stdin",
+			"stdin", input,
+		)
 		return sig, fmt.Errorf("running cmd: %v", err)
 	}
 	if _, err := hex.Decode(sig[:], bufOut.Bytes()); err != nil {
