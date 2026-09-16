@@ -398,7 +398,7 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	row := r.Db.QueryRowContext(ctx, `
 SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		accAddr.String(),
-		acc_types.AssetUsdc,
+		superposition_assets.AssetUsdc.Address(),
 	)
 	var amt uint64
 	if err := row.Err(); err != nil {
