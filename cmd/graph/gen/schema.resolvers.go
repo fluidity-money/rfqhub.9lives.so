@@ -393,15 +393,14 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 		return "", fmt.Errorf("not valid address")
 	}
 	addr_ := ethCommon.HexToAddress(addr)
-	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, addr_)
 	slog.Debug("Getting spendable for",
-		"acc addr", accAddr,
+		"addr", addr_,
 		"usdc addr", usdcAddr(),
 		"snowflake", snowflake,
 	)
 	row := r.Db.QueryRowContext(ctx, `
 SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
-		accAddr.String(),
+		addr_.String(),
 		usdcAddr(),
 	)
 	var amt uint64
