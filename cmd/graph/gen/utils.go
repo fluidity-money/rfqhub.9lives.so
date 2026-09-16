@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"strings"
 	"bytes"
 	"database/sql"
 	"encoding/binary"
@@ -8,8 +9,9 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
+
+	superposition_assets "github.com/fluidity-money/superposition-assets"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
@@ -90,4 +92,8 @@ func modelOutcomeToOutcome(x model.Outcome) types.Outcome {
 		return types.OutcomeBitcoinPrice
 	}
 	panic("bad outcome")
+}
+
+func usdcAddr() string {
+	return strings.ToLower(superposition_assets.AssetUsdc.Address())
 }
