@@ -391,7 +391,7 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	addr_ := ethCommon.HexToAddress(addr)
 	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, addr_)
 	row := r.Db.QueryRow(`
-SELECT rfqhub_get_spendable_1($1, $2)`,
+SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		accAddr.String(),
 		acc_types.AssetUsdc,
 	)
