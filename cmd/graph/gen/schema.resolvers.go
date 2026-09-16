@@ -262,9 +262,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	$10
 )`,
 		accAddrStr,
-		// Temporary fix for a mistake in the code (TODO REMOVE
-		// ME AFTER UPDATING ASSETS DEP):
-		strings.ToLower(superposition_assets.AssetUsdc.Address()),
+		superposition_assets.AssetUsdc.Address(),
 		minAmount_,
 		maxAmount_,
 		isUp,
