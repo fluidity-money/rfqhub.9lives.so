@@ -246,7 +246,9 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 	$9
 )`,
 		accAddrStr,
-		superposition_assets.AssetUsdc.Address(),
+		// Temporary fix for a mistake in the code (TODO REMOVE
+		// ME AFTER UPDATING ASSETS DEP):
+		strings.ToLower(superposition_assets.AssetUsdc.Address()),
 		minAmount_,
 		maxAmount_,
 		isUp,
@@ -269,6 +271,8 @@ SELECT rfqhub_create_bundle_taker_onramping_1(
 			"expiry", expiry,
 			"msTs", msTsI,
 			"snowflake", snowflake,
+			"asset addr", superposition_assets.AssetUsdc.Address(),
+			"asset id", superposition_assets.AssetUsdc,
 		)
 		return nil, fmt.Errorf("error creating BundleTaker")
 	}
@@ -374,7 +378,11 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	}
 	addr_ := ethCommon.HexToAddress(addr)
 	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, addr_)
-	row := r.Db.QueryRow("SELECT rfqhub_get_spendable_1($1)", accAddr.String())
+	row := r.Db.QueryRow(`
+SELECT rfqhub_events_balance_changed($1, $2)`,
+		accAddr.String(),
+		acc_types.AssetUsdc,
+	)
 	var amt events.Number
 	if err := row.Scan(&amt).Error; err != nil {
 		slog.Error("Failed to scan the get spendable row",

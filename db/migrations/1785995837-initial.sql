@@ -1,16 +1,5 @@
 -- migrate:up
 
--- This table is an absolute projection of the contract's latest
--- BalanceChanged account/asset balance. The graph updates it as events arrive;
--- bundle creation locks the row while reserving liquidity.
-CREATE TABLE rfqhub_onramped_balances_1 (
-	acc_addr ADDRESS NOT NULL,
-	asset ADDRESS NOT NULL,
-	amt BIGINT NOT NULL CHECK (amt >= 0),
-	updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	PRIMARY KEY (acc_addr, asset)
-);
-
 CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	id SERIAL PRIMARY KEY,
 	addr ADDRESS NOT NULL UNIQUE,
@@ -170,31 +159,9 @@ BEGIN
 END;
 $$;
 
--- The graph writes absolute balances from BalanceChanged events through this
--- function, making replay and duplicate event delivery harmless.
-CREATE FUNCTION rfqhub_set_onramped_balance_1 (
-	p_acc_addr ADDRESS,
-	p_asset ADDRESS,
-	p_amt BIGINT
-)
-RETURNS VOID
-LANGUAGE plpgsql
-AS $$
-BEGIN
-	IF p_amt < 0 THEN
-		RAISE EXCEPTION 'onramped balance cannot be negative';
-	END IF;
-
-	INSERT INTO rfqhub_onramped_balances_1 (acc_addr, asset, amt)
-	VALUES (p_acc_addr, p_asset, p_amt)
-	ON CONFLICT (acc_addr, asset) DO UPDATE
-	SET amt = EXCLUDED.amt,
-		updated_at = CURRENT_TIMESTAMP;
-END;
-$$;
-
--- Return the unreserved part of the latest onchain-pot balance. Aggregate
--- results are not included here until a result is partially returned to the pot.
+-- Return the unreserved part of the latest BalanceChanged amount. Aggregate
+-- results are not included here until a result is partially returned to the pot
+-- and recorded by a later BalanceChanged event.
 CREATE FUNCTION rfqhub_get_spendable_1 (
 	p_acc_addr ADDRESS,
 	p_asset ADDRESS
@@ -208,11 +175,15 @@ DECLARE
 	v_taker_reserved BIGINT;
 	v_maker_reserved BIGINT;
 BEGIN
-	SELECT COALESCE(b.amt, 0)
-	INTO v_balance
-	FROM (SELECT 1) AS singleton
-	LEFT JOIN rfqhub_onramped_balances_1 AS b
-		ON b.acc_addr = p_acc_addr AND b.asset = p_asset;
+	SELECT COALESCE((
+		SELECT e.amount
+		FROM rfqhub_events_balance_changed AS e
+		WHERE e.account_addr = p_acc_addr
+			AND e.asset = p_asset
+		ORDER BY e.id DESC
+		LIMIT 1
+	), 0)
+	INTO v_balance;
 
 	SELECT COALESCE(SUM(t.amt), 0)
 	INTO v_taker_reserved
@@ -309,7 +280,6 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 AS $$
 DECLARE
-	v_balance BIGINT;
 	v_available BIGINT;
 	v_amt BIGINT;
 	v_user_id INTEGER;
@@ -318,15 +288,6 @@ BEGIN
 	IF p_min_amt <= 0 OR p_max_amt < p_min_amt THEN
 		RAISE EXCEPTION 'invalid taker amount range: minimum %, maximum %', p_min_amt, p_max_amt;
 	END IF;
-
-	INSERT INTO rfqhub_onramped_balances_1 (acc_addr, asset, amt)
-	VALUES (p_acc_addr, p_asset, 0)
-	ON CONFLICT (acc_addr, asset) DO NOTHING;
-
-	SELECT b.amt INTO v_balance
-	FROM rfqhub_onramped_balances_1 AS b
-	WHERE b.acc_addr = p_acc_addr AND b.asset = p_asset
-	FOR UPDATE;
 
 	v_available := rfqhub_get_spendable_1(p_acc_addr, p_asset);
 	v_amt := LEAST(p_max_amt, v_available);
@@ -479,7 +440,6 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
-	v_balance BIGINT;
 	v_available BIGINT;
 	v_amt BIGINT;
 	v_user_id INTEGER;
@@ -502,15 +462,6 @@ BEGIN
 	IF v_taker.amt < p_min_taker_amt THEN
 		RAISE EXCEPTION 'taker offer % is below maker minimum %', v_taker.amt, p_min_taker_amt;
 	END IF;
-
-	INSERT INTO rfqhub_onramped_balances_1 (acc_addr, asset, amt)
-	VALUES (p_acc_addr, v_taker.asset, 0)
-	ON CONFLICT (acc_addr, asset) DO NOTHING;
-
-	SELECT b.amt INTO v_balance
-	FROM rfqhub_onramped_balances_1 AS b
-	WHERE b.acc_addr = p_acc_addr AND b.asset = v_taker.asset
-	FOR UPDATE;
 
 	v_available := rfqhub_get_spendable_1(p_acc_addr, v_taker.asset);
 	v_amt := LEAST(p_max_amt, v_available);
@@ -831,4 +782,42 @@ AS $$
 	WHERE t.id = p_bundle_taker_id;
 $$;
 
--- migrate:up
+-- migrate:down
+
+DROP FUNCTION IF EXISTS rfqhub_get_taker_leftover_1(INTEGER);
+DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1(INTEGER);
+DROP FUNCTION IF EXISTS rfqhub_resolve_aggregate_1(INTEGER, BIGINT, BYTES64);
+DROP FUNCTION IF EXISTS rfqhub_pick_maker_1(INTEGER);
+DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_from_aggregate_1(
+	INTEGER, INTEGER, BIGINT, BIGINT, BIGINT, BYTES64
+);
+DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_onramping_1(
+	ADDRESS, INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BYTES64
+);
+DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_from_aggregate_1(
+	INTEGER, BIGINT, BOOLEAN, BIGINT, RFQHUB_OUTCOME, BIGINT, INTEGER, BYTES64
+);
+DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_user_sig_1(INTEGER, BYTES64);
+DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_onramping_1(
+	ADDRESS, ADDRESS, BIGINT, BIGINT, BOOLEAN, BIGINT, RFQHUB_OUTCOME,
+	BIGINT, INTEGER
+);
+DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1(
+	TIMESTAMP, RFQHUB_OUTCOME, BIGINT
+);
+DROP FUNCTION IF EXISTS rfqhub_get_spendable_1(ADDRESS, ADDRESS);
+DROP FUNCTION IF EXISTS rfqhub_inspect_bundle_taker_1(ADDRESS, INTEGER);
+
+DROP VIEW IF EXISTS rfqhub_bundles_taker_ongoing_1;
+
+ALTER TABLE IF EXISTS rfqhub_bundles_taker_1
+	DROP CONSTRAINT IF EXISTS rfqhub_bundles_taker_maker_fk;
+
+DROP TABLE IF EXISTS rfqhub_bundles_maker_1;
+DROP TABLE IF EXISTS rfqhub_bundles_maker_user_count_1;
+DROP TABLE IF EXISTS rfqhub_bundles_taker_1;
+DROP TABLE IF EXISTS rfqhub_timestamplets_1;
+DROP TABLE IF EXISTS rfqhub_bundles_taker_user_count_1;
+
+DROP FUNCTION IF EXISTS rfqhub_protect_immutable_timestamplet_1();
+DROP TYPE IF EXISTS RFQHUB_OUTCOME;
