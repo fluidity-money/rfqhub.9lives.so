@@ -252,6 +252,10 @@ func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.
 		return nil, fmt.Errorf("deadline more than the expiry")
 	}
 	if deadline > curTs {
+		slog.Debug("Deadline in the past",
+			"deadline", deadline,
+			"current timestamp", curTs,
+		)
 		return nil, fmt.Errorf("deadline in the past")
 	}
 	msTs := pickMsTs()
