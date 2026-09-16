@@ -262,7 +262,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	$10
 )`,
 		accAddrStr,
-		superposition_assets.AssetUsdc.Address(),
+		usdcAddr(),
 		minAmount_,
 		maxAmount_,
 		isUp,
@@ -286,7 +286,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 			"expiry", expiry,
 			"msTs", msTsI,
 			"snowflake", snowflake,
-			"asset addr", superposition_assets.AssetUsdc.Address(),
+			"asset addr", usdcAddr(),
 			"asset id", superposition_assets.AssetUsdc,
 		)
 		return nil, fmt.Errorf("error creating BundleTaker")
@@ -383,6 +383,7 @@ func (r *mutationResolver) SubmitBundleMakerFromOnrampedAmountServerSig(ctx cont
 
 // Balance is the resolver for the balance field.
 func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error) {
+	snowflake, _ := ctx.Value("snowflake").(int)
 	// This function sums the recorded outstanding balances against
 	// the currently spendable amounts. The currently spendable
 	// amounts are amounts that were earmarked to be spent,
@@ -393,10 +394,15 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	}
 	addr_ := ethCommon.HexToAddress(addr)
 	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, addr_)
+	slog.Debug("Getting spendable for",
+		"acc addr", accAddr,
+		"usdc addr", usdcAddr(),
+		"snowflake", snowflake,
+	)
 	row := r.Db.QueryRowContext(ctx, `
 SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		accAddr.String(),
-		superposition_assets.AssetUsdc.Address(),
+		usdcAddr(),
 	)
 	var amt uint64
 	if err := row.Err(); err != nil {
