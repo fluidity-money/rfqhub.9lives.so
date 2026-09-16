@@ -245,7 +245,8 @@ func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.
 	msTsI := msTsBytesToInt(msTs)
 	outcome_ := modelOutcomeToOutcome(outcome)
 	row := r.Db.QueryRow(`
-SELECT rfqhub_create_bundle_taker_onramping_1(
+SELECT bundle_taker_id, amt, leftover_bal
+FROM rfqhub_create_bundle_taker_onramping_1(
 	$1,
 	$2,
 	$3,

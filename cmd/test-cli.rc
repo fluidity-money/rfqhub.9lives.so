@@ -14,7 +14,7 @@ fn usage {
 	echo '  '$prog' taker min-amount max-amount up|down price-target expiry [outcome]' >[1=2]
 	echo '  '$prog' auctions' >[1=2]
 	echo >[1=2]
-	echo 'onramp signs a fresh USDC permit for SPN_SUPERPOSITION_KEY (owner ->' >[1=2]
+	echo 'onramp funds the rfqhub (owner ->' >[1=2]
 	echo 'accounts factory as spender) using the on-chain nonce, then submits' >[1=2]
 	echo 'onrampAmount to settle USDC into the onramped balance.' >[1=2]
 	echo >[1=2]
@@ -70,7 +70,6 @@ fn onramp {
 	need jq
 	need curl
 	need cast
-	need make-permit
 	require_auth
 
 	if(~ $#* 0)
@@ -89,12 +88,13 @@ fn onramp {
 		usage
 	}
 
-	jq -c \
+	jq -cn \
 		--arg query 'mutation Onramp($amt: String!, $dryrun: Boolean) { onrampAmount(amt: $amt, isDryrun: $dryrun) }' \
 		--arg amt $amt \
 		--argjson dryrun $dryrun \
-		'{query: $query, variables: {amt: $amt, permit: {deadline: .deadline, permitV: .v, permitR: .r, permitS: .s}, dryrun: $dryrun}}' \
-		| request $auth
+		'{query: $query, variables: {amt: $amt, dryrun: $dryrun}}' \
+		| request $auth \
+		| render
 }
 
 fn taker {
