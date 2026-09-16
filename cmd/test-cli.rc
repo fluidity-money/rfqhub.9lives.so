@@ -66,33 +66,6 @@ fn require_auth {
 	true
 }
 
-# Print a fresh USDC permit JSON {v,r,s,deadline} signing the owner's USDC
-# allowance to the accounts factory, using the on-chain nonce and a one-hour
-# deadline. Output is a single compact JSON object on stdout.
-fn make_permit {
-	need cast
-	need make-permit
-	require_auth
-	if(~ $SPN_SUPERPOSITION_KEY '') {
-		echo $prog': SPN_SUPERPOSITION_KEY unset (needed to sign the permit)' >[1=2]
-		exit 2
-	}
-	nonce=`{cast call --rpc-url $rpc_url $usdc_addr 'nonces(address)(uint256)' $eoa}
-	if(~ $nonce '') {
-		echo $prog': failed to read USDC nonce for '$eoa >[1=2]
-		exit 1
-	}
-	now=`{date +%s}
-	deadline=`{echo $now + 3600 | bc}
-	# make-permit PRIVKEY SPENDER NONCE TOKEN DEADLINE -> {v,r,s}. Combine with
-	# the deadline without ever storing the JSON in a shell word (avoids rc
-	# command-substitution word-splitting); jq -s slurps {permit, deadline}.
-	{
-		make-permit $SPN_SUPERPOSITION_KEY $accounts_addr $nonce $usdc_addr $deadline
-		echo $deadline
-	} | jq -sc '.[0] + {deadline: (.[1] | tonumber)}'
-}
-
 fn onramp {
 	need jq
 	need curl
@@ -116,8 +89,8 @@ fn onramp {
 		usage
 	}
 
-	make_permit | jq -c \
-		--arg query 'mutation Onramp($amt: String!, $permit: Permit!, $dryrun: Boolean) { onrampAmount(amt: $amt, permit: $permit, isDryrun: $dryrun) }' \
+	jq -c \
+		--arg query 'mutation Onramp($amt: String!, $dryrun: Boolean) { onrampAmount(amt: $amt, isDryrun: $dryrun) }' \
 		--arg amt $amt \
 		--argjson dryrun $dryrun \
 		'{query: $query, variables: {amt: $amt, permit: {deadline: .deadline, permitV: .v, permitR: .r, permitS: .s}, dryrun: $dryrun}}' \

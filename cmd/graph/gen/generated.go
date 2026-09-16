@@ -673,7 +673,9 @@ type Mutation {
   ): AuctionCreatedResult!
 
   """
-  Get status that's relevant for the submitter of the BundleTaker.
+  Get status that's relevant for the submitter of the BundleTaker. The only caller is the
+  owner of the Bundle. Atomic in that the function that inspects information on this is
+  the acc_addr that we filter for.
   """
   inspectBundleTakerId(bundleTakerId: Int!): BundleTakerOwnerStatus!
 
