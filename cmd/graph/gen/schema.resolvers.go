@@ -215,6 +215,11 @@ func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.
 	}
 	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
 	accAddrStr := strings.ToLower(accAddr.String())
+	slog.Debug("Derived the accounts address",
+		"snowflake", snowflake,
+		"acc addr", accAddrStr,
+		"eoa", eoa,
+	)
 	minAmount_, err := strconv.ParseUint(minAmount, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("min amount: %v", err)
