@@ -22,9 +22,14 @@ type FillerArgs struct {
 }
 
 type OnchainPotArgs struct {
-	AccAddr [20]byte `borsh:"acc_addr"`
-	Amt     uint64   `borsh:"amt"`
-	Asset   Asset    `borsh:"asset"`
+	AccAddr [20]byte `json:"acc_addr"`
+	Amt     uint64   `json:"amt"`
+	Asset   Asset    `json:"asset"`
+}
+
+type AggregatedResultArgs struct {
+	From      AggregateEnum `json:"from"`
+	AmtToTake uint64        `json:"amt_to_take"`
 }
 
 const (
@@ -33,9 +38,9 @@ const (
 )
 
 type OnrampingSource struct {
-	Enum             borsh.Enum      `borsh_enum:"true" json:"-"`
-	OnchainPot       *OnchainPotArgs `json:"OnchainOpt,omitempty"`
-	AggregatedResult *AggregateEnum  `json:"AggregatedResult,omitempty"`
+	Enum             borsh.Enum              `borsh_enum:"true" json:"-"`
+	OnchainPot       *OnchainPotArgs         `json:"OnchainPot,omitempty"`
+	AggregatedResult *AggregatedResultArgs   `json:"AggregatedResult,omitempty"`
 }
 
 type BundleTakerArgs struct {
@@ -53,10 +58,10 @@ type BundleTaker struct {
 }
 
 type BundleMakerArgs struct {
-	Amt   uint64      `json:"amt"`
-	Taker BundleTaker `json:"taker"`
-	MsTs  [6]byte     `json:"ms_ts"`
-	Acc   [20]byte    `json:"acc"`
+	Src   OnrampingSource `json:"src"`
+	Taker BundleTaker     `json:"taker"`
+	MsTs  [6]byte         `json:"ms_ts"`
+	Acc   [20]byte        `json:"acc"`
 }
 
 type BundleMaker struct {
