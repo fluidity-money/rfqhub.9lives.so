@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"database/sql"
 	"log"
 	"log/slog"
 	"strconv"
@@ -387,7 +388,69 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 
 // ConcludeAndAggregate is the resolver for the concludeAndAggregate field.
 func (r *mutationResolver) ConcludeAndAggregate(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
-	panic(fmt.Errorf("not implemented: ConcludeAndAggregate - concludeAndAggregate"))
+	snowflake, _ := ctx.Value("snowflake").(int)
+	// Create an auction from a BundleTaker by taking what we can
+	// from the database, then constructing the blob signature
+	// ourselves and putting it into the database.
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return nil, fmt.Errorf("not authed in the handler")
+	}
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return nil, fmt.Errorf("bad eoa address")
+	}
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	accAddrStr := strings.ToLower(accAddr.String())
+	slog.Debug("Derived the accounts address",
+		"snowflake", snowflake,
+		"acc addr", accAddrStr,
+		"eoa", eoa,
+	)
+	row := r.Db.QueryRow(`
+SELECT
+	bundle_maker_id,
+	maker_amt,
+	maker_user_sig,
+	taker_acc_addr,
+	taker_amt,
+	taker_expiry,
+	taker_ms_ts,
+	taker_is_up,
+	taker_price_target,
+	taker_outcome,
+	taker_user_sig
+FROM rfqhub_conclude_aggregate_1($1, $2)`,
+		bundleTakerID,
+		accAddrStr,
+	)
+	var (
+		bundleMakerId, expiry int
+		makerAmt, takerAmt, priceTarget, msTs uint64
+		takerAccAddrS, outcomeS string
+		isUp bool
+		takerUserSigS, makerUserSigS sql.NullString
+	)
+	err := row.Scan(
+		&bundleMakerId,
+		&makerAmt,
+		&makerUserSigS,
+		&takerAccAddrS,
+		&takerAmt,
+		&expiry,
+		&msTs,
+		&isUp,
+		&priceTarget,
+		&outcomeS,
+		&takerUserSigS,
+	)
+	if err != nil {
+		slog.Error("Error scanning a concluded blob",
+			"err", err,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("error concluding")
+	}
+	return nil, nil
 }
 
 // CancelAuction is the resolver for the cancelAuction field.
@@ -479,11 +542,12 @@ FROM
 	}
 	takerOutcome := modelOutcomeToOutcome(model.Outcome(takerOutcomeS))
 	var takerAccAddr [20]byte
-	takerAccAddr_, err := hex.DecodeString(takerAccAddrX)
+	takerAccAddr_, err := hex.DecodeString(strings.TrimPrefix(takerAccAddrX, "0x"))
 	if err != nil {
 		slog.Error("Error decoding taker account address",
 			"err", err,
 			"snowflake", snowflake,
+			"taker acc addr x", takerAccAddrX,
 		)
 		return nil, fmt.Errorf("error decoding taker address")
 	}

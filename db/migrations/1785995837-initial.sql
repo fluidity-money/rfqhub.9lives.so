@@ -6,6 +6,11 @@ CREATE INDEX rfqhub_events_balance_changed_latest_idx
 	ON rfqhub_events_balance_changed (account_addr, asset, id DESC)
 	INCLUDE (amount);
 
+-- Settlement reads the last Chainlink observation at or before taker expiry.
+CREATE INDEX rfqhub_oracles_ninelives_prices_3_lookup_idx
+	ON oracles_ninelives_prices_3 (base, quote, source, created_by DESC, id DESC)
+	INCLUDE (amount);
+
 CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	id SERIAL PRIMARY KEY,
 	addr ADDRESS NOT NULL UNIQUE,
@@ -623,8 +628,7 @@ DECLARE
 BEGIN
 	SELECT m.* INTO STRICT v_source
 	FROM rfqhub_bundles_maker_1 AS m
-	WHERE m.id = p_source_maker_id
-	FOR UPDATE;
+	WHERE m.id = p_source_maker_id;
 
 	SELECT t.* INTO STRICT v_source_taker
 	FROM rfqhub_bundles_taker_1 AS t
@@ -634,6 +638,15 @@ BEGIN
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.id = p_bundle_taker_id
 	FOR SHARE;
+
+	SELECT m.* INTO STRICT v_source
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = p_source_maker_id
+	FOR UPDATE;
+
+	IF v_source.bundle_taker_id <> v_source_taker.id THEN
+		RAISE EXCEPTION 'source maker % changed taker', p_source_maker_id;
+	END IF;
 
 	IF v_target_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_target_taker.maker_id;
@@ -700,17 +713,26 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_maker rfqhub_bundles_maker_1%ROWTYPE;
+	v_bundle_taker_id INTEGER;
 	v_existing_maker_id INTEGER;
 BEGIN
+	SELECT m.bundle_taker_id INTO STRICT v_bundle_taker_id
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = p_bundle_maker_id;
+
+	SELECT t.maker_id INTO v_existing_maker_id
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = v_bundle_taker_id
+	FOR UPDATE;
+
 	SELECT m.* INTO STRICT v_maker
 	FROM rfqhub_bundles_maker_1 AS m
 	WHERE m.id = p_bundle_maker_id
 	FOR UPDATE;
 
-	SELECT t.maker_id INTO v_existing_maker_id
-	FROM rfqhub_bundles_taker_1 AS t
-	WHERE t.id = v_maker.bundle_taker_id
-	FOR UPDATE;
+	IF v_maker.bundle_taker_id <> v_bundle_taker_id THEN
+		RAISE EXCEPTION 'maker % changed taker', p_bundle_maker_id;
+	END IF;
 
 	IF v_existing_maker_id IS NOT NULL AND v_existing_maker_id <> p_bundle_maker_id THEN
 		RAISE EXCEPTION 'taker % already selected maker %', v_maker.bundle_taker_id, v_existing_maker_id;
@@ -728,16 +750,17 @@ BEGIN
 END;
 $$;
 
--- Resolve the selected pair. Taker identity, expiry and outcome are looked up;
--- the timestamplet is created or reused atomically.
+-- Resolve the selected pair after expiry. Taker identity and outcome determine
+-- the latest Chainlink observation at or before expiry; the resulting
+-- timestamplet is created or reused atomically.
 CREATE FUNCTION rfqhub_resolve_aggregate_1 (
 	p_bundle_maker_id INTEGER,
-	p_timestamplet_val BIGINT,
 	p_server_sig BYTES64
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
 	bundle_maker_id INTEGER,
+	taker_acc_addr ADDRESS,
 	timestamplet_id INTEGER,
 	winner_acc_addr ADDRESS,
 	taker_was_correct BOOLEAN,
@@ -749,42 +772,50 @@ AS $$
 DECLARE
 	v_maker rfqhub_bundles_maker_1%ROWTYPE;
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
+	v_bundle_taker_id INTEGER;
 	v_timestamplet_id INTEGER;
+	v_timestamplet_val BIGINT;
+	v_oracle_base VARCHAR;
 	v_taker_correct BOOLEAN;
 	v_total BIGINT;
 	v_taker_end BIGINT;
 	v_maker_end BIGINT;
 	v_winner ADDRESS;
-	v_existing_val BIGINT;
 BEGIN
 	IF p_server_sig IS NULL THEN
 		RAISE EXCEPTION 'server signature is required to resolve an aggregate';
 	END IF;
+
+	SELECT m.bundle_taker_id INTO STRICT v_bundle_taker_id
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = p_bundle_maker_id;
+
+	SELECT t.* INTO STRICT v_taker
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = v_bundle_taker_id
+	FOR UPDATE;
 
 	SELECT m.* INTO STRICT v_maker
 	FROM rfqhub_bundles_maker_1 AS m
 	WHERE m.id = p_bundle_maker_id
 	FOR UPDATE;
 
-	SELECT t.* INTO STRICT v_taker
-	FROM rfqhub_bundles_taker_1 AS t
-	WHERE t.id = v_maker.bundle_taker_id
-	FOR UPDATE;
+	IF v_maker.bundle_taker_id <> v_taker.id THEN
+		RAISE EXCEPTION 'maker % does not belong to taker %', p_bundle_maker_id, v_taker.id;
+	END IF;
 
 	IF v_taker.maker_id IS DISTINCT FROM p_bundle_maker_id OR v_maker.was_chosen IS DISTINCT FROM TRUE THEN
 		RAISE EXCEPTION 'maker % is not selected for taker %', p_bundle_maker_id, v_taker.id;
 	END IF;
 
 	IF v_maker.timestamplet_id IS NOT NULL THEN
-		SELECT ts.timestamplet_val INTO v_existing_val
-		FROM rfqhub_timestamplets_1 AS ts
-		WHERE ts.id = v_maker.timestamplet_id;
-		IF v_existing_val <> p_timestamplet_val OR v_maker.server_sig IS DISTINCT FROM p_server_sig THEN
-			RAISE EXCEPTION 'aggregate for maker % was already resolved differently', p_bundle_maker_id;
+		IF v_maker.server_sig IS DISTINCT FROM p_server_sig THEN
+			RAISE EXCEPTION 'aggregate for maker % was already resolved with a different server signature', p_bundle_maker_id;
 		END IF;
 		RETURN QUERY SELECT
 			v_taker.id,
 			v_maker.id,
+			v_taker.acc_addr,
 			v_maker.timestamplet_id,
 			CASE WHEN v_maker.was_correct THEN v_maker.acc_addr ELSE v_taker.acc_addr END,
 			NOT v_maker.was_correct,
@@ -793,13 +824,41 @@ BEGIN
 		RETURN;
 	END IF;
 
+	IF CURRENT_TIMESTAMP < v_taker.expiry THEN
+		RAISE EXCEPTION 'taker % does not expire until %', v_taker.id, v_taker.expiry;
+	END IF;
+
+	v_oracle_base := CASE v_taker.outcome
+		WHEN 'BitcoinPrice' THEN 'BTC'
+		ELSE NULL
+	END;
+	IF v_oracle_base IS NULL THEN
+		RAISE EXCEPTION 'no oracle base mapping for outcome %', v_taker.outcome;
+	END IF;
+
+	SELECT p.amount INTO v_timestamplet_val
+	FROM oracles_ninelives_prices_3 AS p
+	WHERE p.base = v_oracle_base
+		AND p.quote = 'USD'
+		AND p.source = 'chainlink'
+		AND p.created_by <= v_taker.expiry
+	ORDER BY p.created_by DESC, p.id DESC
+	LIMIT 1;
+
+	IF NOT FOUND THEN
+		RAISE EXCEPTION
+			'no Chainlink price found for base %, quote USD at or before %',
+			v_oracle_base,
+			v_taker.expiry;
+	END IF;
+
 	v_timestamplet_id := rfqhub_get_or_create_timestamplet_1(
 		v_taker.expiry,
 		v_taker.outcome,
-		p_timestamplet_val
+		v_timestamplet_val
 	);
-	v_taker_correct := (p_timestamplet_val > v_taker.price_target AND v_taker.is_up)
-		OR (p_timestamplet_val <= v_taker.price_target AND NOT v_taker.is_up);
+	v_taker_correct := (v_timestamplet_val > v_taker.price_target AND v_taker.is_up)
+		OR (v_timestamplet_val <= v_taker.price_target AND NOT v_taker.is_up);
 	v_total := v_taker.amt + v_maker.amt;
 	v_taker_end := CASE WHEN v_taker_correct THEN v_total ELSE 0 END;
 	v_maker_end := CASE WHEN v_taker_correct THEN 0 ELSE v_total END;
@@ -821,11 +880,98 @@ BEGIN
 	RETURN QUERY SELECT
 		v_taker.id,
 		v_maker.id,
+		v_taker.acc_addr,
 		v_timestamplet_id,
 		v_winner,
 		v_taker_correct,
 		v_taker_end,
 		v_maker_end;
+END;
+$$;
+
+-- Select the largest signed maker offer for a taker and return the payload
+-- needed for server signing. An existing selection is reused on retries.
+-- Resolution and server-signature persistence happen later through
+-- rfqhub_resolve_aggregate_1.
+CREATE FUNCTION rfqhub_conclude_aggregate_1 (
+	p_bundle_taker_id INTEGER,
+	p_taker_acc_addr ADDRESS
+)
+RETURNS TABLE (
+	bundle_maker_id INTEGER,
+	maker_amt BIGINT,
+	maker_user_sig BYTES64,
+	taker_acc_addr ADDRESS,
+	taker_amt BIGINT,
+	taker_expiry INTEGER,
+	taker_ms_ts BIGINT,
+	taker_is_up BOOLEAN,
+	taker_price_target BIGINT,
+	taker_outcome RFQHUB_OUTCOME,
+	taker_user_sig BYTES64
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	v_taker rfqhub_bundles_taker_1%ROWTYPE;
+	v_maker rfqhub_bundles_maker_1%ROWTYPE;
+	v_resolved_taker_acc_addr ADDRESS;
+BEGIN
+	SELECT t.* INTO STRICT v_taker
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = p_bundle_taker_id
+	FOR UPDATE;
+
+	IF v_taker.user_sig IS NULL THEN
+		RAISE EXCEPTION 'taker % has no user signature', p_bundle_taker_id;
+	END IF;
+
+	IF v_taker.maker_id IS NULL THEN
+		SELECT m.* INTO v_maker
+		FROM rfqhub_bundles_maker_1 AS m
+		WHERE m.bundle_taker_id = v_taker.id
+			AND m.user_sig IS NOT NULL
+			AND m.was_chosen IS DISTINCT FROM FALSE
+		ORDER BY m.amt DESC, m.id ASC
+		LIMIT 1
+		FOR UPDATE;
+	ELSE
+		SELECT m.* INTO v_maker
+		FROM rfqhub_bundles_maker_1 AS m
+		WHERE m.id = v_taker.maker_id
+			AND m.bundle_taker_id = v_taker.id
+			AND m.user_sig IS NOT NULL
+		FOR UPDATE;
+	END IF;
+
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'no signed maker offers found for taker %', p_bundle_taker_id;
+	END IF;
+
+	PERFORM rfqhub_pick_maker_1(v_maker.id);
+
+	SELECT r.taker_acc_addr INTO STRICT v_resolved_taker_acc_addr
+	FROM rfqhub_resolve_aggregate_1(
+		v_maker.id,
+		p_server_sig
+	) AS r;
+
+	IF v_resolved_taker_acc_addr IS DISTINCT FROM p_taker_acc_addr THEN
+		RAISE EXCEPTION 'account address does not match bundle taker %', p_bundle_taker_id;
+	END IF;
+
+	RETURN QUERY SELECT
+		v_maker.id,
+		v_maker.amt,
+		v_maker.user_sig,
+		v_taker.acc_addr,
+		v_taker.amt,
+		EXTRACT(EPOCH FROM v_taker.expiry)::INTEGER,
+		v_taker.ms_ts,
+		v_taker.is_up,
+		v_taker.price_target,
+		v_taker.outcome,
+		v_taker.user_sig;
 END;
 $$;
 
@@ -843,16 +989,25 @@ AS $$
 DECLARE
 	v_maker rfqhub_bundles_maker_1%ROWTYPE;
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
+	v_bundle_taker_id INTEGER;
 BEGIN
+	SELECT m.bundle_taker_id INTO STRICT v_bundle_taker_id
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = p_bundle_maker_id;
+
+	SELECT t.* INTO STRICT v_taker
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = v_bundle_taker_id
+	FOR UPDATE;
+
 	SELECT m.* INTO STRICT v_maker
 	FROM rfqhub_bundles_maker_1 AS m
 	WHERE m.id = p_bundle_maker_id
 	FOR UPDATE;
 
-	SELECT t.* INTO STRICT v_taker
-	FROM rfqhub_bundles_taker_1 AS t
-	WHERE t.id = v_maker.bundle_taker_id
-	FOR UPDATE;
+	IF v_maker.bundle_taker_id <> v_taker.id THEN
+		RAISE EXCEPTION 'maker % does not belong to taker %', p_bundle_maker_id, v_taker.id;
+	END IF;
 
 	IF v_taker.maker_id IS DISTINCT FROM p_bundle_maker_id OR v_maker.was_chosen IS DISTINCT FROM TRUE THEN
 		RAISE EXCEPTION 'maker % is not selected for taker %', p_bundle_maker_id, v_taker.id;
@@ -895,6 +1050,7 @@ $$;
 
 DROP FUNCTION IF EXISTS rfqhub_get_taker_leftover_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
+DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_resolve_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_pick_maker_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_from_aggregate_1;
@@ -921,6 +1077,7 @@ DROP TABLE IF EXISTS rfqhub_bundles_taker_user_count_1;
 DROP FUNCTION IF EXISTS rfqhub_protect_immutable_timestamplet_1;
 DROP TYPE IF EXISTS RFQHUB_OUTCOME;
 
--- The BalanceChanged table is external, so remove only the index created by
--- this migration and leave the table itself untouched.
+-- The balance-event and oracle-price tables are external, so remove only the
+-- indexes created by this migration and leave the tables themselves untouched.
+DROP INDEX IF EXISTS rfqhub_oracles_ninelives_prices_3_lookup_idx;
 DROP INDEX IF EXISTS rfqhub_events_balance_changed_latest_idx;
