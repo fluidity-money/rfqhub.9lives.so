@@ -11,7 +11,7 @@ rpc_url=https://arb1.arbitrum.io/rpc
 fn usage {
 	echo 'usage:' >[1=2]
 	echo '  '$prog' onramp amount [dry-run]' >[1=2]
-	echo '  '$prog' taker min-amount max-amount up|down price-target expiry min-reward' >[1=2]
+	echo '  '$prog' taker min-amount max-amount up|down price-target expiry min-offer deadline' >[1=2]
 	echo '  '$prog' maker bundle-taker-id min-amount max-amount' >[1=2]
 	echo '  '$prog' auctions' >[1=2]
 	echo >[1=2]

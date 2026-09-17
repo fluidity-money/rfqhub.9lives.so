@@ -53,6 +53,7 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	source INTEGER REFERENCES rfqhub_bundles_taker_1 (id),
 	asset ADDRESS NOT NULL,
 	amt BIGINT NOT NULL CHECK (amt >= 0),
+	min_offer BIGINT NOT NULL CHECK (min_offer >= 0),
 	is_up BOOLEAN NOT NULL,
 	price_target BIGINT NOT NULL CHECK (price_target >= 0),
 	outcome RFQHUB_OUTCOME NOT NULL,
@@ -299,6 +300,7 @@ CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
 	p_outcome RFQHUB_OUTCOME,
 	p_ms_ts BIGINT,
 	p_expiry INTEGER,
+	p_min_offer BIGINT,
 	p_deadline INTEGER
 )
 RETURNS TABLE (
@@ -318,6 +320,9 @@ DECLARE
 BEGIN
 	IF p_min_amt <= 0 OR p_max_amt < p_min_amt THEN
 		RAISE EXCEPTION 'invalid taker amount range: minimum %, maximum %', p_min_amt, p_max_amt;
+	END IF;
+	IF p_min_offer < 0 THEN
+		RAISE EXCEPTION 'minimum offer cannot be negative: %', p_min_offer;
 	END IF;
 	v_expiry := TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC';
 	IF p_deadline IS NULL THEN
@@ -340,11 +345,11 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_taker_1 (
-		acc_addr, user_id, source, asset, amt, is_up, price_target,
+		acc_addr, user_id, source, asset, amt, min_offer, is_up, price_target,
 		outcome, ms_ts, deadline, expiry
 	)
 	VALUES (
-		p_acc_addr, v_user_id, NULL, p_asset, v_amt, p_is_up,
+		p_acc_addr, v_user_id, NULL, p_asset, v_amt, p_min_offer, p_is_up,
 		p_price_target, p_outcome, p_ms_ts, v_deadline, v_expiry
 	)
 	RETURNING id INTO v_bundle_taker_id;
@@ -396,6 +401,7 @@ CREATE FUNCTION rfqhub_create_bundle_taker_from_aggregate_1 (
 	p_outcome RFQHUB_OUTCOME,
 	p_ms_ts BIGINT,
 	p_expiry INTEGER,
+	p_min_offer BIGINT,
 	p_deadline INTEGER,
 	p_user_sig BYTES64
 )
@@ -414,6 +420,9 @@ DECLARE
 	v_expiry TIMESTAMP;
 	v_deadline TIMESTAMP;
 BEGIN
+	IF p_min_offer < 0 THEN
+		RAISE EXCEPTION 'minimum offer cannot be negative: %', p_min_offer;
+	END IF;
 	v_expiry := TO_TIMESTAMP(p_expiry) AT TIME ZONE 'UTC';
 	IF p_deadline IS NULL THEN
 		RAISE EXCEPTION 'taker deadline cannot be null';
@@ -459,12 +468,12 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_taker_1 (
-		acc_addr, user_id, source, asset, amt, is_up, price_target,
+		acc_addr, user_id, source, asset, amt, min_offer, is_up, price_target,
 		outcome, ms_ts, deadline, expiry, user_sig
 	)
 	VALUES (
 		v_source.acc_addr, v_user_id, p_source_taker_id, v_source.asset,
-		p_amt_to_take, p_is_up, p_price_target, p_outcome, p_ms_ts,
+		p_amt_to_take, p_min_offer, p_is_up, p_price_target, p_outcome, p_ms_ts,
 		v_deadline, v_expiry, p_user_sig
 	)
 	RETURNING id INTO v_bundle_taker_id;
@@ -521,6 +530,9 @@ BEGIN
 	v_amt := LEAST(p_max_amt, v_available);
 	IF v_amt < p_min_amt THEN
 		RAISE EXCEPTION 'insufficient spendable balance: available %, minimum %', v_available, p_min_amt;
+	END IF;
+	IF v_amt <= v_taker.min_offer THEN
+		RAISE EXCEPTION 'maker offer % must exceed taker minimum offer %', v_amt, v_taker.min_offer;
 	END IF;
 	INSERT INTO rfqhub_bundles_maker_user_count_1 AS c (addr, count)
 	VALUES (p_acc_addr, 1)
@@ -643,6 +655,9 @@ BEGIN
 	END IF;
 	IF p_amt_to_take <= 0 OR p_amt_to_take > v_source.end_source_amt THEN
 		RAISE EXCEPTION 'invalid amount % for source maker balance %', p_amt_to_take, v_source.end_source_amt;
+	END IF;
+	IF p_amt_to_take <= v_target_taker.min_offer THEN
+		RAISE EXCEPTION 'maker offer % must exceed taker minimum offer %', p_amt_to_take, v_target_taker.min_offer;
 	END IF;
 	IF EXISTS (
 		SELECT 1 FROM rfqhub_bundles_maker_1 AS m

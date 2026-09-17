@@ -455,8 +455,7 @@ FROM
 		makerAmt, takerAmt, takerPriceTarget, takerMsTs uint64
 		makerId, takerExpiry int
 		takerIsUp bool
-		takerAccAddrX, takerUserSigX string
-		takerOutcome types.Outcome
+		takerAccAddrX, takerUserSigX, takerOutcomeS string
 	)
 	err = row.Scan(
 		&makerId,
@@ -467,7 +466,7 @@ FROM
 		&takerMsTs,
 		&takerIsUp,
 		&takerPriceTarget,
-		&takerOutcome,
+		&takerOutcomeS,
 		&takerUserSigX,
 	)
 	if err != nil {
@@ -478,6 +477,7 @@ FROM
 		)
 		return nil, fmt.Errorf("error scanning BundleMakerSig")
 	}
+	takerOutcome := modelOutcomeToOutcome(model.Outcome(takerOutcomeS))
 	var takerAccAddr [20]byte
 	takerAccAddr_, err := hex.DecodeString(takerAccAddrX)
 	if err != nil {
