@@ -290,6 +290,9 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	)
 	var (
 		bundleTakerId int
+		// Both of these are int64 in the database, but we're
+		// going to make it uint64 here since if we can't cast,
+		// we need to break anyway:
 		amt, leftover uint64
 	)
 	if err := row.Scan(&bundleTakerId, &amt, &leftover); err != nil {
@@ -394,7 +397,156 @@ func (r *mutationResolver) CancelAuction(ctx context.Context, bundleTakerID int)
 
 // SubmitBundleMakerFromOnrampedAmountServerSig is the resolver for the submitBundleMakerFromOnrampedAmountServerSig field.
 func (r *mutationResolver) SubmitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error) {
-	panic(fmt.Errorf("not implemented: SubmitBundleMakerFromOnrampedAmountServerSig - submitBundleMakerFromOnrampedAmountServerSig"))
+	snowflake, _ := ctx.Value("snowflake").(int)
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return nil, fmt.Errorf("not authed in the handler")
+	}
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return nil, fmt.Errorf("bad eoa address")
+	}
+	minAmount_, err := strconv.ParseUint(minAmount, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("min amount: %v", err)
+	}
+	maxAmount_, err := strconv.ParseUint(maxAmount, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("max amount: %v", err)
+	}
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	accAddrStr := strings.ToLower(accAddr.String())
+	slog.Debug("Derived the accounts address",
+		"snowflake", snowflake,
+		"acc addr", accAddrStr,
+		"eoa", eoa,
+	)
+	msTs := pickMsTs()
+	msTsI := msTsBytesToInt(msTs)
+	// Note that we always assume a USDC asset for now, and always the onramped amount.
+	row := r.Db.QueryRowContext(ctx, `
+SELECT
+	bundle_maker_id,
+	maker_amt,
+	taker_acc_addr,
+	taker_amt,
+	taker_expiry,
+	taker_ms_ts,
+	taker_is_up,
+	taker_price_target,
+	taker_outcome,
+	taker_user_sig
+FROM
+	rfqhub_create_bundle_maker_onramping_1(
+		$1,
+		$2,
+		$3,
+		$4,
+		$5
+	)`,
+		accAddrStr,
+		bundleTakerID,
+		minAmount_,
+		maxAmount_,
+		msTsI,
+	)
+	// Note that we don't select the source for now, always assuming
+	// that the amount being used here is the onramped source:
+	var (
+		makerAmt, takerAmt, takerPriceTarget uint64
+		makerId, takerExpiry, takerMsTs int
+		takerIsUp bool
+		takerAccAddrX, takerUserSigX string
+		takerOutcome types.Outcome
+	)
+	err = row.Scan(
+		&makerId,
+		&makerAmt,
+		&takerAccAddrX,
+		&takerAmt,
+		&takerExpiry,
+		&takerMsTs,
+		&takerIsUp,
+		&takerPriceTarget,
+		&takerOutcome,
+		&takerUserSigX,
+	)
+	if err != nil {
+		slog.Error("Error scanning taker signature for constructing the BundleTaker",
+			"err", err,
+			"snowflake", snowflake,
+			"bundle taker id", bundleTakerID,
+		)
+		return nil, fmt.Errorf("error scanning BundleMakerSig")
+	}
+	var takerAccAddr [20]byte
+	takerAccAddr_, err := hex.DecodeString(takerAccAddrX)
+	if err != nil {
+		slog.Error("Error decoding taker account address",
+			"err", err,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("error decoding taker address")
+	}
+	copy(takerAccAddr[:], takerAccAddr_)
+	takerUserSig_, err := hex.DecodeString(takerUserSigX)
+	if err != nil {
+		slog.Error("Error decoding taker signature",
+			"err", err,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("error decoding taker signature")
+	}
+	var takerUserSig [64]byte
+	copy(takerUserSig[:], takerUserSig_)
+	signingArgs := types.ClientSigningArgs{
+		Enum: types.ClientSigningArgsBundleTaker,
+		BundleMaker: &types.BundleMakerArgs{
+			Src: types.OnrampingSource{
+				Enum: types.OnrampingSourceOnchainPot,
+				OnchainPot: &types.OnchainPotArgs{
+					AccAddr: accAddr,
+					Amt:     makerAmt,
+				},
+			},
+			Taker: types.BundleTaker{
+				Args: types.BundleTakerArgs{
+					Src: types.OnrampingSource {
+						Enum: types.OnrampingSourceOnchainPot,
+						OnchainPot: &types.OnchainPotArgs{
+							AccAddr: takerAccAddr,
+							Amt: takerAmt,
+						},
+					},
+				},
+				Sig: takerUserSig,
+			},
+		},
+	}
+	makerUserSig, err := signer.ClientSignClientArgs(signingArgs)
+	if err != nil {
+		slog.Error("Error signing client signing args",
+			"signing args", signingArgs,
+			"err", err,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("error signing args")
+	}
+	makerUserSigX := hex.EncodeToString(makerUserSig[:])
+	_, err = r.Db.Exec(`
+SELECT rfqhub_set_bundle_maker_user_sig_1($1, $2)`,
+		makerId,
+		makerUserSigX,
+	)
+	if err != nil {
+		slog.Error("Error setting bundle maker user signature",
+			"err", err,
+			"snowflake", snowflake,
+			"bundle maker id", makerId,
+			"user signature", makerUserSigX,
+		)
+		return nil, fmt.Errorf("error setting signature")
+	}
+	return nil, nil
 }
 
 // Balance is the resolver for the balance field.
@@ -420,20 +572,20 @@ SELECT rfqhub_get_spendable_1 FROM rfqhub_get_spendable_1($1, $2)`,
 		addr,
 		usdcAddr(),
 	)
-	var amt uint64
+	var amt int64
 	if err := row.Scan(&amt); err != nil {
 		slog.Error("Failed to scan the get spendable row",
 			"err", err,
 		)
 		return "", fmt.Errorf("spendable error")
 	}
-	return strconv.FormatUint(amt, 10), nil
+	return strconv.FormatInt(amt, 10), nil
 }
 
 // OpenAuctions is the resolver for the openAuctions field.
 func (r *queryResolver) OpenAuctions(ctx context.Context) (*model.OpenAuctions, error) {
 	rows, err := r.Db.Query(`
-SELECT acc_addr, amt, is_up, price_target, outcome, expiry, id, auction_deadline
+SELECT updated_by, acc_addr, amt, is_up, price_target, outcome, expiry, id, auction_deadline
 FROM rfqhub_bundles_taker_ongoing_1`,
 	)
 	if err != nil {
@@ -447,10 +599,11 @@ FROM rfqhub_bundles_taker_ongoing_1`,
 	for rows.Next() {
 		o := new(model.OpenAuction)
 		var (
-			openToBeWon, priceTarget uint64
-			expiry, deadline                   time.Time
+			openToBeWon, priceTarget    int64
+			updatedBy, expiry, deadline time.Time
 		)
 		err = rows.Scan(
+			&updatedBy,
 			&o.AccAddr,
 			&openToBeWon,
 			&o.IsUp,
@@ -464,8 +617,9 @@ FROM rfqhub_bundles_taker_ongoing_1`,
 			slog.Error("Error scanning open auctions", "err", err)
 			return nil, fmt.Errorf("scanning open auctions")
 		}
-		o.OpenToBeWon = strconv.FormatUint(openToBeWon, 10)
-		o.PriceTarget = strconv.FormatUint(priceTarget, 10)
+		o.ID = fmt.Sprintf("open auction.%v.%v", o.AccAddr, updatedBy)
+		o.OpenToBeWon = strconv.FormatInt(openToBeWon, 10)
+		o.PriceTarget = strconv.FormatInt(priceTarget, 10)
 		o.ExpiryTs = int(expiry.Unix())
 		o.DeadlineTs = int(deadline.Unix())
 		openAuctions.OpenAuctions = append(openAuctions.OpenAuctions, o)
