@@ -86,6 +86,16 @@ func msTsBytesToInt(b [6]byte) uint64 {
 	return v
 }
 
+func msTsIntToBytes(x uint64) (b [6]byte) {
+	if x > 0xffffffffffff {
+		panic("timestamp exceeds 48 bits")
+	}
+	var buf [8]byte
+	binary.PutUvarint(buf[:], x)
+	copy(b[:], buf[2:])
+	return
+}
+
 func modelOutcomeToOutcome(x model.Outcome) types.Outcome {
 	switch x {
 	case "BitcoinPrice":

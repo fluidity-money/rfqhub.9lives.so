@@ -452,8 +452,8 @@ FROM
 	// Note that we don't select the source for now, always assuming
 	// that the amount being used here is the onramped source:
 	var (
-		makerAmt, takerAmt, takerPriceTarget uint64
-		makerId, takerExpiry, takerMsTs int
+		makerAmt, takerAmt, takerPriceTarget, takerMsTs uint64
+		makerId, takerExpiry int
 		takerIsUp bool
 		takerAccAddrX, takerUserSigX string
 		takerOutcome types.Outcome
@@ -517,6 +517,11 @@ FROM
 							Amt: takerAmt,
 						},
 					},
+					Expiry: uint32(takerExpiry),
+					MsTs: msTsIntToBytes(takerMsTs),
+					IsUp: takerIsUp,
+					PriceTarget: takerPriceTarget,
+					Outcome: takerOutcome,
 				},
 				Sig: takerUserSig,
 			},
@@ -546,7 +551,10 @@ SELECT rfqhub_set_bundle_maker_user_sig_1($1, $2)`,
 		)
 		return nil, fmt.Errorf("error setting signature")
 	}
-	return nil, nil
+	return &model.BundleMakerInfo{
+		ID: strconv.Itoa(makerId),
+		BundleMakerID: makerId,
+	}, nil
 }
 
 // Balance is the resolver for the balance field.

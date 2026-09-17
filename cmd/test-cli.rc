@@ -12,6 +12,7 @@ fn usage {
 	echo 'usage:' >[1=2]
 	echo '  '$prog' onramp amount [dry-run]' >[1=2]
 	echo '  '$prog' taker min-amount max-amount up|down price-target expiry min-reward' >[1=2]
+	echo '  '$prog' maker bundle-taker-id min-amount max-amount' >[1=2]
 	echo '  '$prog' auctions' >[1=2]
 	echo >[1=2]
 	echo 'onramp funds the rfqhub (owner ->' >[1=2]
@@ -136,6 +137,26 @@ fn taker {
 		| render
 }
 
+fn maker {
+	need jq
+	require_auth
+	if(! ~ $#* 3)
+		usage
+
+	bundletakerid=$1
+	minamount=$2
+	maxamount=$3
+
+	jq -cn \
+		--arg query 'mutation SubmitMaker($bundleTakerId: Int!, $minAmount: String!, $maxAmount: String!) { submitBundleMakerFromOnrampedAmountServerSig(bundleTakerId: $bundleTakerId, minAmount: $minAmount, maxAmount: $maxAmount) { id bundleMakerId } }' \
+		--arg bundletakerid $bundletakerid \
+		--arg minamount $minamount \
+		--arg maxamount $maxamount \
+		'{query: $query, variables: {bundleTakerId: ($bundletakerid | tonumber), minAmount: $minamount, maxAmount: $maxamount}}' \
+		| request $auth \
+		| render
+}
+
 fn auctions {
 	need jq
 	if(! ~ $#* 0)
@@ -155,6 +176,9 @@ case onramp
 case taker taker-bundle
 	shift
 	taker $*
+case maker maker-bundle
+	shift
+	maker $*
 case auctions open-auctions
 	shift
 	auctions $*
