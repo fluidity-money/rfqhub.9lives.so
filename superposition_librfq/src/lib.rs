@@ -19,6 +19,7 @@ pub mod entry_version;
 pub mod version;
 
 pub mod signable;
+pub mod sig;
 
 pub mod outcome;
 
@@ -53,13 +54,15 @@ pub use superposition_assets::Asset;
 
 pub use outcome::Outcome;
 
+pub use sig::Sig;
+
 use alloc::boxed::Box;
 
 #[cfg(feature = "arbitrary")]
 use arbitrary::Arbitrary;
 
 #[cfg(feature = "serde")]
-use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize, Serializer as SerdeSerializer, Deserializer as SerdeDeserializer};
+use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
 #[cfg(all(feature = "arbos", feature = "arbitrum"))]
 compile_error!("arbos and arbitrum cannot both be enabled");
@@ -72,65 +75,6 @@ pub const TOPIC_BALANCE_CHANGED: U =
 /// Global balance for the asset given has changed.
 pub const TOPIC_GLOBAL_BALANCE_CHANGED: U =
     const_keccak256(b"GlobalBalanceChanged(address,address,uint64,uint256)");
-
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
-pub struct Sig(pub [u8; 64]);
-
-#[cfg(feature = "serde")]
-impl SerdeSerialize for Sig {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: SerdeSerializer,
-    {
-        use serde::ser::SerializeTuple;
-
-        let mut tup = serializer.serialize_tuple(64)?;
-        for b in self.0 {
-            tup.serialize_element(&b)?;
-        }
-        tup.end()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> SerdeDeserialize<'de> for Sig {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: SerdeDeserializer<'de>,
-    {
-        use core::fmt;
-        use serde::de::{Error, SeqAccess, Visitor};
-
-        struct SigVisitor;
-
-        impl<'de> Visitor<'de> for SigVisitor {
-            type Value = Sig;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "an array of 64 bytes")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Sig, A::Error>
-            where
-                A: SeqAccess<'de>,
-            {
-                let mut out = [0u8; 64];
-
-                for (i, b) in out.iter_mut().enumerate() {
-                    *b = seq
-                        .next_element()?
-                        .ok_or_else(|| A::Error::invalid_length(i, &self))?;
-                }
-                if seq.next_element::<u8>()?.is_some() {
-                    return Err(A::Error::invalid_length(65, &self));
-                }
-                Ok(Sig(out))
-            }
-        }
-
-        deserializer.deserialize_tuple(64, SigVisitor)
-    }
-}
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
