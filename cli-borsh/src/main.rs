@@ -5,7 +5,7 @@ use std::{env::args, io::stdin};
 fn main() {
     let args = args().skip(1).collect::<Vec<_>>();
     let (json, should_decode, is_acc) = match args.as_slice() {
-        [flag] if flag == "-d" =>  (None, true, false),
+        [flag] if flag == "-d" => (None, true, false),
         [flag, is_acc] if flag == "-d" && is_acc == "-a" => (None, true, true),
         [json, flag] if flag == "-d" => (Some(json), true, false),
         [json, flag, is_acc] if flag == "-d" && is_acc == "-a" => (Some(json), true, true),
@@ -21,7 +21,10 @@ fn main() {
                 stdin().read_line(&mut s).unwrap();
                 const_hex::decode(s).unwrap()
             };
-            println!("{}", superposition_libaccounts::Args::deserialize(&mut x.as_slice()).unwrap())
+            println!(
+                "{}",
+                superposition_libaccounts::Args::deserialize(&mut x.as_slice()).unwrap()
+            )
         } else {
             println!(
                 "0x{}",
@@ -44,7 +47,10 @@ fn main() {
                 stdin().read_line(&mut s).unwrap();
                 const_hex::decode(s).unwrap()
             };
-            println!("{}", superposition_librfq::Args::deserialize(&mut x.as_slice()).unwrap())
+            println!(
+                "{}",
+                superposition_librfq::Args::deserialize(&mut x.as_slice()).unwrap()
+            )
         } else {
             println!(
                 "0x{}",

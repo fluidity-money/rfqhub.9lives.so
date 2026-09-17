@@ -35,7 +35,11 @@ pub fn entry_offramp(
     if *should_server_sig_validate {
         let SignableOfframpArgs { hash } = SignableOfframpArgs::from(&args);
         assert!(
-            bobcat_sdk::precompiles::superposition::edphverify_post(hash, *server_key, server_sig),
+            bobcat_sdk::precompiles::superposition::edphverify_post(
+                hash,
+                *server_key,
+                server_sig.0
+            ),
             "bad signature"
         );
     }

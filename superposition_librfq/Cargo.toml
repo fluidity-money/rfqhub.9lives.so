@@ -23,7 +23,7 @@ serde = { version = "1.0.229", default-features = false, features = ["derive"], 
 std = ["bobcat-sdk/std"]
 arbitrary = ["dep:arbitrary", "std", "superposition-assets/arbitrary", "bobcat-sdk/arbitrary"]
 proptest = ["dep:proptest", "dep:proptest-derive", "std", "superposition-assets/proptest", "bobcat-sdk/proptest"]
-serde = ["dep:serde", "bobcat-sdk/serde", "const-hex/alloc"]
+serde = ["dep:serde", "const-hex/alloc"]
 arbos = []
 arbitrum = []
 

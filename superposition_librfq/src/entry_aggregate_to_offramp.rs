@@ -111,12 +111,12 @@ pub unsafe fn recurse_aggregate_args(
                                         price_target,
                                         outcome,
                                     },
-                                sig: taker_sig,
+                                sig: ref taker_sig,
                             },
                         ms_ts: maker_ms_ts,
                         acc: maker_acc,
                     },
-                sig: maker_sig,
+                sig: ref maker_sig,
             },
         timestamplet:
             Timestamplet {
@@ -135,7 +135,7 @@ pub unsafe fn recurse_aggregate_args(
         return Err(Dis::TimestampletInconsistentTime.into());
     }
     if imm.should_server_sig_validate {
-        check_server_sig(&signable.hash, &imm.server_key, *server_sig)?;
+        check_server_sig(&signable.hash, &imm.server_key, server_sig.0)?;
         // Here, we don't bother checking the server signature since the
         // timestamps contained within are going to protect us here
         // from abuse.
@@ -177,13 +177,13 @@ pub unsafe fn recurse_aggregate_args(
             maker_acc,
             signable.maker.hash.clone(),
             maker_ms_ts,
-            maker_sig,
+            maker_sig.clone(),
         )?;
         check_hash_signer(
             taker_acc,
             signable.maker.taker_args.hash.clone(),
             taker_ms_ts,
-            taker_sig,
+            taker_sig.clone(),
         )?;
     }
     let did_taker_win = match (is_up, timestamplet_val > price_target) {
@@ -318,7 +318,7 @@ fn check_hash_signer(
         Ok(())
     }
     #[cfg(not(feature = "arbos"))]
-    if call_accounts::check_hash_statement(_addr, _hash, _ms_ts, &_sig) {
+    if call_accounts::check_hash_statement(_addr, _hash, _ms_ts, &_sig.0) {
         Ok(())
     } else {
         Err(Dis::StatementCheckFailed.into())
