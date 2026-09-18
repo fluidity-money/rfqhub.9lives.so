@@ -33,6 +33,26 @@ func (a Asset) MarshalJSON() ([]byte, error) {
 	}
 }
 
+func (a *Asset) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	switch s {
+	case "USDC":
+		*a = AssetUsdc
+	case "ARB":
+		*a = AssetArb
+	case "WETH":
+		*a = AssetWeth
+	default:
+		return fmt.Errorf("unknown asset %q", s)
+	}
+
+	return nil
+}
+
 type Outcome uint8
 
 const (
@@ -46,6 +66,22 @@ func (o Outcome) MarshalJSON() ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unknown outcome %d", o)
 	}
+}
+
+func (o *Outcome) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	switch s {
+	case "BitcoinPrice":
+		*o = OutcomeBitcoinPrice
+	default:
+		return fmt.Errorf("unknown outcome %q", s)
+	}
+
+	return nil
 }
 
 type FillerArgs struct {
