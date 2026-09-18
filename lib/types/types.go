@@ -69,9 +69,9 @@ const (
 )
 
 type OnrampingSource struct {
-	Enum             borsh.Enum              `borsh_enum:"true" json:"-"`
-	OnchainPot       *OnchainPotArgs         `json:"OnchainPot,omitempty"`
-	AggregatedResult *AggregatedResultArgs   `json:"AggregatedResult,omitempty"`
+	Enum             borsh.Enum            `borsh_enum:"true" json:"-"`
+	OnchainPot       *OnchainPotArgs       `json:"OnchainPot,omitempty"`
+	AggregatedResult *AggregatedResultArgs `json:"AggregatedResult,omitempty"`
 }
 
 type BundleTakerArgs struct {

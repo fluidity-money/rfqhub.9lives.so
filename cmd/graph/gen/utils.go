@@ -1,7 +1,6 @@
 package gen
 
 import (
-	"strings"
 	"bytes"
 	"database/sql"
 	"encoding/binary"
@@ -9,6 +8,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	superposition_assets "github.com/fluidity-money/superposition-assets"

@@ -6,11 +6,6 @@ CREATE INDEX rfqhub_events_balance_changed_latest_idx
 	ON rfqhub_events_balance_changed (account_addr, asset, id DESC)
 	INCLUDE (amount);
 
--- Settlement reads the last Chainlink observation at or before taker expiry.
-CREATE INDEX rfqhub_oracles_ninelives_prices_3_lookup_idx
-	ON oracles_ninelives_prices_3 (base, quote, source, created_by DESC, id DESC)
-	INCLUDE (amount);
-
 CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	id SERIAL PRIMARY KEY,
 	addr ADDRESS NOT NULL UNIQUE,
@@ -66,7 +61,7 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	ms_ts BIGINT NOT NULL,
 	deadline TIMESTAMP NOT NULL,
 	expiry TIMESTAMP NOT NULL,
-	user_sig BYTES64 UNIQUE,
+	structure JSON,
 	was_offramped BOOLEAN NOT NULL DEFAULT FALSE,
 	end_source_amt BIGINT CHECK (end_source_amt >= 0),
 	CHECK (deadline <= expiry),
@@ -108,12 +103,10 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	was_correct BOOLEAN,
 	was_chosen BOOLEAN,
 	timestamplet_id INTEGER REFERENCES rfqhub_timestamplets_1 (id),
-	user_sig BYTES64 UNIQUE,
-	server_sig BYTES64,
+	structure JSON,
 	was_offramped BOOLEAN NOT NULL DEFAULT FALSE,
 	end_source_amt BIGINT CHECK (end_source_amt >= 0),
-	UNIQUE (acc_addr, user_id),
-	CHECK (timestamplet_id IS NULL OR server_sig IS NOT NULL)
+	UNIQUE (acc_addr, user_id)
 );
 
 CREATE UNIQUE INDEX rfqhub_bundles_maker_source_uq
@@ -143,7 +136,7 @@ SELECT
 	t.*,
 	t.deadline AS auction_deadline
 FROM rfqhub_bundles_taker_1 AS t
-WHERE t.user_sig IS NOT NULL
+WHERE t.structure IS NOT NULL
 	AND t.maker_id IS NULL
 	AND t.deadline > CURRENT_TIMESTAMP;
 
@@ -363,37 +356,29 @@ BEGIN
 END;
 $$;
 
--- Onramped taker bundles are created before the final amount is known, so the
--- user signature is attached after creation once that amount has been signed.
--- Replaying the same signature is harmless; replacing it is not allowed.
-CREATE FUNCTION rfqhub_set_bundle_taker_user_sig_1 (
+-- Earlier versions of this function attached a user signature. It now stores the
+-- taker's fully signed bundle structure as raw JSON. The database never
+-- interprets the JSON; it exists only so the structure can be reconstructed for
+-- signature derivation. The column stays nullable and is set once signing completes.
+CREATE FUNCTION rfqhub_set_bundle_taker_structure_1 (
 	p_bundle_taker_id INTEGER,
-	p_user_sig BYTES64
+	p_structure JSON
 )
 RETURNS VOID
 LANGUAGE plpgsql
 AS $$
-DECLARE
-	v_user_sig BYTES64;
 BEGIN
-	IF p_user_sig IS NULL THEN
-		RAISE EXCEPTION 'taker user signature cannot be null';
+	IF p_structure IS NULL THEN
+		RAISE EXCEPTION 'taker bundle structure cannot be null';
 	END IF;
 
-	SELECT t.user_sig INTO STRICT v_user_sig
-	FROM rfqhub_bundles_taker_1 AS t
-	WHERE t.id = p_bundle_taker_id
-	FOR UPDATE;
+	UPDATE rfqhub_bundles_taker_1
+	SET structure = p_structure,
+		updated_by = CURRENT_TIMESTAMP
+	WHERE id = p_bundle_taker_id;
 
-	IF v_user_sig IS NOT NULL AND v_user_sig <> p_user_sig THEN
-		RAISE EXCEPTION 'taker % user signature is already set', p_bundle_taker_id;
-	END IF;
-
-	IF v_user_sig IS NULL THEN
-		UPDATE rfqhub_bundles_taker_1
-		SET user_sig = p_user_sig,
-			updated_by = CURRENT_TIMESTAMP
-		WHERE id = p_bundle_taker_id;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'bundle taker % does not exist', p_bundle_taker_id;
 	END IF;
 END;
 $$;
@@ -407,8 +392,7 @@ CREATE FUNCTION rfqhub_create_bundle_taker_from_aggregate_1 (
 	p_ms_ts BIGINT,
 	p_expiry INTEGER,
 	p_min_offer BIGINT,
-	p_deadline INTEGER,
-	p_user_sig BYTES64
+	p_deadline INTEGER
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
@@ -474,12 +458,12 @@ BEGIN
 
 	INSERT INTO rfqhub_bundles_taker_1 (
 		acc_addr, user_id, source, asset, amt, min_offer, is_up, price_target,
-		outcome, ms_ts, deadline, expiry, user_sig
+		outcome, ms_ts, deadline, expiry
 	)
 	VALUES (
 		v_source.acc_addr, v_user_id, p_source_taker_id, v_source.asset,
 		p_amt_to_take, p_min_offer, p_is_up, p_price_target, p_outcome, p_ms_ts,
-		v_deadline, v_expiry, p_user_sig
+		v_deadline, v_expiry
 	)
 	RETURNING id INTO v_bundle_taker_id;
 
@@ -497,16 +481,8 @@ CREATE FUNCTION rfqhub_create_bundle_maker_onramping_1 (
 RETURNS TABLE (
 	bundle_maker_id INTEGER,
 	maker_amt BIGINT,
-	taker_source INTEGER,
-	taker_acc_addr ADDRESS,
-	taker_asset ADDRESS,
-	taker_amt BIGINT,
-	taker_expiry INTEGER,
-	taker_ms_ts BIGINT,
-	taker_is_up BOOLEAN,
-	taker_price_target BIGINT,
 	taker_outcome RFQHUB_OUTCOME,
-	taker_user_sig BYTES64
+	structure JSON
 )
 LANGUAGE plpgsql
 AS $$
@@ -556,50 +532,29 @@ BEGIN
 	SELECT
 		v_bundle_maker_id,
 		v_amt,
-		v_taker.source,
-		v_taker.acc_addr,
-		v_taker.asset,
-		v_taker.amt,
-		EXTRACT(EPOCH FROM v_taker.expiry)::INTEGER,
-		v_taker.ms_ts,
-		v_taker.is_up,
-		v_taker.price_target,
-		v_taker.outcome,
-		v_taker.user_sig;
+		v_taker.structure
 END;
 $$;
 
--- Onramped maker bundles are created before their final amount is known, so
--- the user signature is attached after creation once that amount has been
--- signed. Replaying the same signature is harmless; replacing it is not.
-CREATE FUNCTION rfqhub_set_bundle_maker_user_sig_1 (
+CREATE FUNCTION rfqhub_set_bundle_maker_structure_1 (
 	p_bundle_maker_id INTEGER,
-	p_user_sig BYTES64
+	p_structure JSON
 )
 RETURNS VOID
 LANGUAGE plpgsql
 AS $$
-DECLARE
-	v_user_sig BYTES64;
 BEGIN
-	IF p_user_sig IS NULL THEN
-		RAISE EXCEPTION 'maker user signature cannot be null';
+	IF p_structure IS NULL THEN
+		RAISE EXCEPTION 'maker bundle structure cannot be null';
 	END IF;
 
-	SELECT m.user_sig INTO STRICT v_user_sig
-	FROM rfqhub_bundles_maker_1 AS m
-	WHERE m.id = p_bundle_maker_id
-	FOR UPDATE;
+	UPDATE rfqhub_bundles_maker_1
+	SET structure = p_structure,
+		updated_by = CURRENT_TIMESTAMP
+	WHERE id = p_bundle_maker_id;
 
-	IF v_user_sig IS NOT NULL AND v_user_sig <> p_user_sig THEN
-		RAISE EXCEPTION 'maker % user signature is already set', p_bundle_maker_id;
-	END IF;
-
-	IF v_user_sig IS NULL THEN
-		UPDATE rfqhub_bundles_maker_1
-		SET user_sig = p_user_sig,
-			updated_by = CURRENT_TIMESTAMP
-		WHERE id = p_bundle_maker_id;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'bundle maker % does not exist', p_bundle_maker_id;
 	END IF;
 END;
 $$;
@@ -608,8 +563,7 @@ CREATE FUNCTION rfqhub_create_bundle_maker_from_aggregate_1 (
 	p_source_maker_id INTEGER,
 	p_bundle_taker_id INTEGER,
 	p_amt_to_take BIGINT,
-	p_ms_ts BIGINT,
-	p_user_sig BYTES64
+	p_ms_ts BIGINT
 )
 RETURNS TABLE (
 	bundle_maker_id INTEGER,
@@ -691,11 +645,11 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_maker_1 (
-		acc_addr, user_id, source, bundle_taker_id, ms_ts, amt, user_sig
+		acc_addr, user_id, source, bundle_taker_id, ms_ts, amt
 	)
 	VALUES (
 		v_source.acc_addr, v_user_id, p_source_maker_id, p_bundle_taker_id,
-		p_ms_ts, p_amt_to_take, p_user_sig
+		p_ms_ts, p_amt_to_take
 	)
 	RETURNING id INTO v_bundle_maker_id;
 
@@ -754,8 +708,7 @@ $$;
 -- the latest Chainlink observation at or before expiry; the resulting
 -- timestamplet is created or reused atomically.
 CREATE FUNCTION rfqhub_resolve_aggregate_1 (
-	p_bundle_maker_id INTEGER,
-	p_server_sig BYTES64
+	p_bundle_maker_id INTEGER
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
@@ -782,10 +735,6 @@ DECLARE
 	v_maker_end BIGINT;
 	v_winner ADDRESS;
 BEGIN
-	IF p_server_sig IS NULL THEN
-		RAISE EXCEPTION 'server signature is required to resolve an aggregate';
-	END IF;
-
 	SELECT m.bundle_taker_id INTO STRICT v_bundle_taker_id
 	FROM rfqhub_bundles_maker_1 AS m
 	WHERE m.id = p_bundle_maker_id;
@@ -809,9 +758,6 @@ BEGIN
 	END IF;
 
 	IF v_maker.timestamplet_id IS NOT NULL THEN
-		IF v_maker.server_sig IS DISTINCT FROM p_server_sig THEN
-			RAISE EXCEPTION 'aggregate for maker % was already resolved with a different server signature', p_bundle_maker_id;
-		END IF;
 		RETURN QUERY SELECT
 			v_taker.id,
 			v_maker.id,
@@ -872,7 +818,6 @@ BEGIN
 	UPDATE rfqhub_bundles_maker_1 AS m
 	SET was_correct = NOT v_taker_correct,
 		timestamplet_id = v_timestamplet_id,
-		server_sig = p_server_sig,
 		end_source_amt = v_maker_end,
 		updated_by = CURRENT_TIMESTAMP
 	WHERE m.id = v_maker.id;
@@ -889,48 +834,47 @@ BEGIN
 END;
 $$;
 
--- Select the largest signed maker offer for a taker and return the payload
--- needed for server signing. An existing selection is reused on retries.
+-- Select the largest signed maker offer for a taker, record the supplied
+-- timestamplet at the taker's expiry, and return the payload needed for server
+-- signing. An existing selection and identical timestamplet are reused on retries.
 -- Resolution and server-signature persistence happen later through
 -- rfqhub_resolve_aggregate_1.
 CREATE FUNCTION rfqhub_conclude_aggregate_1 (
 	p_bundle_taker_id INTEGER,
-	p_taker_acc_addr ADDRESS
+	p_taker_acc_addr ADDRESS,
+	p_timestamplet_val BIGINT
 )
 RETURNS TABLE (
 	bundle_maker_id INTEGER,
 	maker_amt BIGINT,
-	maker_user_sig BYTES64,
 	taker_acc_addr ADDRESS,
 	taker_amt BIGINT,
 	taker_expiry INTEGER,
 	taker_ms_ts BIGINT,
 	taker_is_up BOOLEAN,
 	taker_price_target BIGINT,
-	taker_outcome RFQHUB_OUTCOME,
-	taker_user_sig BYTES64
+	taker_outcome RFQHUB_OUTCOME
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
 	v_maker rfqhub_bundles_maker_1%ROWTYPE;
-	v_resolved_taker_acc_addr ADDRESS;
 BEGIN
 	SELECT t.* INTO STRICT v_taker
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.id = p_bundle_taker_id
 	FOR UPDATE;
 
-	IF v_taker.user_sig IS NULL THEN
-		RAISE EXCEPTION 'taker % has no user signature', p_bundle_taker_id;
+	IF v_taker.structure IS NULL THEN
+		RAISE EXCEPTION 'taker % has no signed structure', p_bundle_taker_id;
 	END IF;
 
 	IF v_taker.maker_id IS NULL THEN
 		SELECT m.* INTO v_maker
 		FROM rfqhub_bundles_maker_1 AS m
 		WHERE m.bundle_taker_id = v_taker.id
-			AND m.user_sig IS NOT NULL
+			AND m.structure IS NOT NULL
 			AND m.was_chosen IS DISTINCT FROM FALSE
 		ORDER BY m.amt DESC, m.id ASC
 		LIMIT 1
@@ -940,7 +884,7 @@ BEGIN
 		FROM rfqhub_bundles_maker_1 AS m
 		WHERE m.id = v_taker.maker_id
 			AND m.bundle_taker_id = v_taker.id
-			AND m.user_sig IS NOT NULL
+			AND m.structure IS NOT NULL
 		FOR UPDATE;
 	END IF;
 
@@ -948,30 +892,34 @@ BEGIN
 		RAISE EXCEPTION 'no signed maker offers found for taker %', p_bundle_taker_id;
 	END IF;
 
-	PERFORM rfqhub_pick_maker_1(v_maker.id);
+	IF CURRENT_TIMESTAMP < v_taker.expiry + INTERVAL '5 seconds' THEN
+		RAISE EXCEPTION
+			'taker % cannot be concluded until %',
+			p_bundle_taker_id,
+			v_taker.expiry + INTERVAL '5 seconds';
+	END IF;
 
-	SELECT r.taker_acc_addr INTO STRICT v_resolved_taker_acc_addr
-	FROM rfqhub_resolve_aggregate_1(
-		v_maker.id,
-		p_server_sig
-	) AS r;
-
-	IF v_resolved_taker_acc_addr IS DISTINCT FROM p_taker_acc_addr THEN
+	IF v_taker.acc_addr IS DISTINCT FROM p_taker_acc_addr THEN
 		RAISE EXCEPTION 'account address does not match bundle taker %', p_bundle_taker_id;
 	END IF;
+
+	PERFORM rfqhub_pick_maker_1(v_maker.id);
+	PERFORM rfqhub_get_or_create_timestamplet_1(
+		v_taker.expiry,
+		v_taker.outcome,
+		p_timestamplet_val
+	);
 
 	RETURN QUERY SELECT
 		v_maker.id,
 		v_maker.amt,
-		v_maker.user_sig,
 		v_taker.acc_addr,
 		v_taker.amt,
 		EXTRACT(EPOCH FROM v_taker.expiry)::INTEGER,
 		v_taker.ms_ts,
 		v_taker.is_up,
 		v_taker.price_target,
-		v_taker.outcome,
-		v_taker.user_sig;
+		v_taker.outcome;
 END;
 $$;
 
@@ -1054,10 +1002,10 @@ DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_resolve_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_pick_maker_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_from_aggregate_1;
-DROP FUNCTION IF EXISTS rfqhub_set_bundle_maker_user_sig_1;
+DROP FUNCTION IF EXISTS rfqhub_set_bundle_maker_structure_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_onramping_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_from_aggregate_1;
-DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_user_sig_1;
+DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_structure_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_onramping_1;
 DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1;
 DROP FUNCTION IF EXISTS rfqhub_get_spendable_1;

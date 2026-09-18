@@ -7,9 +7,9 @@ package gen
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"database/sql"
 	"log"
 	"log/slog"
 	"strconv"
@@ -311,21 +311,22 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		)
 		return nil, fmt.Errorf("error creating BundleTaker")
 	}
+	bundleTakerArgs := types.BundleTakerArgs{
+		Src: types.OnrampingSource{
+			Enum: types.OnrampingSourceOnchainPot,
+			OnchainPot: &types.OnchainPotArgs{
+				AccAddr: accAddr,
+				Amt:     amt,
+			},
+		},
+		Expiry:      uint32(expiry),
+		IsUp:        isUp,
+		PriceTarget: priceTarget_,
+		Outcome:     outcome_,
+	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
 		Enum: types.ClientSigningArgsBundleTaker,
-		BundleTaker: &types.BundleTakerArgs{
-			Src: types.OnrampingSource{
-				Enum: types.OnrampingSourceOnchainPot,
-				OnchainPot: &types.OnchainPotArgs{
-					AccAddr: accAddr,
-					Amt:     amt,
-				},
-			},
-			Expiry:      uint32(expiry),
-			IsUp:        isUp,
-			PriceTarget: priceTarget_,
-			Outcome:     outcome_,
-		},
+		BundleTaker: &bundleTakerArgs,
 	})
 	if err != nil {
 		slog.Error("Error signing a BundleTaker",
@@ -337,14 +338,17 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 			"expiry", expiry,
 			"msTs", msTsI,
 			"snowflake", snowflake,
+			"bundle taker args", bundleTakerArgs,
 		)
 		return nil, fmt.Errorf("failed to sign bundle")
 	}
-	userSigX := hex.EncodeToString(userSig[:])
 	_, err = r.Db.Exec(
-		"SELECT rfqhub_set_bundle_taker_user_sig_1($1, $2)",
+		"SELECT rfqhub_set_bundle_taker_structure_1($1, $2)",
 		bundleTakerId,
-		userSigX,
+		types.BundleTaker {
+			Args: bundleTakerArgs,
+			Sig: userSig,
+		},
 	)
 	if err != nil {
 		slog.Error("Error tagging a BundleTaker",
@@ -424,11 +428,11 @@ FROM rfqhub_conclude_aggregate_1($1, $2)`,
 		accAddrStr,
 	)
 	var (
-		bundleMakerId, expiry int
+		bundleMakerId, expiry                 int
 		makerAmt, takerAmt, priceTarget, msTs uint64
-		takerAccAddrS, outcomeS string
-		isUp bool
-		takerUserSigS, makerUserSigS sql.NullString
+		takerAccAddrS, outcomeS               string
+		isUp                                  bool
+		takerUserSigS, makerUserSigS          sql.NullString
 	)
 	err := row.Scan(
 		&bundleMakerId,
@@ -497,7 +501,7 @@ SELECT
 	taker_is_up,
 	taker_price_target,
 	taker_outcome,
-	taker_user_sig
+	structure
 FROM
 	rfqhub_create_bundle_maker_onramping_1(
 		$1,
@@ -515,22 +519,14 @@ FROM
 	// Note that we don't select the source for now, always assuming
 	// that the amount being used here is the onramped source:
 	var (
-		makerAmt, takerAmt, takerPriceTarget, takerMsTs uint64
-		makerId, takerExpiry int
-		takerIsUp bool
-		takerAccAddrX, takerUserSigX, takerOutcomeS string
+		makerAmt    uint64
+		makerId     int
+		bundleTaker types.BundleMaker
 	)
 	err = row.Scan(
 		&makerId,
 		&makerAmt,
-		&takerAccAddrX,
-		&takerAmt,
-		&takerExpiry,
-		&takerMsTs,
-		&takerIsUp,
-		&takerPriceTarget,
-		&takerOutcomeS,
-		&takerUserSigX,
+		&bundleTaker,
 	)
 	if err != nil {
 		slog.Error("Error scanning taker signature for constructing the BundleTaker",
@@ -540,56 +536,18 @@ FROM
 		)
 		return nil, fmt.Errorf("error scanning BundleMakerSig")
 	}
-	takerOutcome := modelOutcomeToOutcome(model.Outcome(takerOutcomeS))
-	var takerAccAddr [20]byte
-	takerAccAddr_, err := hex.DecodeString(strings.TrimPrefix(takerAccAddrX, "0x"))
-	if err != nil {
-		slog.Error("Error decoding taker account address",
-			"err", err,
-			"snowflake", snowflake,
-			"taker acc addr x", takerAccAddrX,
-		)
-		return nil, fmt.Errorf("error decoding taker address")
-	}
-	copy(takerAccAddr[:], takerAccAddr_)
-	takerUserSig_, err := hex.DecodeString(takerUserSigX)
-	if err != nil {
-		slog.Error("Error decoding taker signature",
-			"err", err,
-			"snowflake", snowflake,
-		)
-		return nil, fmt.Errorf("error decoding taker signature")
-	}
-	var takerUserSig [64]byte
-	copy(takerUserSig[:], takerUserSig_)
-	signingArgs := types.ClientSigningArgs{
-		Enum: types.ClientSigningArgsBundleTaker,
-		BundleMaker: &types.BundleMakerArgs{
-			Src: types.OnrampingSource{
-				Enum: types.OnrampingSourceOnchainPot,
-				OnchainPot: &types.OnchainPotArgs{
-					AccAddr: accAddr,
-					Amt:     makerAmt,
-				},
-			},
-			Taker: types.BundleTaker{
-				Args: types.BundleTakerArgs{
-					Src: types.OnrampingSource {
-						Enum: types.OnrampingSourceOnchainPot,
-						OnchainPot: &types.OnchainPotArgs{
-							AccAddr: takerAccAddr,
-							Amt: takerAmt,
-						},
-					},
-					Expiry: uint32(takerExpiry),
-					MsTs: msTsIntToBytes(takerMsTs),
-					IsUp: takerIsUp,
-					PriceTarget: takerPriceTarget,
-					Outcome: takerOutcome,
-				},
-				Sig: takerUserSig,
+	bundleMakerArgs := types.BundleMakerArgs{
+		Src: types.OnrampingSource{
+			Enum: types.OnrampingSourceOnchainPot,
+			OnchainPot: &types.OnchainPotArgs{
+				AccAddr: accAddr,
+				Amt:     makerAmt,
 			},
 		},
+	}
+	signingArgs := types.ClientSigningArgs{
+		Enum:        types.ClientSigningArgsBundleTaker,
+		BundleMaker: &bundleMakerArgs,
 	}
 	makerUserSig, err := signer.ClientSignClientArgs(signingArgs)
 	if err != nil {
@@ -602,9 +560,12 @@ FROM
 	}
 	makerUserSigX := hex.EncodeToString(makerUserSig[:])
 	_, err = r.Db.Exec(`
-SELECT rfqhub_set_bundle_maker_user_sig_1($1, $2)`,
+SELECT rfqhub_set_bundle_maker_structure_1($1, $2)`,
 		makerId,
-		makerUserSigX,
+		types.BundleMaker{
+			Args: bundleMakerArgs,
+			Sig:  makerUserSig,
+		},
 	)
 	if err != nil {
 		slog.Error("Error setting bundle maker user signature",
@@ -616,7 +577,7 @@ SELECT rfqhub_set_bundle_maker_user_sig_1($1, $2)`,
 		return nil, fmt.Errorf("error setting signature")
 	}
 	return &model.BundleMakerInfo{
-		ID: strconv.Itoa(makerId),
+		ID:            strconv.Itoa(makerId),
 		BundleMakerID: makerId,
 	}, nil
 }
