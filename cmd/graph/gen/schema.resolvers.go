@@ -318,6 +318,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 				Amt:     amt,
 			},
 		},
+		MsTs: msTs,
 		Expiry:      uint32(expiry),
 		IsUp:        isUp,
 		PriceTarget: priceTarget_,
