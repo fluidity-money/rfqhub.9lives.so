@@ -494,13 +494,6 @@ func (r *mutationResolver) SubmitBundleMakerFromOnrampedAmountServerSig(ctx cont
 SELECT
 	bundle_maker_id,
 	maker_amt,
-	taker_acc_addr,
-	taker_amt,
-	taker_expiry,
-	taker_ms_ts,
-	taker_is_up,
-	taker_price_target,
-	taker_outcome,
 	structure
 FROM
 	rfqhub_create_bundle_maker_onramping_1(
@@ -523,12 +516,7 @@ FROM
 		makerId     int
 		bundleTaker types.BundleMaker
 	)
-	err = row.Scan(
-		&makerId,
-		&makerAmt,
-		&bundleTaker,
-	)
-	if err != nil {
+	if err = row.Scan(&makerId,&makerAmt, &bundleTaker); err != nil {
 		slog.Error("Error scanning taker signature for constructing the BundleTaker",
 			"err", err,
 			"snowflake", snowflake,

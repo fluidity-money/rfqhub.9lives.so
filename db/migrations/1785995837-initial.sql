@@ -532,7 +532,8 @@ BEGIN
 	SELECT
 		v_bundle_maker_id,
 		v_amt,
-		v_taker.structure
+		v_taker.outcome,
+		v_taker.structure;
 END;
 $$;
 
@@ -1025,7 +1026,5 @@ DROP TABLE IF EXISTS rfqhub_bundles_taker_user_count_1;
 DROP FUNCTION IF EXISTS rfqhub_protect_immutable_timestamplet_1;
 DROP TYPE IF EXISTS RFQHUB_OUTCOME;
 
--- The balance-event and oracle-price tables are external, so remove only the
--- indexes created by this migration and leave the tables themselves untouched.
 DROP INDEX IF EXISTS rfqhub_oracles_ninelives_prices_3_lookup_idx;
 DROP INDEX IF EXISTS rfqhub_events_balance_changed_latest_idx;
