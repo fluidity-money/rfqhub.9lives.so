@@ -39,7 +39,7 @@ fn test_erik_alex_after_already_same_blob() {
                 price_target: 100,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_1 = BundleMaker {
             args: BundleMakerArgs {
@@ -52,7 +52,7 @@ fn test_erik_alex_after_already_same_blob() {
                 ms_ts: [1u8; 6],
                 acc: alex_addr,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg_1 = AggregateArgs {
             maker: alex_1,
@@ -67,7 +67,7 @@ fn test_erik_alex_after_already_same_blob() {
                 src: OnrampingSource::AggregatedResult(AggregatedResultArgs {
                     from: Box::new(AggregateEnum::Args(Box::new(Aggregate {
                         args: agg_1,
-                        server_sig: [0u8; 64],
+                        server_sig: Sig::default(),
                     }))),
                     amt_to_take: 700,
                 }),
@@ -77,7 +77,7 @@ fn test_erik_alex_after_already_same_blob() {
                 price_target: 50,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_2 = BundleMaker {
             args: BundleMakerArgs {
@@ -90,7 +90,7 @@ fn test_erik_alex_after_already_same_blob() {
                 ms_ts: [3u8; 6],
                 acc: alex_addr,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg_2 = AggregateArgs {
             maker: alex_2,
@@ -102,7 +102,7 @@ fn test_erik_alex_after_already_same_blob() {
         };
         let signable = SignableAggregateArgs::from(&agg_2);
         assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &[0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable, &Sig::default()).unwrap()
         });
     })
 }
@@ -136,7 +136,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
                 price_target: 100,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_1 = BundleMaker {
             args: BundleMakerArgs {
@@ -149,7 +149,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
                 ms_ts: [1u8; 6],
                 acc: maker,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg_1 = AggregateArgs {
             maker: alex_1,
@@ -167,7 +167,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
                 src: OnrampingSource::AggregatedResult(AggregatedResultArgs {
                     from: Box::new(AggregateEnum::Args(Box::new(Aggregate {
                         args: agg_1,
-                        server_sig: [0u8; 64],
+                        server_sig: Sig::default(),
                     }))),
                     amt_to_take: 700,
                 }),
@@ -177,7 +177,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
                 price_target: 50,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_2 = BundleMaker {
             args: BundleMakerArgs {
@@ -190,7 +190,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
                 ms_ts: [3u8; 6],
                 acc: maker,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg_2 = AggregateArgs {
             maker: alex_2,
@@ -203,7 +203,7 @@ fn test_inline_reinvest_consumes_inner_leftover() {
 
         let signable_2 = SignableAggregateArgs::from(&agg_2);
         assert_eq!((1000, taker, asset.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &Sig::default()).unwrap()
         });
 
         // The inner (game 1) aggregate's taker claim of 700 was fully
@@ -277,7 +277,7 @@ fn test_erik_alex_after_posted_blob() {
                 price_target: 100,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_1 = BundleMaker {
             args: BundleMakerArgs {
@@ -290,7 +290,7 @@ fn test_erik_alex_after_posted_blob() {
                 ms_ts: [1u8; 6],
                 acc: alex_addr,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg_1 = AggregateArgs {
             maker: alex_1,
@@ -302,7 +302,7 @@ fn test_erik_alex_after_posted_blob() {
         };
         let signable_1 = SignableAggregateArgs::from(&agg_1);
         assert_eq!((700, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_1, &signable_1, &[0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg_1, &signable_1, &Sig::default()).unwrap()
         });
         let erik_2 = BundleTaker {
             args: BundleTakerArgs {
@@ -316,7 +316,7 @@ fn test_erik_alex_after_posted_blob() {
                 price_target: 50,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_2 = BundleMaker {
             args: BundleMakerArgs {
@@ -329,7 +329,7 @@ fn test_erik_alex_after_posted_blob() {
                 ms_ts: [3u8; 6],
                 acc: alex_addr,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg_2 = AggregateArgs {
             maker: alex_2,
@@ -343,7 +343,7 @@ fn test_erik_alex_after_posted_blob() {
         // Referring to the posted aggregate by hash preserves the complete
         // taker return, just like inlining the first aggregate above.
         assert_eq!((1000, erik_addr, Asset::USDC.addr()), unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &[0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg_2, &signable_2, &Sig::default()).unwrap()
         });
     })
 }
@@ -388,7 +388,7 @@ fn test_maker_win_offramp_pays_principal() {
                 price_target: 100,
                 outcome,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let alex_maker = BundleMaker {
             args: BundleMakerArgs {
@@ -401,7 +401,7 @@ fn test_maker_win_offramp_pays_principal() {
                 ms_ts: [1u8; 6],
                 acc: maker,
             },
-            sig: [0u8; 64],
+            sig: Sig::default(),
         };
         let agg = AggregateArgs {
             maker: alex_maker,
@@ -415,7 +415,7 @@ fn test_maker_win_offramp_pays_principal() {
         };
         let signable = SignableAggregateArgs::from(&agg);
         let (taker_leftover, returned_taker, returned_asset) = unsafe {
-            recurse_aggregate_args(&Imm::default(), &agg, &signable, &[0u8; 64]).unwrap()
+            recurse_aggregate_args(&Imm::default(), &agg, &signable, &Sig::default()).unwrap()
         };
         // The loser (taker) gets nothing back.
         assert_eq!(

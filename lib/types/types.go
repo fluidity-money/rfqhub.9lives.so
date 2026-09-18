@@ -55,9 +55,7 @@ func (a *Asset) UnmarshalJSON(data []byte) error {
 
 type Outcome uint8
 
-const (
-	OutcomeBitcoinPrice Outcome = 0
-)
+const OutcomeBitcoinPrice Outcome = 0
 
 func (o Outcome) MarshalJSON() ([]byte, error) {
 	switch o {
@@ -73,14 +71,12 @@ func (o *Outcome) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return err
 	}
-
 	switch s {
 	case "BitcoinPrice":
 		*o = OutcomeBitcoinPrice
 	default:
 		return fmt.Errorf("unknown outcome %q", s)
 	}
-
 	return nil
 }
 

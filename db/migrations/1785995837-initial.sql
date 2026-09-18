@@ -482,7 +482,7 @@ RETURNS TABLE (
 	bundle_maker_id INTEGER,
 	maker_amt BIGINT,
 	taker_outcome RFQHUB_OUTCOME,
-	structure JSON
+	structure_bundle_taker JSON
 )
 LANGUAGE plpgsql
 AS $$
@@ -854,7 +854,8 @@ RETURNS TABLE (
 	taker_ms_ts BIGINT,
 	taker_is_up BOOLEAN,
 	taker_price_target BIGINT,
-	taker_outcome RFQHUB_OUTCOME
+	taker_outcome RFQHUB_OUTCOME,
+	structure JSON
 )
 LANGUAGE plpgsql
 AS $$
@@ -913,14 +914,7 @@ BEGIN
 
 	RETURN QUERY SELECT
 		v_maker.id,
-		v_maker.amt,
-		v_taker.acc_addr,
-		v_taker.amt,
-		EXTRACT(EPOCH FROM v_taker.expiry)::INTEGER,
-		v_taker.ms_ts,
-		v_taker.is_up,
-		v_taker.price_target,
-		v_taker.outcome;
+		v_taker.structure;
 END;
 $$;
 

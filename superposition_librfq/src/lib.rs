@@ -18,8 +18,8 @@ pub mod entry_source;
 pub mod entry_version;
 pub mod version;
 
-pub mod signable;
 pub mod sig;
+pub mod signable;
 
 pub mod outcome;
 

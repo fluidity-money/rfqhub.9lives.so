@@ -1154,6 +1154,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "serde",
+ "serde_json",
  "superposition-assets",
  "superposition_libaccounts",
 ]

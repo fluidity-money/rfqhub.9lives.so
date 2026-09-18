@@ -7,7 +7,6 @@ package gen
 
 import (
 	"context"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -413,40 +412,17 @@ func (r *mutationResolver) ConcludeAndAggregate(ctx context.Context, bundleTaker
 	row := r.Db.QueryRow(`
 SELECT
 	bundle_maker_id,
-	maker_amt,
-	maker_user_sig,
-	taker_acc_addr,
-	taker_amt,
-	taker_expiry,
-	taker_ms_ts,
-	taker_is_up,
-	taker_price_target,
-	taker_outcome,
-	taker_user_sig
+	structure
 FROM rfqhub_conclude_aggregate_1($1, $2)`,
 		bundleTakerID,
 		accAddrStr,
 	)
 	var (
-		bundleMakerId, expiry                 int
-		makerAmt, takerAmt, priceTarget, msTs uint64
-		takerAccAddrS, outcomeS               string
-		isUp                                  bool
-		takerUserSigS, makerUserSigS          sql.NullString
+		bundleMakerId int
+		takerWon bool
+		makerStructure types.BundleMaker
 	)
-	err := row.Scan(
-		&bundleMakerId,
-		&makerAmt,
-		&makerUserSigS,
-		&takerAccAddrS,
-		&takerAmt,
-		&expiry,
-		&msTs,
-		&isUp,
-		&priceTarget,
-		&outcomeS,
-		&takerUserSigS,
-	)
+	err := row.Scan(&bundleMakerId, &takerWon, &makerStructure)
 	if err != nil {
 		slog.Error("Error scanning a concluded blob",
 			"err", err,
@@ -494,7 +470,7 @@ func (r *mutationResolver) SubmitBundleMakerFromOnrampedAmountServerSig(ctx cont
 SELECT
 	bundle_maker_id,
 	maker_amt,
-	structure
+	structure_bundle_taker
 FROM
 	rfqhub_create_bundle_maker_onramping_1(
 		$1,
@@ -514,9 +490,9 @@ FROM
 	var (
 		makerAmt    uint64
 		makerId     int
-		bundleTaker types.BundleMaker
+		bundleTaker types.BundleTaker
 	)
-	if err = row.Scan(&makerId,&makerAmt, &bundleTaker); err != nil {
+	if err = row.Scan(&makerId, &makerAmt, &bundleTaker); err != nil {
 		slog.Error("Error scanning taker signature for constructing the BundleTaker",
 			"err", err,
 			"snowflake", snowflake,
@@ -532,7 +508,15 @@ FROM
 				Amt:     makerAmt,
 			},
 		},
+		Taker: bundleTaker,
+		MsTs: msTs,
+		Acc: accAddr,
 	}
+	slog.Debug("Started to insert a BundleMaker",
+		"maker id", makerId,
+		"maker amt", makerAmt,
+		"bundle bundle taker", bundleTaker,
+	)
 	signingArgs := types.ClientSigningArgs{
 		Enum:        types.ClientSigningArgsBundleTaker,
 		BundleMaker: &bundleMakerArgs,
