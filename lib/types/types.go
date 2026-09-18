@@ -1,9 +1,9 @@
 package types
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"database/sql/driver"
 
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
@@ -102,9 +102,9 @@ const (
 )
 
 type OnrampingSource struct {
-	Enum             borsh.Enum              `borsh_enum:"true" json:"-"`
-	OnchainPot       *OnchainPotArgs         `json:"OnchainPot,omitempty"`
-	AggregatedResult *AggregatedResultArgs   `json:"AggregatedResult,omitempty"`
+	Enum             borsh.Enum            `borsh_enum:"true" json:"-"`
+	OnchainPot       *OnchainPotArgs       `json:"OnchainPot,omitempty"`
+	AggregatedResult *AggregatedResultArgs `json:"AggregatedResult,omitempty"`
 }
 
 type BundleTakerArgs struct {

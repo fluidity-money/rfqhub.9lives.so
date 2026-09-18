@@ -14,9 +14,3 @@ impl From<u8> for Outcome {
         Outcome::BitcoinPrice
     }
 }
-
-#[test]
-fn test_print_outcome() {
-    serde_json::to_writer(&std::io::stdout(), &Outcome::BitcoinPrice).unwrap();
-    panic!("shit")
-}

@@ -318,14 +318,14 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 				Amt:     amt,
 			},
 		},
-		MsTs: msTs,
+		MsTs:        msTs,
 		Expiry:      uint32(expiry),
 		IsUp:        isUp,
 		PriceTarget: priceTarget_,
 		Outcome:     outcome_,
 	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
-		Enum: types.ClientSigningArgsBundleTaker,
+		Enum:        types.ClientSigningArgsBundleTaker,
 		BundleTaker: &bundleTakerArgs,
 	})
 	if err != nil {
@@ -345,9 +345,9 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	_, err = r.Db.Exec(
 		"SELECT rfqhub_set_bundle_taker_structure_1($1, $2)",
 		bundleTakerId,
-		types.BundleTaker {
+		types.BundleTaker{
 			Args: bundleTakerArgs,
-			Sig: userSig,
+			Sig:  userSig,
 		},
 	)
 	if err != nil {
@@ -419,8 +419,8 @@ FROM rfqhub_conclude_aggregate_1($1, $2)`,
 		accAddrStr,
 	)
 	var (
-		bundleMakerId int
-		takerWon bool
+		bundleMakerId  int
+		takerWon       bool
 		makerStructure types.BundleMaker
 	)
 	err := row.Scan(&bundleMakerId, &takerWon, &makerStructure)
@@ -510,8 +510,8 @@ FROM
 			},
 		},
 		Taker: bundleTaker,
-		MsTs: msTs,
-		Acc: accAddr,
+		MsTs:  msTs,
+		Acc:   accAddr,
 	}
 	slog.Debug("Started to insert a BundleMaker",
 		"maker id", makerId,
