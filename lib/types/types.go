@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"database/sql/driver"
 
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
@@ -69,9 +70,9 @@ const (
 )
 
 type OnrampingSource struct {
-	Enum             borsh.Enum            `borsh_enum:"true" json:"-"`
-	OnchainPot       *OnchainPotArgs       `json:"OnchainPot,omitempty"`
-	AggregatedResult *AggregatedResultArgs `json:"AggregatedResult,omitempty"`
+	Enum             borsh.Enum              `borsh_enum:"true" json:"-"`
+	OnchainPot       *OnchainPotArgs         `json:"OnchainPot,omitempty"`
+	AggregatedResult *AggregatedResultArgs   `json:"AggregatedResult,omitempty"`
 }
 
 type BundleTakerArgs struct {
@@ -182,4 +183,38 @@ type ClientSigningArgs struct {
 	Enum        borsh.Enum       `borsh_enum:"true" json:"-"`
 	BundleTaker *BundleTakerArgs `json:"BundleTaker,omitempty"`
 	BundleMaker *BundleMakerArgs `json:"BundleMaker,omitempty"`
+}
+
+func (b BundleTaker) Value() (driver.Value, error) {
+	return json.Marshal(b)
+}
+
+func (b *BundleTaker) Scan(src any) error {
+	switch src := src.(type) {
+	case []byte:
+		return json.Unmarshal(src, b)
+	case string:
+		return json.Unmarshal([]byte(src), b)
+	case nil:
+		return nil
+	default:
+		return fmt.Errorf("cannot scan %T into BundleTaker", src)
+	}
+}
+
+func (b BundleMaker) Value() (driver.Value, error) {
+	return json.Marshal(b)
+}
+
+func (b *BundleMaker) Scan(src any) error {
+	switch src := src.(type) {
+	case []byte:
+		return json.Unmarshal(src, b)
+	case string:
+		return json.Unmarshal([]byte(src), b)
+	case nil:
+		return nil
+	default:
+		return fmt.Errorf("cannot scan %T into BundleMaker", src)
+	}
 }
