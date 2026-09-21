@@ -463,6 +463,7 @@ WHERE id = $1`,
 	row := r.Db.QueryRow(`
 SELECT
 	bundle_maker_id,
+	taker_was_correct,
 	structure
 FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 		bundleTakerID,
