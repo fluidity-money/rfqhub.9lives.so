@@ -125,21 +125,20 @@ type BundleTakerOwnerStatus {
   earned: String
 }
 
-type AggregateBundleTaker {
-  id: ID!
-}
-
-type AggregateBundleMaker {
-  id: ID!
-}
-
 type Aggregate {
   id: ID!,
 
   takerWon: Boolean!,
 
-  bundleTaker: AggregateBundleTaker!,
-  bundleMaker: AggregateBundleMaker!
+  """
+  Calldata to earn the resulting amount the winner is earning.
+  """
+  cd: String!,
+
+  """
+  Amount that the winner won.
+  """
+  winningAmount: String!
 }
 
 type Mutation {

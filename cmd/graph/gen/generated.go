@@ -37,18 +37,10 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Aggregate struct {
-		BundleMaker func(childComplexity int) int
-		BundleTaker func(childComplexity int) int
-		ID          func(childComplexity int) int
-		TakerWon    func(childComplexity int) int
-	}
-
-	AggregateBundleMaker struct {
-		ID func(childComplexity int) int
-	}
-
-	AggregateBundleTaker struct {
-		ID func(childComplexity int) int
+		Cd            func(childComplexity int) int
+		ID            func(childComplexity int) int
+		TakerWon      func(childComplexity int) int
+		WinningAmount func(childComplexity int) int
 	}
 
 	AuctionCreatedResult struct {
@@ -138,18 +130,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	_ = ec
 	switch typeName + "." + field {
 
-	case "Aggregate.bundleMaker":
-		if e.ComplexityRoot.Aggregate.BundleMaker == nil {
+	case "Aggregate.cd":
+		if e.ComplexityRoot.Aggregate.Cd == nil {
 			break
 		}
 
-		return e.ComplexityRoot.Aggregate.BundleMaker(childComplexity), true
-	case "Aggregate.bundleTaker":
-		if e.ComplexityRoot.Aggregate.BundleTaker == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Aggregate.BundleTaker(childComplexity), true
+		return e.ComplexityRoot.Aggregate.Cd(childComplexity), true
 	case "Aggregate.id":
 		if e.ComplexityRoot.Aggregate.ID == nil {
 			break
@@ -162,20 +148,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Aggregate.TakerWon(childComplexity), true
-
-	case "AggregateBundleMaker.id":
-		if e.ComplexityRoot.AggregateBundleMaker.ID == nil {
+	case "Aggregate.winningAmount":
+		if e.ComplexityRoot.Aggregate.WinningAmount == nil {
 			break
 		}
 
-		return e.ComplexityRoot.AggregateBundleMaker.ID(childComplexity), true
-
-	case "AggregateBundleTaker.id":
-		if e.ComplexityRoot.AggregateBundleTaker.ID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.AggregateBundleTaker.ID(childComplexity), true
+		return e.ComplexityRoot.Aggregate.WinningAmount(childComplexity), true
 
 	case "AuctionCreatedResult.amountSpent":
 		if e.ComplexityRoot.AuctionCreatedResult.AmountSpent == nil {
@@ -611,21 +589,20 @@ type BundleTakerOwnerStatus {
   earned: String
 }
 
-type AggregateBundleTaker {
-  id: ID!
-}
-
-type AggregateBundleMaker {
-  id: ID!
-}
-
 type Aggregate {
   id: ID!,
 
   takerWon: Boolean!,
 
-  bundleTaker: AggregateBundleTaker!,
-  bundleMaker: AggregateBundleMaker!
+  """
+  Calldata to earn the resulting amount the winner is earning.
+  """
+  cd: String!,
+
+  """
+  Amount that the winner won.
+  """
+  winningAmount: String!
 }
 
 type Mutation {
@@ -741,28 +718,12 @@ func (ec *executionContext) childFields_Aggregate(ctx context.Context, field gra
 		return ec.fieldContext_Aggregate_id(ctx, field)
 	case "takerWon":
 		return ec.fieldContext_Aggregate_takerWon(ctx, field)
-	case "bundleTaker":
-		return ec.fieldContext_Aggregate_bundleTaker(ctx, field)
-	case "bundleMaker":
-		return ec.fieldContext_Aggregate_bundleMaker(ctx, field)
+	case "cd":
+		return ec.fieldContext_Aggregate_cd(ctx, field)
+	case "winningAmount":
+		return ec.fieldContext_Aggregate_winningAmount(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Aggregate", field.Name)
-}
-
-func (ec *executionContext) childFields_AggregateBundleMaker(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-	switch field.Name {
-	case "id":
-		return ec.fieldContext_AggregateBundleMaker_id(ctx, field)
-	}
-	return nil, fmt.Errorf("no field named %q was found under type AggregateBundleMaker", field.Name)
-}
-
-func (ec *executionContext) childFields_AggregateBundleTaker(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-	switch field.Name {
-	case "id":
-		return ec.fieldContext_AggregateBundleTaker_id(ctx, field)
-	}
-	return nil, fmt.Errorf("no field named %q was found under type AggregateBundleTaker", field.Name)
 }
 
 func (ec *executionContext) childFields_AuctionCreatedResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1295,114 +1256,50 @@ func (ec *executionContext) fieldContext_Aggregate_takerWon(_ context.Context, f
 	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type Boolean does not have child fields"))
 }
 
-func (ec *executionContext) _Aggregate_bundleTaker(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
+func (ec *executionContext) _Aggregate_cd(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Aggregate_bundleTaker(ctx, field)
+			return ec.fieldContext_Aggregate_cd(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.BundleTaker, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.AggregateBundleTaker) graphql.Marshaler {
-			return ec.marshalNAggregateBundleTaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleTaker(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Aggregate_bundleTaker(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Aggregate",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_AggregateBundleTaker(ctx, field)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Aggregate_bundleMaker(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Aggregate_bundleMaker(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.BundleMaker, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.AggregateBundleMaker) graphql.Marshaler {
-			return ec.marshalNAggregateBundleMaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleMaker(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Aggregate_bundleMaker(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Aggregate",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_AggregateBundleMaker(ctx, field)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _AggregateBundleMaker_id(ctx context.Context, field graphql.CollectedField, obj *model.AggregateBundleMaker) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_AggregateBundleMaker_id(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
+			return obj.Cd, nil
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNID2string(ctx, selections, v)
+			return ec.marshalNString2string(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_AggregateBundleMaker_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("AggregateBundleMaker", field, false, false, errors.New("field of type ID does not have child fields"))
+func (ec *executionContext) fieldContext_Aggregate_cd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
-func (ec *executionContext) _AggregateBundleTaker_id(ctx context.Context, field graphql.CollectedField, obj *model.AggregateBundleTaker) (ret graphql.Marshaler) {
+func (ec *executionContext) _Aggregate_winningAmount(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_AggregateBundleTaker_id(ctx, field)
+			return ec.fieldContext_Aggregate_winningAmount(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
+			return obj.WinningAmount, nil
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNID2string(ctx, selections, v)
+			return ec.marshalNString2string(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_AggregateBundleTaker_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("AggregateBundleTaker", field, false, false, errors.New("field of type ID does not have child fields"))
+func (ec *executionContext) fieldContext_Aggregate_winningAmount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _AuctionCreatedResult_leftoverBal(ctx context.Context, field graphql.CollectedField, obj *model.AuctionCreatedResult) (ret graphql.Marshaler) {
@@ -3532,89 +3429,13 @@ func (ec *executionContext) _Aggregate(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "bundleTaker":
-			out.Values[i] = ec._Aggregate_bundleTaker(ctx, field, obj)
+		case "cd":
+			out.Values[i] = ec._Aggregate_cd(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "bundleMaker":
-			out.Values[i] = ec._Aggregate_bundleMaker(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
-
-	ec.ProcessDeferredGroup(graphql.DeferredGroup{
-		Defers:   deferLabelToView,
-		Path:     graphql.GetPath(ctx),
-		FieldSet: deferredFieldSet,
-		Context:  ctx,
-	})
-
-	return out
-}
-
-var aggregateBundleMakerImplementors = []string{"AggregateBundleMaker"}
-
-func (ec *executionContext) _AggregateBundleMaker(ctx context.Context, sel ast.SelectionSet, obj *model.AggregateBundleMaker) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, aggregateBundleMakerImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferredFieldSet := graphql.NewFieldSet(nil)
-	deferLabelToView := make(map[string]*graphql.FieldSetView)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("AggregateBundleMaker")
-		case "id":
-			out.Values[i] = ec._AggregateBundleMaker_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
-
-	ec.ProcessDeferredGroup(graphql.DeferredGroup{
-		Defers:   deferLabelToView,
-		Path:     graphql.GetPath(ctx),
-		FieldSet: deferredFieldSet,
-		Context:  ctx,
-	})
-
-	return out
-}
-
-var aggregateBundleTakerImplementors = []string{"AggregateBundleTaker"}
-
-func (ec *executionContext) _AggregateBundleTaker(ctx context.Context, sel ast.SelectionSet, obj *model.AggregateBundleTaker) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, aggregateBundleTakerImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferredFieldSet := graphql.NewFieldSet(nil)
-	deferLabelToView := make(map[string]*graphql.FieldSetView)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("AggregateBundleTaker")
-		case "id":
-			out.Values[i] = ec._AggregateBundleTaker_id(ctx, field, obj)
+		case "winningAmount":
+			out.Values[i] = ec._Aggregate_winningAmount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -4497,26 +4318,6 @@ func (ec *executionContext) marshalNAggregate2ᚖgithubᚗcomᚋfluidityᚑmoney
 		return graphql.Null
 	}
 	return ec._Aggregate(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNAggregateBundleMaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleMaker(ctx context.Context, sel ast.SelectionSet, v *model.AggregateBundleMaker) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._AggregateBundleMaker(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNAggregateBundleTaker2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregateBundleTaker(ctx context.Context, sel ast.SelectionSet, v *model.AggregateBundleTaker) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._AggregateBundleTaker(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNAuctionCreatedResult2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAuctionCreatedResult(ctx context.Context, sel ast.SelectionSet, v model.AuctionCreatedResult) graphql.Marshaler {

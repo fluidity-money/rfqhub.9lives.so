@@ -848,6 +848,8 @@ CREATE FUNCTION rfqhub_conclude_aggregate_1 (
 RETURNS TABLE (
 	bundle_maker_id INTEGER,
 	taker_was_correct BOOLEAN,
+	taker_amt BIGINT,
+	maker_amt BIGINT,
 	structure JSON
 )
 LANGUAGE plpgsql
@@ -909,6 +911,8 @@ BEGIN
 		v_maker.id,
 		(p_timestamplet_val > v_taker.price_target AND v_taker.is_up)
 			OR (p_timestamplet_val <= v_taker.price_target AND NOT v_taker.is_up),
+		v_taker.amt,
+		v_maker.amt,
 		v_taker.structure;
 END;
 $$;

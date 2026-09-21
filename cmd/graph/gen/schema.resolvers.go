@@ -10,8 +10,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"math/big"
 	"log/slog"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -21,10 +21,10 @@ import (
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	superposition_assets "github.com/fluidity-money/superposition-assets"
 )
 
@@ -465,17 +465,24 @@ SELECT
 	bundle_maker_id,
 	taker_was_correct,
 	structure
-FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
+FROM rfqhub_conclude_aggregate_1($1, $2, $3, $4, $5)`,
 		bundleTakerID,
 		accAddrStr,
 		timestampletVal,
 	)
 	var (
-		bundleMakerId  int
-		takerWon       bool
-		makerStructure types.BundleMaker
+		bundleMakerId      int
+		takerWon           bool
+		takerAmt, makerAmt uint64
+		makerStructure     types.BundleMaker
 	)
-	err = row.Scan(&bundleMakerId, &takerWon, &makerStructure)
+	err = row.Scan(
+		&bundleMakerId,
+		&takerWon,
+		&takerAmt,
+		&makerAmt,
+		&makerStructure,
+	)
 	if err != nil {
 		slog.Error("Error scanning a concluded blob",
 			"err", err,
@@ -483,7 +490,16 @@ FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 		)
 		return nil, fmt.Errorf("error concluding")
 	}
-	return nil, nil
+	wonAmt := takerAmt + makerAmt
+	amountWon := strconv.FormatUint(wonAmt, 10)
+	slog.Debug("Recorded as winning",
+		"snowflake", snowflake,
+		"amount won", amountWon,
+		"did taker win?", takerWon,
+	)
+	return &model.Aggregate{
+		TakerWon: takerWon,
+	}, nil
 }
 
 // CancelAuction is the resolver for the cancelAuction field.

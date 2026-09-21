@@ -10,18 +10,12 @@ import (
 )
 
 type Aggregate struct {
-	ID          string                `json:"id"`
-	TakerWon    bool                  `json:"takerWon"`
-	BundleTaker *AggregateBundleTaker `json:"bundleTaker"`
-	BundleMaker *AggregateBundleMaker `json:"bundleMaker"`
-}
-
-type AggregateBundleMaker struct {
-	ID string `json:"id"`
-}
-
-type AggregateBundleTaker struct {
-	ID string `json:"id"`
+	ID       string `json:"id"`
+	TakerWon bool   `json:"takerWon"`
+	// Calldata to earn the resulting amount the winner is earning.
+	Cd string `json:"cd"`
+	// Amount that the winner won.
+	WinningAmount string `json:"winningAmount"`
 }
 
 type AuctionCreatedResult struct {
