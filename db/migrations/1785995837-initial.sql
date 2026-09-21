@@ -844,7 +844,6 @@ $$;
 -- timestamplet_id.
 CREATE FUNCTION rfqhub_conclude_aggregate_1 (
 	p_bundle_taker_id INTEGER,
-	p_taker_acc_addr ADDRESS,
 	p_timestamplet_val BIGINT
 )
 RETURNS TABLE (
@@ -903,10 +902,6 @@ BEGIN
 			v_taker.expiry + INTERVAL '5 seconds';
 	END IF;
 
-	IF v_taker.acc_addr IS DISTINCT FROM p_taker_acc_addr THEN
-		RAISE EXCEPTION 'account address does not match bundle taker %', p_bundle_taker_id;
-	END IF;
-
 	PERFORM rfqhub_pick_maker_1(v_maker.id);
 	v_timestamplet_id := rfqhub_get_or_create_timestamplet_1(
 		v_taker.expiry,
@@ -938,6 +933,90 @@ BEGIN
 		v_taker.amt,
 		v_maker.amt,
 		v_taker.structure;
+END;
+$$;
+
+-- Mark exactly one resolved winner as offramped. The caller identifies whether
+-- it is claiming the taker or maker side, and its account address must match
+-- that side of the selected aggregate.
+CREATE FUNCTION rfqhub_mark_winner_as_offramped_1 (
+	p_acc_addr ADDRESS,
+	p_sender_is_taker BOOLEAN,
+	p_bundle_taker_id INTEGER
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	v_maker rfqhub_bundles_maker_1%ROWTYPE;
+	v_taker rfqhub_bundles_taker_1%ROWTYPE;
+BEGIN
+	IF p_sender_is_taker IS NULL THEN
+		RAISE EXCEPTION 'sender side cannot be null';
+	END IF;
+
+	SELECT t.* INTO STRICT v_taker
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.id = p_bundle_taker_id
+	FOR UPDATE;
+
+	IF v_taker.maker_id IS NULL THEN
+		RAISE EXCEPTION 'taker % has no selected maker', v_taker.id;
+	END IF;
+
+	SELECT m.* INTO STRICT v_maker
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = v_taker.maker_id
+	FOR UPDATE;
+
+	IF v_taker.maker_id IS DISTINCT FROM v_maker.id
+		OR v_maker.bundle_taker_id IS DISTINCT FROM v_taker.id
+		OR v_maker.was_chosen IS DISTINCT FROM TRUE THEN
+		RAISE EXCEPTION 'maker % is not selected for taker %', v_maker.id, v_taker.id;
+	END IF;
+	IF v_maker.was_correct IS NULL
+		OR v_taker.end_source_amt IS NULL
+		OR v_maker.end_source_amt IS NULL THEN
+		RAISE EXCEPTION 'aggregate for taker % has not been resolved', v_taker.id;
+	END IF;
+
+	IF p_sender_is_taker THEN
+		IF v_taker.acc_addr IS DISTINCT FROM p_acc_addr THEN
+			RAISE EXCEPTION 'account address does not match bundle taker %', v_taker.id;
+		END IF;
+		IF v_maker.was_correct IS DISTINCT FROM FALSE OR v_taker.end_source_amt <= 0 THEN
+			RAISE EXCEPTION 'taker % is not the winner', v_taker.id;
+		END IF;
+		IF EXISTS (
+			SELECT 1 FROM rfqhub_bundles_taker_1 AS t
+			WHERE t.source = v_taker.id
+		) THEN
+			RAISE EXCEPTION 'taker result % was already consumed as a source', v_taker.id;
+		END IF;
+
+		UPDATE rfqhub_bundles_taker_1 AS t
+		SET was_offramped = TRUE,
+			updated_by = CURRENT_TIMESTAMP
+		WHERE t.id = v_taker.id;
+	ELSE
+		IF v_maker.acc_addr IS DISTINCT FROM p_acc_addr THEN
+			RAISE EXCEPTION 'account address does not match bundle maker %', v_maker.id;
+		END IF;
+		IF v_maker.was_correct IS DISTINCT FROM TRUE OR v_maker.end_source_amt <= 0 THEN
+			RAISE EXCEPTION 'maker % is not the winner', v_maker.id;
+		END IF;
+		IF EXISTS (
+			SELECT 1 FROM rfqhub_bundles_maker_1 AS m
+			WHERE m.source = v_maker.id
+		) THEN
+			RAISE EXCEPTION 'maker result % was already consumed as a source', v_maker.id;
+		END IF;
+
+		UPDATE rfqhub_bundles_maker_1 AS m
+		SET was_offramped = TRUE,
+			updated_by = CURRENT_TIMESTAMP
+		WHERE m.id = v_maker.id;
+	END IF;
 END;
 $$;
 
@@ -1016,6 +1095,7 @@ $$;
 
 DROP FUNCTION IF EXISTS rfqhub_get_taker_leftover_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
+DROP FUNCTION IF EXISTS rfqhub_mark_winner_as_offramped_1;
 DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_resolve_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_pick_maker_1;

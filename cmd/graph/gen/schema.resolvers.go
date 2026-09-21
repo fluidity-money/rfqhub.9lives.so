@@ -395,23 +395,6 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 // ConcludeAndAggregate is the resolver for the concludeAndAggregate field.
 func (r *mutationResolver) Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
-	// Create an auction from a BundleTaker by taking what we can
-	// from the database, then constructing the blob signature
-	// ourselves and putting it into the database.
-	if authed, _ := ctx.Value("authed").(bool); !authed {
-		return nil, fmt.Errorf("not authed in the handler")
-	}
-	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
-	if !ok {
-		return nil, fmt.Errorf("bad eoa address")
-	}
-	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
-	accAddrStr := strings.ToLower(accAddr.String())
-	slog.Debug("Derived the accounts address",
-		"snowflake", snowflake,
-		"acc addr", accAddrStr,
-		"eoa", eoa,
-	)
 	var expiry time.Time
 	err := r.Db.QueryRow(`
 SELECT expiry FROM rfqhub_bundles_taker_1
@@ -467,9 +450,8 @@ SELECT
 	taker_amt,
 	maker_amt,
 	structure
-FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
+FROM rfqhub_conclude_aggregate_1($1, $2)`,
 		bundleTakerID,
-		accAddrStr,
 		timestampletVal,
 	)
 	var (
@@ -501,9 +483,44 @@ FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 	)
 	return &model.Aggregate{
 		TakerWon:      takerWon,
-		Cd:            "",
 		WinningAmount: "",
 	}, nil
+}
+
+// ConcludedCalldata is the resolver for the concludedCalldata field.
+func (r *mutationResolver) ConcludedCalldata(ctx context.Context, bundleTakerID int, isTaker bool) (string, error) {
+	snowflake, _ := ctx.Value("snowflake").(int)
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return "", fmt.Errorf("not authed in the handler")
+	}
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return "", fmt.Errorf("bad eoa address")
+	}
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	accAddrStr := strings.ToLower(accAddr.String())
+	slog.Debug("Derived the accounts address",
+		"snowflake", snowflake,
+		"acc addr", accAddrStr,
+		"eoa", eoa,
+	)
+	_, err := r.Db.Exec(`
+SELECT rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
+		accAddrStr,
+		isTaker,
+		bundleTakerID,
+	)
+	if err != nil {
+		slog.Error("Error marking a winner as offramped",
+			"err", err,
+			"snowflake", snowflake,
+			"bundle taker id", bundleTakerID,
+			"is taker?", isTaker,
+			"acc addr str", accAddrStr,
+		)
+		return "", fmt.Errorf("marking winner as offramped")
+	}
+	panic("TODO")
 }
 
 // CancelAuction is the resolver for the cancelAuction field.

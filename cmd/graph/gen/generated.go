@@ -64,6 +64,7 @@ type ComplexityRoot struct {
 	Mutation struct {
 		CancelAuction                                func(childComplexity int, bundleTakerID int) int
 		Conclude                                     func(childComplexity int, bundleTakerID int) int
+		ConcludedCalldata                            func(childComplexity int, bundleTakerID int, isTaker bool) int
 		CreateAccountExec                            func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
 		CreateAuctionFromOnrampedAmountServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) int
 		InspectBundleTakerID                         func(childComplexity int, bundleTakerID int) int
@@ -104,6 +105,7 @@ type MutationResolver interface {
 	CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
 	Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
+	ConcludedCalldata(ctx context.Context, bundleTakerID int, isTaker bool) (string, error)
 	CancelAuction(ctx context.Context, bundleTakerID int) (bool, error)
 	SubmitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error)
 }
@@ -234,6 +236,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.Conclude(childComplexity, args["bundleTakerId"].(int)), true
+	case "Mutation.concludedCalldata":
+		if e.ComplexityRoot.Mutation.ConcludedCalldata == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_concludedCalldata_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConcludedCalldata(childComplexity, args["bundleTakerId"].(int), args["isTaker"].(bool)), true
 	case "Mutation.createAccountExec":
 		if e.ComplexityRoot.Mutation.CreateAccountExec == nil {
 			break
@@ -675,6 +688,12 @@ type Mutation {
   conclude(bundleTakerId: Int!): Aggregate!
 
   """
+  Get the calldata to perform an offramping from the Rfqhub engine. Marks the aggregate
+  bundle as being unable to be consumed.
+  """
+  concludedCalldata(bundleTakerId: Int!, isTaker: Boolean!): String!
+
+  """
   Cancel an auction, using the taker id to do so. Only possible to be invoked by the
   creator of the auction. It's only possible to cancel the auction if it's within the
   one minute window of the market existing.
@@ -938,6 +957,28 @@ func (ec *executionContext) field_Mutation_conclude_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["bundleTakerId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_concludedCalldata_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["bundleTakerId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "isTaker",
+		func(ctx context.Context, v any) (bool, error) {
+			return ec.unmarshalNBoolean2bool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["isTaker"] = arg1
 	return args, nil
 }
 
@@ -1724,6 +1765,50 @@ func (ec *executionContext) fieldContext_Mutation_conclude(ctx context.Context, 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_conclude_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_concludedCalldata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_concludedCalldata(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConcludedCalldata(ctx, fc.Args["bundleTakerId"].(int), fc.Args["isTaker"].(bool))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_concludedCalldata(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_concludedCalldata_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3656,6 +3741,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "conclude":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_conclude(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "concludedCalldata":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_concludedCalldata(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
