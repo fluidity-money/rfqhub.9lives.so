@@ -8,6 +8,8 @@ import (
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
 	"github.com/near/borsh-go"
+
+	ethCommon "github.com/ethereum/go-ethereum/common"
 )
 
 type Sig [64]byte
@@ -78,6 +80,16 @@ func (o *Outcome) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unknown outcome %q", s)
 	}
 	return nil
+}
+
+// ChainlinkOracleAddrArb gets the Chainlink price feed for BTC USD (intended for Arbitrum One).
+func (o Outcome) ChainlinkOracleAddrArb() ethCommon.Address {
+	switch o {
+	case OutcomeBitcoinPrice:
+		return ethCommon.HexToAddress("0x6ce185860a4963106506C203335A2910413708e9")
+	default:
+		panic("bad outcome")
+	}
 }
 
 type FillerArgs struct {

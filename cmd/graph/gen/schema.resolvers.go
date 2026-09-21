@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math/big"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -23,6 +24,8 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
+	ninelives_events "github.com/fluidity-money/9lives.so/lib/types/events"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	superposition_assets "github.com/fluidity-money/superposition-assets"
 )
 
@@ -410,20 +413,60 @@ func (r *mutationResolver) ConcludeAndAggregate(ctx context.Context, bundleTaker
 		"acc addr", accAddrStr,
 		"eoa", eoa,
 	)
+	var expiry time.Time
+	err := r.Db.QueryRow(`
+SELECT expiry FROM bundles_taker_1
+WHERE id = $1`,
+		bundleTakerID,
+	).Scan(&expiry)
+	if err != nil {
+		slog.Error("Error scanning bundle taker for expiry when resolving",
+			"err", err,
+			"snowflake", snowflake,
+			"bundle taker id", bundleTakerID,
+		)
+		return nil, fmt.Errorf("scan bundle taker")
+	}
+	roundId, err := chainlink_proxy.GetOutcomePrice(
+		ctx,
+		r.Client,
+		types.OutcomeBitcoinPrice,
+		expiry,
+	)
+	if err != nil {
+		slog.Error("Error getting outcome price",
+			"outcome", types.OutcomeBitcoinPrice,
+			"err", err,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("get outcome price")
+	}
+	slog.Info("Resolving market for expiry",
+		"snowflake", snowflake,
+		"round id", roundId,
+		"outcome", types.OutcomeBitcoinPrice,
+		"expiry", expiry,
+	)
+	// TODO: hardcoded for Bitcoin to get us to 1e6 as the price delta:
+	exp := new(big.Int).SetInt64(10)
+	exp.Exp(exp, new(big.Int).SetInt64(12), nil)
+	answer := roundId.Answer
+	timestampletVal := ninelives_events.NumberFromBig(answer.Div(answer, exp))
 	row := r.Db.QueryRow(`
 SELECT
 	bundle_maker_id,
 	structure
-FROM rfqhub_conclude_aggregate_1($1, $2)`,
+FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 		bundleTakerID,
 		accAddrStr,
+		timestampletVal,
 	)
 	var (
 		bundleMakerId  int
 		takerWon       bool
 		makerStructure types.BundleMaker
 	)
-	err := row.Scan(&bundleMakerId, &takerWon, &makerStructure)
+	err = row.Scan(&bundleMakerId, &takerWon, &makerStructure)
 	if err != nil {
 		slog.Error("Error scanning a concluded blob",
 			"err", err,

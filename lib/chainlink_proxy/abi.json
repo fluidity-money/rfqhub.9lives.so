@@ -1,0 +1,69 @@
+[
+	{
+		"type": "function",
+		"name": "priceAt",
+		"inputs": [
+			{
+				"name": "feed",
+				"type": "address",
+				"internalType": "contract IChainlinkFeed"
+			},
+			{
+				"name": "target",
+				"type": "uint256",
+				"internalType": "uint256"
+			}
+		],
+		"outputs": [
+			{
+				"name": "round",
+				"type": "tuple",
+				"internalType": "struct ChainlinkPriceHistory.Round",
+				"components": [
+					{
+						"name": "proxyRoundId",
+						"type": "uint80",
+						"internalType": "uint80"
+					},
+					{
+						"name": "phase",
+						"type": "uint16",
+						"internalType": "uint16"
+					},
+					{
+						"name": "aggregatorRoundId",
+						"type": "uint64",
+						"internalType": "uint64"
+					},
+					{
+						"name": "answer",
+						"type": "int256",
+						"internalType": "int256"
+					},
+					{
+						"name": "startedAt",
+						"type": "uint256",
+						"internalType": "uint256"
+					},
+					{
+						"name": "updatedAt",
+						"type": "uint256",
+						"internalType": "uint256"
+					}
+				]
+			}
+		],
+		"stateMutability": "view"
+	},
+	{
+		"type": "error",
+		"name": "BeforeHistory",
+		"inputs": [
+			{
+				"name": "requestedAt",
+				"type": "uint256",
+				"internalType": "uint256"
+			}
+		]
+	}
+]
