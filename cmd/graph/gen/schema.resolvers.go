@@ -465,7 +465,7 @@ SELECT
 	bundle_maker_id,
 	taker_was_correct,
 	structure
-FROM rfqhub_conclude_aggregate_1($1, $2, $3, $4, $5)`,
+FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 		bundleTakerID,
 		accAddrStr,
 		timestampletVal,
