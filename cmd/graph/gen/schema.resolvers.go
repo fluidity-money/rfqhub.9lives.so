@@ -415,7 +415,7 @@ func (r *mutationResolver) ConcludeAndAggregate(ctx context.Context, bundleTaker
 	)
 	var expiry time.Time
 	err := r.Db.QueryRow(`
-SELECT expiry FROM bundles_taker_1
+SELECT expiry FROM rfqhub_bundles_taker_1
 WHERE id = $1`,
 		bundleTakerID,
 	).Scan(&expiry)
