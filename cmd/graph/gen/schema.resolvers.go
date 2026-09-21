@@ -464,6 +464,8 @@ WHERE id = $1`,
 SELECT
 	bundle_maker_id,
 	taker_was_correct,
+	taker_amt,
+	maker_amt,
 	structure
 FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 		bundleTakerID,
