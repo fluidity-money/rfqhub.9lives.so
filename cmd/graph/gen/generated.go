@@ -63,7 +63,7 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		CancelAuction                                func(childComplexity int, bundleTakerID int) int
-		ConcludeAndAggregate                         func(childComplexity int, bundleTakerID int) int
+		Conclude                                     func(childComplexity int, bundleTakerID int) int
 		CreateAccountExec                            func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
 		CreateAuctionFromOnrampedAmountServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) int
 		InspectBundleTakerID                         func(childComplexity int, bundleTakerID int) int
@@ -103,7 +103,7 @@ type MutationResolver interface {
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
 	CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
-	ConcludeAndAggregate(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
+	Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
 	CancelAuction(ctx context.Context, bundleTakerID int) (bool, error)
 	SubmitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error)
 }
@@ -223,17 +223,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CancelAuction(childComplexity, args["bundleTakerId"].(int)), true
-	case "Mutation.concludeAndAggregate":
-		if e.ComplexityRoot.Mutation.ConcludeAndAggregate == nil {
+	case "Mutation.conclude":
+		if e.ComplexityRoot.Mutation.Conclude == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_concludeAndAggregate_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_conclude_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.ConcludeAndAggregate(childComplexity, args["bundleTakerId"].(int)), true
+		return e.ComplexityRoot.Mutation.Conclude(childComplexity, args["bundleTakerId"].(int)), true
 	case "Mutation.createAccountExec":
 		if e.ComplexityRoot.Mutation.CreateAccountExec == nil {
 			break
@@ -667,11 +667,12 @@ type Mutation {
   inspectBundleTakerId(bundleTakerId: Int!): BundleTakerOwnerStatus!
 
   """
-  Permanently mark one side of the Aggregate bundle as consumed, and receive a server
-  signature for the Aggregate. Automatically decides if you're the taker or the maker,
-  and gives you results relevant to that.
+  Conclude a bundle that's been outstanding to be resolved (the expiry date has passed).
+  Anyone can call this. ` + "`" + `produceOfframpCdTaker` + "`" + ` needs to be called by the taker and
+  ` + "`" + `produceOfframpCdMaker` + "`" + ` needs to be called by the maker to get calldata to offramp,
+  and also to offramp.
   """
-  concludeAndAggregate(bundleTakerId: Int!): Aggregate!
+  conclude(bundleTakerId: Int!): Aggregate!
 
   """
   Cancel an auction, using the taker id to do so. Only possible to be invoked by the
@@ -926,7 +927,7 @@ func (ec *executionContext) field_Mutation_cancelAuction_args(ctx context.Contex
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_concludeAndAggregate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_conclude_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
@@ -1685,17 +1686,17 @@ func (ec *executionContext) fieldContext_Mutation_inspectBundleTakerId(ctx conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_concludeAndAggregate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_conclude(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_concludeAndAggregate(ctx, field)
+			return ec.fieldContext_Mutation_conclude(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().ConcludeAndAggregate(ctx, fc.Args["bundleTakerId"].(int))
+			return ec.Resolvers.Mutation().Conclude(ctx, fc.Args["bundleTakerId"].(int))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.Aggregate) graphql.Marshaler {
@@ -1705,7 +1706,7 @@ func (ec *executionContext) _Mutation_concludeAndAggregate(ctx context.Context, 
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Mutation_concludeAndAggregate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_conclude(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -1722,7 +1723,7 @@ func (ec *executionContext) fieldContext_Mutation_concludeAndAggregate(ctx conte
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_concludeAndAggregate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_conclude_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3652,9 +3653,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "concludeAndAggregate":
+		case "conclude":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_concludeAndAggregate(ctx, field)
+				return ec._Mutation_conclude(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

@@ -393,7 +393,7 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 }
 
 // ConcludeAndAggregate is the resolver for the concludeAndAggregate field.
-func (r *mutationResolver) ConcludeAndAggregate(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
+func (r *mutationResolver) Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	// Create an auction from a BundleTaker by taking what we can
 	// from the database, then constructing the blob signature
@@ -500,8 +500,8 @@ FROM rfqhub_conclude_aggregate_1($1, $2, $3)`,
 		"did taker win?", takerWon,
 	)
 	return &model.Aggregate{
-		TakerWon: takerWon,
-		Cd: "",
+		TakerWon:      takerWon,
+		Cd:            "",
 		WinningAmount: "",
 	}, nil
 }

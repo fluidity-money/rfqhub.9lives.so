@@ -836,10 +836,12 @@ END;
 $$;
 
 -- Select the largest signed maker offer for a taker, record the supplied
--- timestamplet at the taker's expiry, and return the payload needed for server
--- signing. An existing selection and identical timestamplet are reused on retries.
--- Resolution and server-signature persistence happen later through
--- rfqhub_resolve_aggregate_1.
+-- timestamplet at the taker's expiry, and resolve the pair in place: the maker's
+-- was_correct and both end_source_amt values are set from the outcome. Returns
+-- the payload needed for server signing plus the resolution results. An existing
+-- selection and identical timestamplet are reused on retries; a later call to
+-- rfqhub_resolve_aggregate_1 is idempotent because the maker already carries a
+-- timestamplet_id.
 CREATE FUNCTION rfqhub_conclude_aggregate_1 (
 	p_bundle_taker_id INTEGER,
 	p_taker_acc_addr ADDRESS,
@@ -857,6 +859,11 @@ AS $$
 DECLARE
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
 	v_maker rfqhub_bundles_maker_1%ROWTYPE;
+	v_timestamplet_id INTEGER;
+	v_taker_correct BOOLEAN;
+	v_total BIGINT;
+	v_taker_end BIGINT;
+	v_maker_end BIGINT;
 BEGIN
 	SELECT t.* INTO STRICT v_taker
 	FROM rfqhub_bundles_taker_1 AS t
@@ -901,16 +908,33 @@ BEGIN
 	END IF;
 
 	PERFORM rfqhub_pick_maker_1(v_maker.id);
-	PERFORM rfqhub_get_or_create_timestamplet_1(
+	v_timestamplet_id := rfqhub_get_or_create_timestamplet_1(
 		v_taker.expiry,
 		v_taker.outcome,
 		p_timestamplet_val
 	);
 
+	v_taker_correct := (p_timestamplet_val > v_taker.price_target AND v_taker.is_up)
+		OR (p_timestamplet_val <= v_taker.price_target AND NOT v_taker.is_up);
+	v_total := v_taker.amt + v_maker.amt;
+	v_taker_end := CASE WHEN v_taker_correct THEN v_total ELSE 0 END;
+	v_maker_end := CASE WHEN v_taker_correct THEN 0 ELSE v_total END;
+
+	UPDATE rfqhub_bundles_taker_1 AS t
+	SET end_source_amt = v_taker_end,
+		updated_by = CURRENT_TIMESTAMP
+	WHERE t.id = v_taker.id;
+
+	UPDATE rfqhub_bundles_maker_1 AS m
+	SET was_correct = NOT v_taker_correct,
+		timestamplet_id = v_timestamplet_id,
+		end_source_amt = v_maker_end,
+		updated_by = CURRENT_TIMESTAMP
+	WHERE m.id = v_maker.id;
+
 	RETURN QUERY SELECT
 		v_maker.id,
-		(p_timestamplet_val > v_taker.price_target AND v_taker.is_up)
-			OR (p_timestamplet_val <= v_taker.price_target AND NOT v_taker.is_up),
+		v_taker_correct,
 		v_taker.amt,
 		v_maker.amt,
 		v_taker.structure;

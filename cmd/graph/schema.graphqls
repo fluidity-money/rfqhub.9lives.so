@@ -203,11 +203,12 @@ type Mutation {
   inspectBundleTakerId(bundleTakerId: Int!): BundleTakerOwnerStatus!
 
   """
-  Permanently mark one side of the Aggregate bundle as consumed, and receive a server
-  signature for the Aggregate. Automatically decides if you're the taker or the maker,
-  and gives you results relevant to that.
+  Conclude a bundle that's been outstanding to be resolved (the expiry date has passed).
+  Anyone can call this. `produceOfframpCdTaker` needs to be called by the taker and
+  `produceOfframpCdMaker` needs to be called by the maker to get calldata to offramp,
+  and also to offramp.
   """
-  concludeAndAggregate(bundleTakerId: Int!): Aggregate!
+  conclude(bundleTakerId: Int!): Aggregate!
 
   """
   Cancel an auction, using the taker id to do so. Only possible to be invoked by the
