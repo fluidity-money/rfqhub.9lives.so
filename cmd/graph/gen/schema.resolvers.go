@@ -24,7 +24,6 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
-	ninelives_events "github.com/fluidity-money/9lives.so/lib/types/events"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	superposition_assets "github.com/fluidity-money/superposition-assets"
 )
@@ -451,7 +450,16 @@ WHERE id = $1`,
 	exp := new(big.Int).SetInt64(10)
 	exp.Exp(exp, new(big.Int).SetInt64(12), nil)
 	answer := roundId.Answer
-	timestampletVal := ninelives_events.NumberFromBig(answer.Div(answer, exp))
+	answer.Div(answer, exp)
+	if !answer.IsUint64() {
+		slog.Error("Answer too large to be represented as a uint64",
+			"snowflake", snowflake,
+			"answer", answer,
+			"outcome", types.OutcomeBitcoinPrice,
+		)
+		return nil, fmt.Errorf("answer too large from chainlink")
+	}
+	timestampletVal := answer.Uint64()
 	row := r.Db.QueryRow(`
 SELECT
 	bundle_maker_id,
