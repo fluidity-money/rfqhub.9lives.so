@@ -13,7 +13,7 @@ COPY contract contract
 COPY cli-borsh cli-borsh
 COPY .cargo .cargo
 
-RUN cargo build --release -p cli-client-signing -p cli-server-signing -p ed25519-dalek-ph
+RUN cargo build --release -p cli-client-signing -p cli-server-signing -p ed25519-dalek-ph -p cli-borsh
 
 FROM golang:alpine3.24 AS build-go
 
