@@ -11,12 +11,26 @@ use serde::{
     ser::SerializeTuple,
 };
 
-#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct Sig(pub [u8; 64]);
 
 impl Default for Sig {
     fn default() -> Self {
         Sig([0u8; 64])
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for Sig {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let buf = u.bytes(64)?;
+        let mut out = [0u8; 64];
+        out.copy_from_slice(&buf);
+        Ok(Sig(out))
+    }
+
+    fn size_hint(_dep: usize) -> (usize, Option<usize>) {
+        (64, Some(64))
     }
 }
 

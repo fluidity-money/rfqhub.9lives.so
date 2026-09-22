@@ -270,7 +270,16 @@ impl proptest::arbitrary::Arbitrary for InvertedAggregate {
 }
 
 fn sig() -> impl Strategy<Value = Sig> {
-    any::<[u8; 64]>()
+    any::<[u8; 64]>().prop_map(|b| Sig(b))
+}
+
+impl proptest::arbitrary::Arbitrary for Sig {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+        any::<[u8; 64]>().prop_map(|b| Sig(b)).boxed()
+    }
 }
 
 fn onramping_source_strategy() -> BoxedStrategy<OnrampingSource> {
@@ -388,20 +397,6 @@ fn aggregate_enum_strategy_with_source(
         any::<U>().prop_map(AggregateEnum::Hash),
     ]
     .boxed()
-}
-
-impl proptest::arbitrary::Arbitrary for FillerArgs {
-    type Parameters = ();
-    type Strategy = BoxedStrategy<Self>;
-
-    fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-        (any::<u64>(), any::<[u8; 20]>())
-            .prop_map(|(fusdc_on_win, acc_sender)| FillerArgs {
-                fusdc_on_win,
-                acc_sender,
-            })
-            .boxed()
-    }
 }
 
 impl proptest::arbitrary::Arbitrary for OnchainPotArgs {
@@ -540,10 +535,6 @@ impl proptest::arbitrary::Arbitrary for Args {
         ]
         .boxed()
     }
-}
-
-pub fn filler_args() -> StrategyFor<FillerArgs> {
-    any::<FillerArgs>()
 }
 
 pub fn onchain_pot_args() -> StrategyFor<OnchainPotArgs> {

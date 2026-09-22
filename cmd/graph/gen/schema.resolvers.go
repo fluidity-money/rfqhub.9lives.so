@@ -23,10 +23,10 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	superposition_assets "github.com/fluidity-money/superposition-assets"
-	"github.com/near/borsh-go"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
@@ -315,7 +315,6 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	}
 	bundleTakerArgs := types.BundleTakerArgs{
 		Src: types.OnrampingSource{
-			Enum: types.OnrampingSourceOnchainPot,
 			OnchainPot: &types.OnchainPotArgs{
 				AccAddr: accAddr,
 				Amt:     amt,
@@ -328,8 +327,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		Outcome:     outcome_,
 	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
-		Enum:        types.ClientSigningArgsBundleTaker,
-		BundleTaker: bundleTakerArgs,
+		BundleTaker: &bundleTakerArgs,
 	})
 	if err != nil {
 		slog.Error("Error signing a BundleTaker",
@@ -549,8 +547,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 	}
 	// It's safe for us to just redo this ourselves, since things won't change:
 	serverArgs := types.ServerSigningArgs{
-		Enum:               types.ServerSigningArgsAggregateToOfframp,
-		AggregateToOfframp: aggArgs,
+		AggregateToOfframp: &aggArgs,
 	}
 	serverSig, err := signer.ServerSignAggregate(serverArgs)
 	if err != nil {
@@ -562,11 +559,9 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		return "", fmt.Errorf("server sign aggregate")
 	}
 	args := types.Args{
-		Enum: types.ArgsAggregateToOfframp,
-		AggregateToOfframp: types.AggregateToOfframpArgs{
+		AggregateToOfframp: &types.AggregateToOfframpArgs{
 			Args: types.AggregateEnum{
-				Enum: types.AggregateEnumArgs,
-				Args: types.Aggregate{
+				Args: &types.Aggregate{
 					Args:      aggArgs,
 					ServerSig: serverSig,
 				},
@@ -579,7 +574,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		"args", args,
 		"is taker", isTaker,
 	)
-	cd, err := borsh.Serialize(args)
+	cd, err := borsh.Encode(args)
 	if err != nil {
 		slog.Error("Error creating aggregate args calldata",
 			"err", err,
@@ -661,7 +656,6 @@ FROM
 	}
 	bundleMakerArgs := types.BundleMakerArgs{
 		Src: types.OnrampingSource{
-			Enum: types.OnrampingSourceOnchainPot,
 			OnchainPot: &types.OnchainPotArgs{
 				AccAddr: accAddr,
 				Amt:     makerAmt,
@@ -677,8 +671,7 @@ FROM
 		"bundle bundle taker", bundleTaker,
 	)
 	signingArgs := types.ClientSigningArgs{
-		Enum:        types.ClientSigningArgsBundleTaker,
-		BundleMaker: bundleMakerArgs,
+		BundleMaker: &bundleMakerArgs,
 	}
 	makerUserSig, err := signer.ClientSignClientArgs(signingArgs)
 	if err != nil {

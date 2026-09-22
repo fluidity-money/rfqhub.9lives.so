@@ -292,7 +292,7 @@ library RfqhubTypes {
     function _aggregate(Aggregate memory a) internal pure returns (string memory) {
         return string.concat(
             "{\"args\":", _aggregateArgs(a.args),
-            ",\"server_sig\":\"", _hex(a.serverSig), "\"}"
+            ",\"server_sig\":", _u8Arr(a.serverSig), "}"
         );
     }
 
@@ -306,7 +306,7 @@ library RfqhubTypes {
     function _bundleMaker(BundleMaker memory a) internal pure returns (string memory) {
         return string.concat(
             "{\"args\":", _bundleMakerArgs(a.args),
-            ",\"sig\":\"", _hex(a.sig), "\"}"
+            ",\"sig\":", _u8Arr(a.sig), "}"
         );
     }
 
@@ -322,7 +322,7 @@ library RfqhubTypes {
     function _bundleTaker(BundleTaker memory a) internal pure returns (string memory) {
         return string.concat(
             "{\"args\":", _bundleTakerArgs(a.args),
-            ",\"sig\":\"", _hex(a.sig), "\"}"
+            ",\"sig\":", _u8Arr(a.sig), "}"
         );
     }
 
@@ -377,7 +377,7 @@ library RfqhubTypes {
         if (a.kind == ArgsKind.Offramp) {
             return string.concat(
                 "{\"Offramp\":{\"args\":", _offrampArgs(a.offramp.args),
-                ",\"server_sig\":\"", _hex(a.offramp.serverSig), "\"}}"
+                ",\"server_sig\":", _u8Arr(a.offramp.serverSig), "}}"
             );
         }
         // AggregateToOfframp

@@ -34,6 +34,7 @@ FROM alpine:3.24 AS runner
 COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/cli-client-signing /bin/rfqhub-cli-client-signing
 COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/cli-server-signing /bin/rfqhub-cli-server-signing
 COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/ed25519-dalek-ph /bin/rfqhub-ed25519-dalek-ph
+COPY --from=build-rust /usr/src/rfqhub.9lives.so/target/release/cli-borsh /bin/rfqhub-cli-borsh
 
 COPY --from=build-go /usr/src/rfqhub.9lives.so/rfqhub-graph /bin/rfqhub-graph
 

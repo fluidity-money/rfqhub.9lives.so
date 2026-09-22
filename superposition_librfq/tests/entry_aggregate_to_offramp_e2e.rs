@@ -124,7 +124,7 @@ mod test {
 
                 set_msg_sender(unauthorized_submitter);
                 let result = catch_unwind(AssertUnwindSafe(|| {
-                    entry_offramp::entry_offramp(&Imm::default(), args.clone(), [0_u8; 64])
+                    entry_offramp::entry_offramp(&Imm::default(), args.clone(), Sig::default())
                 }));
 
                 let error = result.expect_err(
@@ -148,7 +148,7 @@ mod test {
 
                 set_msg_sender(owner);
                 assert_eq!(
-                    entry_offramp::entry_offramp(&Imm::default(), args, [0_u8; 64]),
+                    entry_offramp::entry_offramp(&Imm::default(), args, Sig::default()),
                     0,
                 );
                 assert_eq!(

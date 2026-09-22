@@ -97,8 +97,7 @@ func CreateSolveArgsSigArgs(
 	msTs [6]byte,
 ) (*acc_types.SolveArgsSigArgs, error) {
 	cd, err := borsh.Serialize(types.Args{
-		Enum: types.ArgsOnrampingFromBal,
-		OnrampingFromBal: types.OnrampingFromBalArgs{
+		OnrampingFromBal: &types.OnrampingFromBalArgs{
 			Asset: asset,
 			Amt:   amt,
 		},

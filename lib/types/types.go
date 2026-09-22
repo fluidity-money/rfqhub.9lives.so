@@ -7,8 +7,6 @@ import (
 
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
-	"github.com/near/borsh-go"
-
 	ethCommon "github.com/ethereum/go-ethereum/common"
 )
 
@@ -108,13 +106,7 @@ type AggregatedResultArgs struct {
 	AmtToTake uint64        `json:"amt_to_take"`
 }
 
-const (
-	OnrampingSourceOnchainPot borsh.Enum = iota
-	OnrampingSourceAggregatedResult
-)
-
 type OnrampingSource struct {
-	Enum             borsh.Enum            `borsh_enum:"true" json:"-"`
 	OnchainPot       *OnchainPotArgs       `json:"OnchainPot,omitempty"`
 	AggregatedResult *AggregatedResultArgs `json:"AggregatedResult,omitempty"`
 }
@@ -168,25 +160,10 @@ type Aggregate struct {
 	ServerSig Sig           `json:"server_sig"`
 }
 
-const (
-	AggregateEnumArgs borsh.Enum = iota
-	AggregateEnumHash
-)
-
 type AggregateEnum struct {
-	Enum borsh.Enum `borsh_enum:"true" json:"-"`
-	Args Aggregate  `json:"args,omitempty"`
-	Hash [32]byte   `json:"hash,omitempty"`
+	Args *Aggregate `json:"args,omitempty"`
+	Hash *[32]byte  `json:"hash,omitempty"`
 }
-
-const (
-	ArgsVersion borsh.Enum = iota
-	ArgsSource
-	ArgsBalance
-	ArgsOnrampingFromBal
-	ArgsOfframp
-	ArgsAggregateToOfframp
-)
 
 type BalanceArgs struct {
 	Asset [20]byte `json:"asset"`
@@ -209,35 +186,22 @@ type AggregateToOfframpArgs struct {
 }
 
 type Args struct {
-	Enum               borsh.Enum              `borsh_enum:"true" json:"-"`
-	Version            struct{}               `json:"Version,omitempty"`
-	Source             struct{}               `json:"Source,omitempty"`
-	Balance            BalanceArgs            `json:"Balance,omitempty"`
-	OnrampingFromBal   OnrampingFromBalArgs   `json:"OnrampingFromBal,omitempty"`
-	Offramp            OfframpVariantArgs     `json:"Offramp,omitempty"`
-	AggregateToOfframp AggregateToOfframpArgs `json:"AggregateToOfframp,omitempty"`
+	Version            *struct{}               `json:"Version,omitempty"`
+	Source             *struct{}               `json:"Source,omitempty"`
+	Balance            *BalanceArgs            `json:"Balance,omitempty"`
+	OnrampingFromBal   *OnrampingFromBalArgs   `json:"OnrampingFromBal,omitempty"`
+	Offramp            *OfframpVariantArgs     `json:"Offramp,omitempty"`
+	AggregateToOfframp *AggregateToOfframpArgs `json:"AggregateToOfframp,omitempty"`
 }
-
-const (
-	ClientSigningArgsBundleTaker borsh.Enum = iota
-	ClientSigningArgsBundleMaker
-)
 
 type ClientSigningArgs struct {
-	Enum        borsh.Enum      `borsh_enum:"true" json:"-"`
-	BundleTaker BundleTakerArgs `json:"BundleTaker,omitempty"`
-	BundleMaker BundleMakerArgs `json:"BundleMaker,omitempty"`
+	BundleTaker *BundleTakerArgs `json:"BundleTaker,omitempty"`
+	BundleMaker *BundleMakerArgs `json:"BundleMaker,omitempty"`
 }
 
-const (
-	ServerSigningArgsBundleOfframp borsh.Enum = iota
-	ServerSigningArgsAggregateToOfframp
-)
-
 type ServerSigningArgs struct {
-	Enum               borsh.Enum    `borsh_enum:"true" json:"-"`
-	Offramp            OfframpArgs   `json:"Offramp,omitempty"`
-	AggregateToOfframp AggregateArgs `json:"AggregateToOfframp,omitempty"`
+	Offramp            *OfframpArgs   `json:"Offramp,omitempty"`
+	AggregateToOfframp *AggregateArgs `json:"AggregateToOfframp,omitempty"`
 }
 
 func (b BundleTaker) Value() (driver.Value, error) {
