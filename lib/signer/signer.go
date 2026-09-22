@@ -19,7 +19,7 @@ const (
 	ProgServerSigningPath = "/bin/rfqhub-cli-server-signing"
 )
 
-func ServerSignAggregate(args types.Args) (sig [64]byte, err error) {
+func ServerSignAggregate(args types.ServerSigningArgs) (sig [64]byte, err error) {
 	cmd := exec.Command(ProgServerSigningPath)
 	var bufIn, bufOut bytes.Buffer
 	if err := json.NewEncoder(&bufIn).Encode(args); err != nil {

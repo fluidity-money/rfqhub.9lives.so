@@ -26,6 +26,7 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	superposition_assets "github.com/fluidity-money/superposition-assets"
+	"github.com/near/borsh-go"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
@@ -504,14 +505,31 @@ func (r *mutationResolver) ConcludedCalldata(ctx context.Context, bundleTakerID 
 		"acc addr", accAddrStr,
 		"eoa", eoa,
 	)
-	_, err := r.Db.Exec(`
-SELECT rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
+	var (
+		maker types.BundleMaker
+		timestampletVal uint64
+		timestampletTime time.Time
+		timestampletOutcome types.Outcome
+	)
+	row := r.Db.QueryRow(`
+SELECT
+	bundle_maker_structure,
+	timestamplet_end_value,
+	timestamplet_time,
+	timestamplet_outcome
+FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		accAddrStr,
 		isTaker,
 		bundleTakerID,
 	)
+	err := row.Scan(
+		&maker,
+		&timestampletVal,
+		&timestampletTime,
+		&timestampletOutcome,
+	)
 	if err != nil {
-		slog.Error("Error marking a winner as offramped",
+		slog.Error("Error marking a side of the result as offramped",
 			"err", err,
 			"snowflake", snowflake,
 			"bundle taker id", bundleTakerID,
@@ -520,7 +538,41 @@ SELECT rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		)
 		return "", fmt.Errorf("marking winner as offramped")
 	}
-	panic("TODO")
+	aggArgs := types.AggregateArgs {
+		Maker: maker,
+		Timestamplet: types.Timestamplet {
+			TimestampletTime: uint32(timestampletTime.Unix()),
+			TimestampletOutcome: timestampletOutcome,
+			TimestampletVal: timestampletVal,
+		},
+	}
+	// It's safe for us to just redo this ourselves, since things won't change:
+	serverSig, err := signer.ServerSignAggregate(types.ServerSigningArgs{
+		Enum: types.ServerSigningArgsAggregateToOfframp,
+		AggregateToOfframp: &aggArgs,
+	})
+	if err != nil {
+		slog.Error("Error signing aggregate args",
+			"err", err,
+			"snowflake", snowflake,
+			"args", aggArgs,
+		)
+		return "", fmt.Errorf("server sign aggregate")
+	}
+	cd, err := borsh.Serialize(types.Aggregate {
+		Args: aggArgs,
+		ServerSig: serverSig,
+	})
+	if err != nil {
+		slog.Error("Error creating aggregate args calldata",
+			"err", err,
+			"snowflake", snowflake,
+			"args", aggArgs,
+			"sig", serverSig,
+		)
+		return "", fmt.Errorf("server cd aggregate")
+	}
+	return hex.EncodeToString(cd), nil
 }
 
 // CancelAuction is the resolver for the cancelAuction field.

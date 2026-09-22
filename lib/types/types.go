@@ -229,6 +229,17 @@ type ClientSigningArgs struct {
 	BundleMaker *BundleMakerArgs `json:"BundleMaker,omitempty"`
 }
 
+const (
+	ServerSigningArgsBundleOfframp borsh.Enum = iota
+	ServerSigningArgsAggregateToOfframp
+)
+
+type ServerSigningArgs struct {
+	Enum        borsh.Enum       `borsh_enum:"true" json:"-"`
+	Offramp *OfframpArgs `json:"OfframpArgs,omitempty"`
+	AggregateToOfframp *AggregateArgs `json:"AggregateToOfframp,omitempty"`
+}
+
 func (b BundleTaker) Value() (driver.Value, error) {
 	return json.Marshal(b)
 }

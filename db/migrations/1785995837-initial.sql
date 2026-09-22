@@ -938,18 +938,27 @@ $$;
 
 -- Mark exactly one resolved winner as offramped. The caller identifies whether
 -- it is claiming the taker or maker side, and its account address must match
--- that side of the selected aggregate.
+-- that side of the selected aggregate. Return the selected maker structure and
+-- the immutable timestamplet value and timestamp used to resolve the aggregate.
 CREATE FUNCTION rfqhub_mark_winner_as_offramped_1 (
 	p_acc_addr ADDRESS,
 	p_sender_is_taker BOOLEAN,
 	p_bundle_taker_id INTEGER
 )
-RETURNS VOID
+RETURNS TABLE (
+	bundle_maker_structure JSON,
+	timestamplet_end_value BIGINT,
+	timestamplet_time TIMESTAMP,
+	timestamplet_outcome RFQHUB_OUTCOME
+)
 LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_maker rfqhub_bundles_maker_1%ROWTYPE;
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
+	v_timestamplet_end_value BIGINT;
+	v_timestamplet_time TIMESTAMP;
+	v_timestamplet_outcome RFQHUB_OUTCOME;
 BEGIN
 	IF p_sender_is_taker IS NULL THEN
 		RAISE EXCEPTION 'sender side cannot be null';
@@ -975,10 +984,19 @@ BEGIN
 		RAISE EXCEPTION 'maker % is not selected for taker %', v_maker.id, v_taker.id;
 	END IF;
 	IF v_maker.was_correct IS NULL
+		OR v_maker.timestamplet_id IS NULL
 		OR v_taker.end_source_amt IS NULL
 		OR v_maker.end_source_amt IS NULL THEN
 		RAISE EXCEPTION 'aggregate for taker % has not been resolved', v_taker.id;
 	END IF;
+
+	SELECT ts.timestamplet_val, ts.timestamplet_time, ts.timestamplet_outcome
+	INTO STRICT
+		v_timestamplet_end_value,
+		v_timestamplet_time,
+		v_timestamplet_outcome
+	FROM rfqhub_timestamplets_1 AS ts
+	WHERE ts.id = v_maker.timestamplet_id;
 
 	IF p_sender_is_taker THEN
 		IF v_taker.acc_addr IS DISTINCT FROM p_acc_addr THEN
@@ -1017,83 +1035,17 @@ BEGIN
 			updated_by = CURRENT_TIMESTAMP
 		WHERE m.id = v_maker.id;
 	END IF;
+
+	RETURN QUERY SELECT
+		v_maker.structure,
+		v_timestamplet_end_value,
+		v_timestamplet_time,
+		v_timestamplet_outcome;
 END;
-$$;
-
--- The selected taker is derived from the maker. Calling this twice is
--- idempotent, but unresolved or already-consumed results are rejected.
-CREATE FUNCTION rfqhub_mark_as_offramped_1 (
-	p_bundle_maker_id INTEGER
-)
-RETURNS TABLE (
-	taker_end_source_amt BIGINT,
-	maker_end_source_amt BIGINT
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-	v_maker rfqhub_bundles_maker_1%ROWTYPE;
-	v_taker rfqhub_bundles_taker_1%ROWTYPE;
-	v_bundle_taker_id INTEGER;
-BEGIN
-	SELECT m.bundle_taker_id INTO STRICT v_bundle_taker_id
-	FROM rfqhub_bundles_maker_1 AS m
-	WHERE m.id = p_bundle_maker_id;
-
-	SELECT t.* INTO STRICT v_taker
-	FROM rfqhub_bundles_taker_1 AS t
-	WHERE t.id = v_bundle_taker_id
-	FOR UPDATE;
-
-	SELECT m.* INTO STRICT v_maker
-	FROM rfqhub_bundles_maker_1 AS m
-	WHERE m.id = p_bundle_maker_id
-	FOR UPDATE;
-
-	IF v_maker.bundle_taker_id <> v_taker.id THEN
-		RAISE EXCEPTION 'maker % does not belong to taker %', p_bundle_maker_id, v_taker.id;
-	END IF;
-
-	IF v_taker.maker_id IS DISTINCT FROM p_bundle_maker_id OR v_maker.was_chosen IS DISTINCT FROM TRUE THEN
-		RAISE EXCEPTION 'maker % is not selected for taker %', p_bundle_maker_id, v_taker.id;
-	END IF;
-	IF v_taker.end_source_amt IS NULL OR v_maker.end_source_amt IS NULL THEN
-		RAISE EXCEPTION 'aggregate for maker % has not been resolved', p_bundle_maker_id;
-	END IF;
-	IF EXISTS (SELECT 1 FROM rfqhub_bundles_taker_1 AS t WHERE t.source = v_taker.id)
-		OR EXISTS (SELECT 1 FROM rfqhub_bundles_maker_1 AS m WHERE m.source = v_maker.id) THEN
-		RAISE EXCEPTION 'aggregate for maker % was already consumed as a source', p_bundle_maker_id;
-	END IF;
-
-	UPDATE rfqhub_bundles_taker_1 AS t
-	SET was_offramped = TRUE,
-		updated_by = CURRENT_TIMESTAMP
-	WHERE t.id = v_taker.id;
-
-	UPDATE rfqhub_bundles_maker_1 AS m
-	SET was_offramped = TRUE,
-		updated_by = CURRENT_TIMESTAMP
-	WHERE m.id = v_maker.id;
-
-	RETURN QUERY SELECT v_taker.end_source_amt, v_maker.end_source_amt;
-END;
-$$;
-
-CREATE FUNCTION rfqhub_get_taker_leftover_1 (
-	p_bundle_taker_id INTEGER
-)
-RETURNS BIGINT
-LANGUAGE sql
-STABLE
-AS $$
-	SELECT t.end_source_amt
-	FROM rfqhub_bundles_taker_1 AS t
-	WHERE t.id = p_bundle_taker_id;
 $$;
 
 -- migrate:down
 
-DROP FUNCTION IF EXISTS rfqhub_get_taker_leftover_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_winner_as_offramped_1;
 DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;

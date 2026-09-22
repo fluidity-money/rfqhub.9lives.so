@@ -438,6 +438,7 @@ dependencies = [
  "borsh",
  "const-hex",
  "ed25519-dalek",
+ "serde",
  "serde_json",
  "superposition_librfq",
 ]
@@ -1154,7 +1155,6 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "serde",
- "serde_json",
  "superposition-assets",
  "superposition_libaccounts",
 ]

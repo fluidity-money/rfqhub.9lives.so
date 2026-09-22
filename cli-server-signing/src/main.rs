@@ -6,14 +6,22 @@ use std::{
     io::stdin,
 };
 
+use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
+
 use bobcat_sdk::precompiles::superposition::ed25519_sign_post;
 
 use superposition_librfq::{
-    Aggregate, AggregateEnum, Args,
     signable::{Hash, SignableAggregateArgs, SignableOfframpArgs},
+    AggregateArgs, OfframpArgs,
 };
 
 use ed25519_dalek::SigningKey;
+
+#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
+pub enum ServerSigningArgs {
+    Offramp(OfframpArgs),
+    AggregateToOfframp(AggregateArgs),
+}
 
 fn main() {
     let key = SigningKey::from_bytes(
@@ -24,7 +32,7 @@ fn main() {
         )
         .unwrap(),
     );
-    let args: Args = if let Some(x) = args().nth(1) {
+    let args: ServerSigningArgs = if let Some(x) = args().nth(1) {
         serde_json::from_str::<_>(&x)
     } else {
         serde_json::from_reader::<_, _>(stdin())
@@ -33,25 +41,12 @@ fn main() {
     println!(
         "{}",
         const_hex::encode(match args {
-            Args::Offramp { args, .. } => {
-                ed25519_sign_post(key, SignableOfframpArgs::from(&args).hash)
-            }
-            Args::AggregateToOfframp {
-                args: AggregateEnum::Args(agg),
-                ..
-            } => {
-                let Aggregate { args, .. } = agg.as_ref();
-                let Hash::JustInTime(hash) = SignableAggregateArgs::from(args).hash else {
-                    panic!("non just in time hash tried to be signed");
+            ServerSigningArgs::Offramp(args) => ed25519_sign_post(key, SignableOfframpArgs::from(&args).hash),
+            ServerSigningArgs::AggregateToOfframp(args) => {
+                let Hash::JustInTime(hash) = SignableAggregateArgs::from(&args).hash else {
+                    unreachable!()
                 };
                 ed25519_sign_post(key, hash)
-            }
-            Args::Version
-            | Args::Source
-            | Args::Balance { .. }
-            | Args::OnrampingFromBal { .. }
-            | Args::AggregateToOfframp { .. } => {
-                panic!("unsupported hash signing")
             }
         })
     )
