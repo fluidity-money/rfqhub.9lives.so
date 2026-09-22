@@ -23,7 +23,7 @@ func Encode(args types.Args) (buf []byte, err error) {
 	if err := cmd.Run(); err != nil {
 		return buf, fmt.Errorf("running cmd: %v", err)
 	}
-	_, err = hex.Decode(buf, bytes.TrimSuffix(bufOut.Bytes(), []byte{'\n'}))
+	_, err = hex.Decode(buf, buf[1:len(buf)-1])
 	if err != nil {
 		return buf, fmt.Errorf("decode sig: %v", err)
 	}
