@@ -81,7 +81,9 @@ fn build_recursive_aggregate(
         };
 
         // The next (outer) game reinvests this node's full claim.
-        available = available.checked_add(maker_stake).expect("no overflow in test");
+        available = available
+            .checked_add(maker_stake)
+            .expect("no overflow in test");
         source = OnrampingSource::AggregatedResult(AggregatedResultArgs {
             from: Box::new(AggregateEnum::Args(Box::new(aggregate))),
             amt_to_take: available,
@@ -106,17 +108,9 @@ fn test_recursive_input_10_depth_is_accepted() {
         let maker_stake: u64 = 100;
 
         // Fund the ledger: taker pot + each maker's stake.
-        storage::onramped_bal::set(
-            &Asset::USDC.into(),
-            &taker.into(),
-            &U::from(initial_amt),
-        );
+        storage::onramped_bal::set(&Asset::USDC.into(), &taker.into(), &U::from(initial_amt));
         for acc in &makers {
-            storage::onramped_bal::set(
-                &Asset::USDC.into(),
-                &acc.into(),
-                &U::from(maker_stake),
-            );
+            storage::onramped_bal::set(&Asset::USDC.into(), &acc.into(), &U::from(maker_stake));
         }
 
         let (top, expected_claim) =
@@ -151,4 +145,21 @@ fn test_recursive_input_10_depth_is_accepted() {
             blob.len()
         );
     });
+}
+
+// Report how the serialized calldata grows with recursion depth, so we can
+// pick the maximum postable depth. Building + serializing needs no storage.
+#[test]
+fn report_calldata_growth_by_depth() {
+    let taker = [0xAA; 20];
+    for depth in [1usize, 5, 10, 20, 50, 100] {
+        let makers: Vec<[u8; 20]> = (0..depth).map(|i| [i as u8; 20]).collect();
+        let (top, _) = build_recursive_aggregate(depth, 100, 100, taker, &makers);
+        let blob = borsh::to_vec(&Args::AggregateToOfframp {
+            args: top,
+            is_taker: true,
+        })
+        .unwrap();
+        eprintln!("depth {depth:>3}: borsh calldata = {} bytes", blob.len());
+    }
 }

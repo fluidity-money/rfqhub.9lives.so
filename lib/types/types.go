@@ -209,13 +209,13 @@ type AggregateToOfframpArgs struct {
 }
 
 type Args struct {
-	Enum               borsh.Enum             `borsh_enum:"true" json:"-"`
-	Version            struct{}               `json:"version,omitempty"`
-	Source             struct{}               `json:"source,omitempty"`
-	Balance            BalanceArgs            `json:"balance,omitempty"`
-	OnrampingFromBal   OnrampingFromBalArgs   `json:"onramping_from_bal,omitempty"`
-	Offramp            OfframpVariantArgs     `json:"offramp,omitempty"`
-	AggregateToOfframp AggregateToOfframpArgs `json:"aggregate_to_offramp,omitempty"`
+	Enum               borsh.Enum              `borsh_enum:"true" json:"-"`
+	Version            struct{}               `json:"Version,omitempty"`
+	Source             struct{}               `json:"Source,omitempty"`
+	Balance            BalanceArgs            `json:"Balance,omitempty"`
+	OnrampingFromBal   OnrampingFromBalArgs   `json:"OnrampingFromBal,omitempty"`
+	Offramp            OfframpVariantArgs     `json:"Offramp,omitempty"`
+	AggregateToOfframp AggregateToOfframpArgs `json:"AggregateToOfframp,omitempty"`
 }
 
 const (
@@ -236,7 +236,7 @@ const (
 
 type ServerSigningArgs struct {
 	Enum               borsh.Enum    `borsh_enum:"true" json:"-"`
-	Offramp            OfframpArgs   `json:"OfframpArgs,omitempty"`
+	Offramp            OfframpArgs   `json:"Offramp,omitempty"`
 	AggregateToOfframp AggregateArgs `json:"AggregateToOfframp,omitempty"`
 }
 
