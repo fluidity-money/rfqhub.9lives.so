@@ -1,5 +1,6 @@
 [target.wasm32-unknown-unknown]
 rustflags = [
-    "--remap-path-prefix", "$HOME=~",
+    "--remap-path-prefix", "/c/f=~",
+    "-C", "link-arg=-zstack-size=32768",
     "-C", "target-feature=-reference-types,-multivalue,-bulk-memory,-bulk-memory-opt"
 ]

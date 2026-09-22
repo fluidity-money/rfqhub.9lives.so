@@ -3,7 +3,7 @@ use crate::{
     signable::SignableOfframpArgs, storage,
 };
 
-#[cfg(not(any(feature = "arbos", feature = "std")))]
+#[cfg(not(feature = "arbos"))]
 use crate::call_accounts;
 
 use bobcat_sdk::{
@@ -61,11 +61,11 @@ pub fn entry_offramp(
 // Get the owner of an account, or skipping it based on what's in the
 // current slot for this purpose.
 fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
-    #[cfg(any(feature = "arbos", feature = "std"))]
+    #[cfg(feature = "arbos")]
     unsafe {
         arbos_recipient_hint(acc)
     }
-    #[cfg(not(any(feature = "arbos", feature = "std")))]
+    #[cfg(not(feature = "arbos"))]
     call_accounts::get_owner(acc).unwrap()
 }
 
@@ -73,7 +73,7 @@ fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
 // runner can set for online testing.
 #[allow(unused)]
 unsafe fn arbos_recipient_hint(acc: [u8; 20]) -> [u8; 20] {
-    #[cfg(all(feature = "arbos", not(feature = "std")))]
+    #[cfg(feature = "arbos")]
     assert_eq!(
         31337,
         bobcat_sdk::entry::chain_id(),

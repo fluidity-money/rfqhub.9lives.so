@@ -16,6 +16,6 @@ borsh.workspace = true
 paste = "1.0.15"
 
 [features]
-testing = ["superposition_librfq/std"]
-arbos = ["superposition_librfq/arbos"]
+testing = []
+arbos = ["superposition_librfq/arbos", "superposition_librfq/console"]
 arbitrum = ["superposition_librfq/arbitrum"]

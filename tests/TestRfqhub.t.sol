@@ -191,4 +191,19 @@ contract TestRfqhub is Test {
         (bool ok,) = RfqhubTypes.sendCalldata(vm, c, args);
         assertTrue(ok, "aggregate to offramp");
     }
+
+    function test_wtf() external {
+        bytes memory cd = "0500003a804fe6f047f8a974701492025aa5adb61ab696640000000000000000003a804fe6f047f8a974701492025aa5adb61ab6966400000000000000003380b26a6ab27fd0000001640000000000000000f5b5a1766bc19d643d5d2f10db72edaba99230cd94c5bbe0f5e288787d54c4ad35b4609430aa88900f06295193db144b432a86b0abe21f0f8f57a1037c315d0c6ab27fd300003a804fe6f047f8a974701492025aa5adb61ab6964a1e004ca4b8fde1820b7169bf9b43927318f9c0fb991359cc4c6964efb687bb755c1c88a2499d4006ebd71c99c1ab18818cfebfaa791aa47fff327cb0ce470d3380b26a000800000000000000006a6903b21915a482390ab7f7767724736b1ffe159bdc2e2272f8bb20e190991c7bf1b98f17c85c52915a8eed9590d508dfbdb69b8b104f5b4b79817d8ce30a00";
+        vm.createSelectFork("https://arbitrum-mainnet.infura.io/v3/87bd4c7ecce4449ba0746431da94685a");
+        vm.etch(
+            0x7193088e878F3b461e552b3D6c0c97F1051A7822,
+                IArbFoundry(address(vm)).deployStylusCode(
+                "rfqhub.9lives.so.wasm"
+            ).code
+        );
+        vm.chainId(31337);
+        (bool rc, bytes memory rd) = 0x7193088e878F3b461e552b3D6c0c97F1051A7822.call(cd);
+        assert(rc);
+        assertEq("", rd);
+    }
 }

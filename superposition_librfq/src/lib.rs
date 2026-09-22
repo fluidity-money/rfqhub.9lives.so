@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(target_arch = "wasm32", no_std)]
 
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
@@ -26,9 +26,9 @@ pub mod outcome;
 pub mod call_aave_v3;
 pub mod call_accounts;
 
-#[cfg(all(feature = "std", not(target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod std_eip20;
-#[cfg(any(not(feature = "std"), target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 pub mod wasm_eip20;
 
 pub mod call_eip20;
