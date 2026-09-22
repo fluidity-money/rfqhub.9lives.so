@@ -509,7 +509,7 @@ func (r *mutationResolver) ConcludedCalldata(ctx context.Context, bundleTakerID 
 		maker types.BundleMaker
 		timestampletVal uint64
 		timestampletTime time.Time
-		timestampletOutcome types.Outcome
+		timestampletOutcomeS string
 	)
 	row := r.Db.QueryRow(`
 SELECT
@@ -526,7 +526,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		&maker,
 		&timestampletVal,
 		&timestampletTime,
-		&timestampletOutcome,
+		&timestampletOutcomeS,
 	)
 	if err != nil {
 		slog.Error("Error marking a side of the result as offramped",
@@ -538,6 +538,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		)
 		return "", fmt.Errorf("marking winner as offramped")
 	}
+	timestampletOutcome := modelOutcomeToOutcome(model.Outcome(timestampletOutcomeS))
 	aggArgs := types.AggregateArgs {
 		Maker: maker,
 		Timestamplet: types.Timestamplet {
