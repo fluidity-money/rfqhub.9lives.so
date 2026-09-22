@@ -548,15 +548,16 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		},
 	}
 	// It's safe for us to just redo this ourselves, since things won't change:
-	serverSig, err := signer.ServerSignAggregate(types.ServerSigningArgs{
+	serverArgs := types.ServerSigningArgs{
 		Enum:               types.ServerSigningArgsAggregateToOfframp,
 		AggregateToOfframp: aggArgs,
-	})
+	}
+	serverSig, err := signer.ServerSignAggregate(serverArgs)
 	if err != nil {
 		slog.Error("Error signing aggregate args",
 			"err", err,
 			"snowflake", snowflake,
-			"args", aggArgs,
+			"args", serverArgs,
 		)
 		return "", fmt.Errorf("server sign aggregate")
 	}
