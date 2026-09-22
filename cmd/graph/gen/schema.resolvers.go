@@ -560,7 +560,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		)
 		return "", fmt.Errorf("server sign aggregate")
 	}
-	cd, err := borsh.Serialize(types.Args{
+	args := types.Args{
 		Enum: types.ArgsAggregateToOfframp,
 		AggregateToOfframp: types.AggregateToOfframpArgs{
 			Args: types.AggregateEnum{
@@ -572,7 +572,13 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 			},
 			IsTaker: isTaker,
 		},
-	})
+	}
+	slog.Debug("Generating borsh for the args",
+		"snowflake", snowflake,
+		"args", args,
+		"is taker", isTaker,
+	)
+	cd, err := borsh.Serialize(args)
 	if err != nil {
 		slog.Error("Error creating aggregate args calldata",
 			"err", err,
