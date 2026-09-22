@@ -329,7 +329,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
 		Enum:        types.ClientSigningArgsBundleTaker,
-		BundleTaker: &bundleTakerArgs,
+		BundleTaker: bundleTakerArgs,
 	})
 	if err != nil {
 		slog.Error("Error signing a BundleTaker",
@@ -506,9 +506,9 @@ func (r *mutationResolver) ConcludedCalldata(ctx context.Context, bundleTakerID 
 		"eoa", eoa,
 	)
 	var (
-		maker types.BundleMaker
-		timestampletVal uint64
-		timestampletTime time.Time
+		maker                types.BundleMaker
+		timestampletVal      uint64
+		timestampletTime     time.Time
 		timestampletOutcomeS string
 	)
 	row := r.Db.QueryRow(`
@@ -539,18 +539,18 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		return "", fmt.Errorf("marking winner as offramped")
 	}
 	timestampletOutcome := modelOutcomeToOutcome(model.Outcome(timestampletOutcomeS))
-	aggArgs := types.AggregateArgs {
+	aggArgs := types.AggregateArgs{
 		Maker: maker,
-		Timestamplet: types.Timestamplet {
-			TimestampletTime: uint32(timestampletTime.Unix()),
+		Timestamplet: types.Timestamplet{
+			TimestampletTime:    uint32(timestampletTime.Unix()),
 			TimestampletOutcome: timestampletOutcome,
-			TimestampletVal: timestampletVal,
+			TimestampletVal:     timestampletVal,
 		},
 	}
 	// It's safe for us to just redo this ourselves, since things won't change:
 	serverSig, err := signer.ServerSignAggregate(types.ServerSigningArgs{
-		Enum: types.ServerSigningArgsAggregateToOfframp,
-		AggregateToOfframp: &aggArgs,
+		Enum:               types.ServerSigningArgsAggregateToOfframp,
+		AggregateToOfframp: aggArgs,
 	})
 	if err != nil {
 		slog.Error("Error signing aggregate args",
@@ -560,13 +560,13 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		)
 		return "", fmt.Errorf("server sign aggregate")
 	}
-	cd, err := borsh.Serialize(types.Args {
+	cd, err := borsh.Serialize(types.Args{
 		Enum: types.ArgsAggregateToOfframp,
-		AggregateToOfframp: &types.AggregateToOfframpArgs {
+		AggregateToOfframp: types.AggregateToOfframpArgs{
 			Args: types.AggregateEnum{
 				Enum: types.AggregateEnumArgs,
-				Args: &types.Aggregate{
-					Args: aggArgs,
+				Args: types.Aggregate{
+					Args:      aggArgs,
 					ServerSig: serverSig,
 				},
 			},
@@ -671,7 +671,7 @@ FROM
 	)
 	signingArgs := types.ClientSigningArgs{
 		Enum:        types.ClientSigningArgsBundleTaker,
-		BundleMaker: &bundleMakerArgs,
+		BundleMaker: bundleMakerArgs,
 	}
 	makerUserSig, err := signer.ClientSignClientArgs(signingArgs)
 	if err != nil {

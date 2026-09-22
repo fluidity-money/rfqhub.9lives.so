@@ -6,6 +6,8 @@ use bobcat_sdk::{alloc::bobcat_allocator, cd::const_keccak256, maths::U};
 
 bobcat_allocator!();
 
+use alloc::vec::Vec;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 
 pub mod immutables;
@@ -111,7 +113,7 @@ pub enum OnrampingSource {
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub struct BundleTakerArgs {
     /// Onramping source that we're using for loading the user in.
-    pub src: OnrampingSource,
+    pub src: Vec<OnrampingSource>,
     /// The timestamp for when this RFQ market has expired.
     pub expiry: u32,
     /// The nonce that we use here. A millisecond timestamp.

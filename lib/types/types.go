@@ -175,8 +175,8 @@ const (
 
 type AggregateEnum struct {
 	Enum borsh.Enum `borsh_enum:"true" json:"-"`
-	Args *Aggregate `json:"args,omitempty"`
-	Hash *[32]byte  `json:"hash,omitempty"`
+	Args Aggregate  `json:"args,omitempty"`
+	Hash [32]byte   `json:"hash,omitempty"`
 }
 
 const (
@@ -209,13 +209,13 @@ type AggregateToOfframpArgs struct {
 }
 
 type Args struct {
-	Enum               borsh.Enum              `borsh_enum:"true" json:"-"`
-	Version            *struct{}               `json:"version,omitempty"`
-	Source             *struct{}               `json:"source,omitempty"`
-	Balance            *BalanceArgs            `json:"balance,omitempty"`
-	OnrampingFromBal   *OnrampingFromBalArgs   `json:"onramping_from_bal,omitempty"`
-	Offramp            *OfframpVariantArgs     `json:"offramp,omitempty"`
-	AggregateToOfframp *AggregateToOfframpArgs `json:"aggregate_to_offramp,omitempty"`
+	Enum               borsh.Enum             `borsh_enum:"true" json:"-"`
+	Version            struct{}               `json:"version,omitempty"`
+	Source             struct{}               `json:"source,omitempty"`
+	Balance            BalanceArgs            `json:"balance,omitempty"`
+	OnrampingFromBal   OnrampingFromBalArgs   `json:"onramping_from_bal,omitempty"`
+	Offramp            OfframpVariantArgs     `json:"offramp,omitempty"`
+	AggregateToOfframp AggregateToOfframpArgs `json:"aggregate_to_offramp,omitempty"`
 }
 
 const (
@@ -224,9 +224,9 @@ const (
 )
 
 type ClientSigningArgs struct {
-	Enum        borsh.Enum       `borsh_enum:"true" json:"-"`
-	BundleTaker *BundleTakerArgs `json:"BundleTaker,omitempty"`
-	BundleMaker *BundleMakerArgs `json:"BundleMaker,omitempty"`
+	Enum        borsh.Enum      `borsh_enum:"true" json:"-"`
+	BundleTaker BundleTakerArgs `json:"BundleTaker,omitempty"`
+	BundleMaker BundleMakerArgs `json:"BundleMaker,omitempty"`
 }
 
 const (
@@ -235,9 +235,9 @@ const (
 )
 
 type ServerSigningArgs struct {
-	Enum        borsh.Enum       `borsh_enum:"true" json:"-"`
-	Offramp *OfframpArgs `json:"OfframpArgs,omitempty"`
-	AggregateToOfframp *AggregateArgs `json:"AggregateToOfframp,omitempty"`
+	Enum               borsh.Enum    `borsh_enum:"true" json:"-"`
+	Offramp            OfframpArgs   `json:"OfframpArgs,omitempty"`
+	AggregateToOfframp AggregateArgs `json:"AggregateToOfframp,omitempty"`
 }
 
 func (b BundleTaker) Value() (driver.Value, error) {

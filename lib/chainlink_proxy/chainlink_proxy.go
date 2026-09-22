@@ -2,19 +2,19 @@ package chainlink_proxy
 
 import (
 	"bytes"
-	_ "embed"
-	"math/big"
 	"context"
-	"time"
-	"fmt"
+	_ "embed"
 	"encoding/binary"
+	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 
-	"github.com/ethereum/go-ethereum/ethclient"
-	ethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum"
+	ethAbi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethCommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 //go:embed abi.json
@@ -25,12 +25,12 @@ var abi, abiErr = ethAbi.JSON(bytes.NewReader(abiB))
 var AddrChainlinkProxy = ethCommon.HexToAddress("0xE69bCD13ac4C2dE1882B10339fe3e5075AE27C46")
 
 type Round struct {
-	RoundId                      *big.Int `abi:"roundId"`
-	Phase                        uint16 `abi:"phase"`
-	AggregatorRoundId            uint64 `abi:"aggregatorRoundId"`
-	Answer *big.Int `abi:"answer"`
-	StartedAt *big.Int `abi:"startedAt"`
-	UpdatedAt *big.Int `abi:"updatedAt"`
+	RoundId           *big.Int `abi:"roundId"`
+	Phase             uint16   `abi:"phase"`
+	AggregatorRoundId uint64   `abi:"aggregatorRoundId"`
+	Answer            *big.Int `abi:"answer"`
+	StartedAt         *big.Int `abi:"startedAt"`
+	UpdatedAt         *big.Int `abi:"updatedAt"`
 }
 
 // GetOutcomePrice closest to the time given, according to Chainlink.
