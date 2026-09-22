@@ -484,7 +484,7 @@ FROM rfqhub_conclude_aggregate_1($1, $2)`,
 	)
 	return &model.Aggregate{
 		TakerWon:      takerWon,
-		WinningAmount: "",
+		WinningAmount: amountWon,
 	}, nil
 }
 
