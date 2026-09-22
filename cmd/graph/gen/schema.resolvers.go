@@ -579,7 +579,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		slog.Error("Error creating aggregate args calldata",
 			"err", err,
 			"snowflake", snowflake,
-			"args", aggArgs,
+			"args", args,
 			"sig", serverSig,
 		)
 		return "", fmt.Errorf("server cd aggregate")

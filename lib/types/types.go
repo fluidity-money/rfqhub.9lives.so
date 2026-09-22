@@ -161,8 +161,8 @@ type Aggregate struct {
 }
 
 type AggregateEnum struct {
-	Args *Aggregate `json:"args,omitempty"`
-	Hash *[32]byte  `json:"hash,omitempty"`
+	Args *Aggregate `json:"Args,omitempty"`
+	Hash *[32]byte  `json:"Hash,omitempty"`
 }
 
 type BalanceArgs struct {
