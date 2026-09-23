@@ -1,10 +1,13 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![no_std]
 
-use bobcat_sdk::{entry::read_args_vec, maths::U, storage::flush_guard};
+use bobcat_sdk::{bobcat_trace, entry::read_args_vec, storage::flush_guard};
 
 #[cfg(feature = "arbos")]
 use bobcat_sdk::entry::chain_id;
+
+#[cfg(not(feature = "arbos"))]
+use bobcat_sdk::maths::U;
 
 use borsh::de::BorshDeserialize;
 
@@ -16,22 +19,17 @@ macro_rules! env_word {
     ($name:ident, $input:literal) => {
         #[cfg(any(feature = "testing", not(target_arch = "wasm32")))]
         const $name: U = host_addrs::$name;
-        #[cfg(not(any(feature = "testing", not(target_arch = "wasm32"))))]
-        const $name: U = U::const_from_hex(env!($input).as_bytes()).unwrap();
     };
 }
 
 env_word!(SERVER_PUBLIC_KEY, "SPN_SERVER_PUBLIC_KEY");
 
 #[unsafe(no_mangle)]
+#[bobcat_trace]
 pub unsafe extern "C" fn user_entrypoint(len: usize) -> usize {
     let args = read_args_vec(len);
     #[cfg(feature = "arbos")]
-    let imm = Imm {
-        should_server_sig_validate: false,
-        should_user_sig_validate: false,
-        server_key: SERVER_PUBLIC_KEY,
-    };
+    let imm = Imm::default();
     #[cfg(not(feature = "arbos"))]
     let imm = Imm {
         should_server_sig_validate: true,

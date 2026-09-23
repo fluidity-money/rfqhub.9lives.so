@@ -17,5 +17,6 @@ paste = "1.0.15"
 
 [features]
 testing = []
-arbos = ["superposition_librfq/arbos", "superposition_librfq/console"]
+console = []
+arbos = ["superposition_librfq/arbos", "superposition_librfq/console", "console"]
 arbitrum = ["superposition_librfq/arbitrum"]

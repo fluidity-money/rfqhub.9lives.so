@@ -8,7 +8,7 @@ name = "superposition_librfq"
 crate-type   = ["rlib", "cdylib"]
 
 [dependencies]
-bobcat-sdk = { workspace = true, features = ["alloc", "panic-revert", "sha512", "borsh"] }
+bobcat-sdk = { workspace = true, features = ["alloc", "panic-revert", "sha512", "borsh", "derive-trace"] }
 borsh.workspace = true
 superposition_libaccounts.workspace = true
 superposition-assets.workspace = true

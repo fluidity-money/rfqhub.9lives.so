@@ -16,10 +16,12 @@ use bobcat_sdk::{
     entry::{chain_id, msg_sender},
     maths::U,
     storage::{const_keccak256, slot_map, storage_load},
+    bobcat_trace
 };
 
 // Recursively descend into the aggregated bundle, returning the address
 // of the taker, and the amount they provided.
+#[bobcat_trace]
 pub unsafe fn recurse_aggregate_src(
     imm: &Imm,
     src: &OnrampingSource,
@@ -92,6 +94,7 @@ pub unsafe fn recurse_aggregate_src(
 // SAFETY: Uses the contract storage to move amounts around, taking
 // advantage of the memory performing caching at places. Uses the storage
 // to look up the funds involved.
+#[bobcat_trace]
 pub unsafe fn recurse_aggregate_args(
     imm: &Imm,
     &AggregateArgs {
@@ -220,6 +223,7 @@ pub unsafe fn recurse_aggregate_args(
 
 // Entry the aggregate recursive function, returning the amount that's
 // able to be withdrawn by the party given. Checks the msg_sender.
+#[bobcat_trace]
 pub fn entry_recurse_aggregate_enum(
     imm: &Imm,
     args: &AggregateEnum,
@@ -275,6 +279,7 @@ pub fn entry_recurse_aggregate_enum(
     }
 }
 
+#[bobcat_trace]
 pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool) -> usize {
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
