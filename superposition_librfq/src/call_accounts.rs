@@ -5,10 +5,7 @@ use bobcat_sdk::{
 
 use superposition_libaccounts::{Args, Sig, StatementArgs};
 
-use crate::{
-    error::{Dis, Error},
-    signable::Hash,
-};
+use crate::error::{Dis, Error};
 
 pub fn get_owner(addr: [u8; 20]) -> Result<[u8; 20], Error> {
     let (ok, _, addr) =
@@ -23,13 +20,12 @@ pub fn get_owner(addr: [u8; 20]) -> Result<[u8; 20], Error> {
 /// Check the statement of a hash given by a user by converting it to
 /// its keccak form then checking to see if they signed it with the
 /// prelude that we use internally.
-pub fn check_hash_statement(addr: [u8; 20], hash: Hash, ms_ts: [u8; 6], sig: &[u8; 64]) -> bool {
-    let hash: U = hash.into();
+pub fn check_hash_statement(addr: [u8; 20], hash: U, ms_ts: [u8; 6], sig: &[u8; 64]) -> bool {
     safe_static_call_unit(
         addr,
         &borsh::to_vec(&Args::Statement {
             args: StatementArgs {
-                msg: hash.0.to_vec(),
+                msg: hash.as_vec(),
                 ms_ts,
             },
             sig: Sig(*sig),

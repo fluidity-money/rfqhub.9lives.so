@@ -1,4 +1,7 @@
 use alloc::boxed::Box;
+
+use crate::Sig;
+
 use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 use bobcat_sdk::maths::U;
@@ -40,6 +43,10 @@ pub struct ErrorData {
     pub hint: Option<&'static str>,
     pub old_val: Option<U>,
     pub server_key: Option<U>,
+    pub acc_addr: Option<[u8; 20]>,
+    pub acc_ms_ts: Option<[u8; 6]>,
+    pub acc_sig: Option<Sig>,
+    pub acc_msg: Option<U>,
 }
 
 impl From<Dis> for Error {
@@ -68,34 +75,63 @@ impl Debug for Error {
             hint,
             old_val,
             server_key,
+            acc_addr,
+            acc_ms_ts,
+            acc_sig,
+            acc_msg,
         } = data.as_ref();
         write!(
             f,
             "Error {{ dis: {dis:?}, hash: {hash:?}, storage: {storage:?}, consuming_amt: "
         )?;
         if let Some(x) = consuming_amt {
-            write!(f, "{x}")?;
+            write!(f, "{x}")
         } else {
-            write!(f, "None")?;
-        };
+            write!(f, "None")
+        }?;
         write!(f, ", prev_amt: ")?;
         if let Some(x) = prev_amt {
-            write!(f, "{x}")?;
+            write!(f, "{x}")
         } else {
-            write!(f, "None")?;
-        };
-        write!(f, ", hint: {hint:?}, old_val: }}")?;
+            write!(f, "None")
+        }?;
+        write!(f, ", hint: {hint:?}, old_val: ")?;
         if let Some(x) = old_val {
-            write!(f, "{x}")?
+            write!(f, "{x}")
         } else {
-            write!(f, "None")?;
-        };
+            write!(f, "None")
+        }?;
         write!(f, ", server_key: ")?;
         if let Some(x) = server_key {
             write!(f, "{x}")
         } else {
             write!(f, "None")
-        }
+        }?;
+        write!(f, ", acc_addr: ")?;
+        if let Some(x) = acc_addr {
+            write!(f, "{}", const_hex::encode(x))
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, ", acc_ms_ts: ")?;
+        if let Some(x) = acc_ms_ts {
+            write!(f, "{}", const_hex::encode(x))
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, ", acc_sig: ")?;
+        if let Some(Sig(x)) = acc_sig {
+            write!(f, "{}", const_hex::encode(x))
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, ", acc_msg: ")?;
+        if let Some(x) = acc_msg {
+            write!(f, "{x:?}")
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, "}}")
     }
 }
 

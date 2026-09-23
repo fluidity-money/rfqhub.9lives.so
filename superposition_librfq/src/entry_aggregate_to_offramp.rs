@@ -323,10 +323,22 @@ fn check_hash_signer(
         Ok(())
     }
     #[cfg(not(feature = "arbos"))]
-    if call_accounts::check_hash_statement(_addr, _hash, _ms_ts, &_sig.0) {
-        Ok(())
-    } else {
-        Err(Dis::StatementCheckFailed.into())
+    {
+        let hash: U = _hash.into();
+        if call_accounts::check_hash_statement(_addr, hash, _ms_ts, &_sig.0) {
+            Ok(())
+        } else {
+            Err(Error {
+                dis: Dis::StatementCheckFailed,
+                data: Box::new(ErrorData {
+                    acc_addr: Some(_addr),
+                    acc_ms_ts: Some(_ms_ts),
+                    acc_sig: Some(_sig),
+                    acc_msg: Some(hash),
+                    ..ErrorData::default()
+                }),
+            })
+        }
     }
 }
 

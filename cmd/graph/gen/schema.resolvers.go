@@ -327,7 +327,10 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		Outcome:     outcome_,
 	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
-		BundleTaker: &bundleTakerArgs,
+		AccAddr: accAddr,
+		Bundle: types.ClientSigningBundle {
+			BundleTaker: &bundleTakerArgs,
+		},
 	})
 	if err != nil {
 		slog.Error("Error signing a BundleTaker",
@@ -671,7 +674,10 @@ FROM
 		"bundle bundle taker", bundleTaker,
 	)
 	signingArgs := types.ClientSigningArgs{
-		BundleMaker: &bundleMakerArgs,
+		AccAddr: accAddr,
+		Bundle: types.ClientSigningBundle {
+			BundleMaker: &bundleMakerArgs,
+		},
 	}
 	makerUserSig, err := signer.ClientSignClientArgs(signingArgs)
 	if err != nil {

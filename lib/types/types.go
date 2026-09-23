@@ -194,9 +194,14 @@ type Args struct {
 	AggregateToOfframp *AggregateToOfframpArgs `json:"AggregateToOfframp,omitempty"`
 }
 
-type ClientSigningArgs struct {
+type ClientSigningBundle struct {
 	BundleTaker *BundleTakerArgs `json:"BundleTaker,omitempty"`
 	BundleMaker *BundleMakerArgs `json:"BundleMaker,omitempty"`
+}
+
+type ClientSigningArgs struct {
+	AccAddr [20]byte `json:"acc_addr"`
+	Bundle ClientSigningBundle `json:"bundle"`
 }
 
 type ServerSigningArgs struct {

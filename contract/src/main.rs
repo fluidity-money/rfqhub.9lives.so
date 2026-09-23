@@ -6,7 +6,7 @@ use bobcat_sdk::{bobcat_trace, entry::read_args_vec, storage::flush_guard};
 #[cfg(feature = "arbos")]
 use bobcat_sdk::entry::chain_id;
 
-#[cfg(not(any(feature = "testing", not(target_arch = "wasm32"))))]
+#[cfg(not(any(feature = "arbos", feature = "testing")))]
 use bobcat_sdk::maths::U;
 
 use borsh::de::BorshDeserialize;
@@ -17,7 +17,7 @@ mod host_addrs;
 
 macro_rules! env_word {
     ($name:ident, $input:literal) => {
-        #[cfg(not(any(feature = "testing", not(target_arch = "wasm32"))))]
+        #[cfg(not(any(feature = "arbos", feature = "testing")))]
         const $name: U = U::const_from_hex(env!($input).as_bytes()).unwrap();
     };
 }

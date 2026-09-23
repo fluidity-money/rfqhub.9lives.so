@@ -9,19 +9,25 @@ use std::{
 
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
-use bobcat_sdk::precompiles::superposition::ed25519_sign_post;
-
 use superposition_librfq::{
     BundleMakerArgs, BundleTakerArgs,
     signable::{Hash, SignableBundleMakerArgs, SignableBundleTakerArgs},
 };
 
+use superposition_libaccounts::sign_statement;
+
 use ed25519_dalek::SigningKey;
 
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
-pub enum ClientSigningArgs {
+pub enum ClientSigningBundle {
     BundleTaker(BundleTakerArgs),
     BundleMaker(BundleMakerArgs),
+}
+
+#[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
+pub struct ClientSigningArgs {
+    pub acc_addr: [u8; 20],
+    pub bundle: ClientSigningBundle,
 }
 
 fn main() {
@@ -33,27 +39,26 @@ fn main() {
         )
         .unwrap(),
     );
-    let args: ClientSigningArgs = if let Some(x) = args().nth(1) {
+    let ClientSigningArgs { acc_addr, bundle } = if let Some(x) = args().nth(1) {
         serde_json::from_str::<_>(&x)
     } else {
         serde_json::from_reader::<_, _>(stdin())
     }
     .unwrap();
-    println!(
-        "{}",
-        const_hex::encode(match args {
-            ClientSigningArgs::BundleTaker(args) => {
-                let Hash::JustInTime(hash) = SignableBundleTakerArgs::from(&args).hash else {
-                    panic!("non just in time bundle taker not supported");
-                };
-                ed25519_sign_post(key, hash)
-            }
-            ClientSigningArgs::BundleMaker(args) => {
-                let Hash::JustInTime(hash) = SignableBundleMakerArgs::from(&args).hash else {
-                    panic!("non just in time bundle maker not supported");
-                };
-                ed25519_sign_post(key, hash)
-            }
-        })
-    )
+    let (hash, ms_ts) = match bundle {
+        ClientSigningBundle::BundleTaker(args) => {
+            let Hash::JustInTime(hash) = SignableBundleTakerArgs::from(&args).hash else {
+                panic!("non just in time bundle taker not supported");
+            };
+            (hash, args.ms_ts)
+        }
+        ClientSigningBundle::BundleMaker(args) => {
+            let Hash::JustInTime(hash) = SignableBundleMakerArgs::from(&args).hash else {
+                panic!("non just in time bundle maker not supported");
+            };
+            (hash, args.ms_ts)
+        }
+    };
+    let sig = sign_statement(key, hash.0.to_vec(), ms_ts, acc_addr);
+    println!("{}", const_hex::encode(sig.0))
 }
