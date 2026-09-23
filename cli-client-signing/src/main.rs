@@ -9,9 +9,11 @@ use std::{
 
 use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 
+use bobcat_sdk::maths::U;
+
 use superposition_librfq::{
     BundleMakerArgs, BundleTakerArgs,
-    signable::{Hash, SignableBundleMakerArgs, SignableBundleTakerArgs},
+    signable::{SignableBundleMakerArgs, SignableBundleTakerArgs},
 };
 
 use superposition_libaccounts::sign_statement;
@@ -47,19 +49,13 @@ fn main() {
     .unwrap();
     let (hash, ms_ts) = match bundle {
         ClientSigningBundle::BundleTaker(args) => {
-            let Hash::JustInTime(hash) = SignableBundleTakerArgs::from(&args).hash else {
-                panic!("non just in time bundle taker not supported");
-            };
-            (hash, args.ms_ts)
+            (SignableBundleTakerArgs::from(&args).hash, args.ms_ts)
         }
         ClientSigningBundle::BundleMaker(args) => {
-            let Hash::JustInTime(hash) = SignableBundleMakerArgs::from(&args).hash else {
-                panic!("non just in time bundle maker not supported");
-            };
-            (hash, args.ms_ts)
+            (SignableBundleMakerArgs::from(&args).hash , args.ms_ts)
         }
     };
-    let hash: [u8; 32] = hash.into();
-    let sig = sign_statement(key, hash.0.to_vec(), ms_ts, acc_addr);
+    let hash: U = hash.into();
+    let sig = sign_statement(key, hash.as_vec(), ms_ts, acc_addr);
     println!("{}", const_hex::encode(sig.0))
 }
