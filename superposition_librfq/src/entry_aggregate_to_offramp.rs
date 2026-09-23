@@ -13,10 +13,10 @@ use crate::call_accounts;
 use alloc::boxed::Box;
 
 use bobcat_sdk::{
+    bobcat_trace,
     entry::{chain_id, msg_sender},
     maths::U,
     storage::{const_keccak256, slot_map, storage_load},
-    bobcat_trace
 };
 
 // Recursively descend into the aggregated bundle, returning the address
@@ -336,7 +336,13 @@ fn check_server_sig(hash: &Hash, key: &U, sig: [u8; 64]) -> Result<(), Error> {
         if is_sig_ok {
             Ok(())
         } else {
-            Err(Dis::BadSignature.into())
+            Err(Error {
+                dis: Dis::BadSignature,
+                data: Box::new(ErrorData {
+                    server_key: Some(key.clone()),
+                    ..ErrorData::default()
+                }),
+            })
         }
     } else {
         // The hash is already on-chain, we don't need to verify it.

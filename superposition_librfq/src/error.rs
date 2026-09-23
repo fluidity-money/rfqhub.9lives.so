@@ -39,6 +39,7 @@ pub struct ErrorData {
     pub prev_amt: Option<U>,
     pub hint: Option<&'static str>,
     pub old_val: Option<U>,
+    pub server_key: Option<U>,
 }
 
 impl From<Dis> for Error {
@@ -66,6 +67,7 @@ impl Debug for Error {
             prev_amt,
             hint,
             old_val,
+            server_key,
         } = data.as_ref();
         write!(
             f,
@@ -84,6 +86,12 @@ impl Debug for Error {
         };
         write!(f, ", hint: {hint:?}, old_val: }}")?;
         if let Some(x) = old_val {
+            write!(f, "{x}")?
+        } else {
+            write!(f, "None")?;
+        };
+        write!(f, ", server_key: ")?;
+        if let Some(x) = server_key {
             write!(f, "{x}")
         } else {
             write!(f, "None")

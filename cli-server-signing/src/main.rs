@@ -11,8 +11,8 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 use bobcat_sdk::precompiles::superposition::ed25519_sign_post;
 
 use superposition_librfq::{
-    signable::{Hash, SignableAggregateArgs, SignableOfframpArgs},
     AggregateArgs, OfframpArgs,
+    signable::{Hash, SignableAggregateArgs, SignableOfframpArgs},
 };
 
 use ed25519_dalek::SigningKey;
@@ -41,7 +41,8 @@ fn main() {
     println!(
         "{}",
         const_hex::encode(match args {
-            ServerSigningArgs::Offramp(args) => ed25519_sign_post(key, SignableOfframpArgs::from(&args).hash),
+            ServerSigningArgs::Offramp(args) =>
+                ed25519_sign_post(key, SignableOfframpArgs::from(&args).hash),
             ServerSigningArgs::AggregateToOfframp(args) => {
                 let Hash::JustInTime(hash) = SignableAggregateArgs::from(&args).hash else {
                     unreachable!()
