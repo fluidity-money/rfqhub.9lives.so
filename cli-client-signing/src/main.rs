@@ -52,7 +52,7 @@ fn main() {
             (SignableBundleTakerArgs::from(&args).hash, args.ms_ts)
         }
         ClientSigningBundle::BundleMaker(args) => {
-            (SignableBundleMakerArgs::from(&args).hash , args.ms_ts)
+            (SignableBundleMakerArgs::from(&args).hash, args.ms_ts)
         }
     };
     let hash: U = hash.into();

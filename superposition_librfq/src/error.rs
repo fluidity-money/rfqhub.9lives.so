@@ -1,4 +1,4 @@
-use alloc::boxed::Box;
+use alloc::{vec::Vec, boxed::Box};
 
 use crate::Sig;
 
@@ -47,6 +47,7 @@ pub struct ErrorData {
     pub acc_ms_ts: Option<[u8; 6]>,
     pub acc_sig: Option<Sig>,
     pub acc_msg: Option<U>,
+    pub cd: Option<Vec<u8>>,
 }
 
 impl From<Dis> for Error {
@@ -79,6 +80,7 @@ impl Debug for Error {
             acc_ms_ts,
             acc_sig,
             acc_msg,
+            cd,
         } = data.as_ref();
         write!(
             f,
@@ -128,6 +130,12 @@ impl Debug for Error {
         write!(f, ", acc_msg: ")?;
         if let Some(x) = acc_msg {
             write!(f, "{x:?}")
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, ", cd: ")?;
+        if let Some(x) = cd {
+            write!(f, "{}", const_hex::encode(x))
         } else {
             write!(f, "None")
         }?;
