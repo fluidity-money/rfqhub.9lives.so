@@ -1,7 +1,7 @@
 
 # rfqhub.9lives.so
 
-Rfqhub has its implementation deployed to `0xc244fab590355bf7493bfd7deee76bf5af2e4adc` on
+Rfqhub has its implementation deployed to `0x9d8e17ac05679f7ed977beb1c8f16d31b236b6fb` on
 Arbitrum One mainnet. It's proxy lives at `0x7193088e878F3b461e552b3D6c0c97F1051A7822`.
 
 rfqhub is a calldata aggregating middleware bundler and off-chain matching engine. Orders

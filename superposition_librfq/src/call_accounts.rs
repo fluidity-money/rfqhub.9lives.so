@@ -1,5 +1,5 @@
 use bobcat_sdk::{
-    call::{safe_call_unit, safe_static_call_slice},
+    call::{safe_call_unit, safe_call_slice},
     maths::U,
 };
 
@@ -11,7 +11,7 @@ use alloc::boxed::Box;
 
 pub fn get_owner(addr: [u8; 20]) -> Result<[u8; 20], Error> {
     let cd = borsh::to_vec(&Args::Owner).unwrap();
-    let (ok, _, a) = safe_static_call_slice::<20>(addr, &cd, u64::MAX, 0)
+    let (ok, _, a) = safe_call_slice::<20>(addr, &cd, &U::ZERO, u64::MAX, 32 - 20)
         .ok_or(Error::from(Dis::AccountNonexistent))?;
     if !ok {
         return Err(Error {

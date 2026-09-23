@@ -238,7 +238,14 @@ pub fn entry_recurse_aggregate_enum(
             if is_taker {
                 let recipient = get_acc_owner(taker_acc)?;
                 if recipient != sender {
-                    return Err(Dis::SenderNotTaker.into());
+                    return Err(Error {
+                        dis: Dis::SenderNotTaker,
+                        data: Box::new(ErrorData {
+                            sender: Some(sender),
+                            expected_sender: Some(recipient),
+                            ..ErrorData::default()
+                        })
+                    });
                 }
                 storage::hash_taker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
                 Ok((sender, asset, taker_leftover))
@@ -247,7 +254,14 @@ pub fn entry_recurse_aggregate_enum(
                 let maker_acc: [u8; 20] = storage::hash_maker_addr::get(&signable_hash_u).into();
                 let recipient = get_acc_owner(maker_acc)?;
                 if recipient != sender {
-                    return Err(Dis::SenderNotTaker.into());
+                    return Err(Error {
+                        dis: Dis::SenderNotTaker,
+                        data: Box::new(ErrorData {
+                            sender: Some(sender),
+                            expected_sender: Some(recipient),
+                            ..ErrorData::default()
+                        })
+                    });
                 }
                 let maker_leftover =
                     storage::hash_maker_leftover::get(&signable_hash_u, &asset.into());
@@ -261,7 +275,15 @@ pub fn entry_recurse_aggregate_enum(
                 let amt = storage::hash_taker_leftover::get(h, &asset);
                 let recipient = get_acc_owner(storage::hash_taker_addr::get(h).into())?;
                 if recipient != sender {
-                    return Err(Dis::SenderNotTaker.into());
+                    return Err(Error {
+                        dis: Dis::SenderNotTaker,
+                        data: Box::new(ErrorData {
+                            sender: Some(sender),
+                            expected_sender: Some(recipient),
+                            hash: Some(*h),
+                            ..ErrorData::default()
+                        })
+                    });
                 }
                 storage::hash_taker_leftover::set(h, &asset, &U::ZERO);
                 (sender, asset, amt)

@@ -48,6 +48,8 @@ pub struct ErrorData {
     pub acc_sig: Option<Sig>,
     pub acc_msg: Option<U>,
     pub cd: Option<Vec<u8>>,
+    pub sender: Option<[u8; 20]>,
+    pub expected_sender: Option<[u8; 20]>
 }
 
 impl From<Dis> for Error {
@@ -81,6 +83,8 @@ impl Debug for Error {
             acc_sig,
             acc_msg,
             cd,
+            sender,
+            expected_sender,
         } = data.as_ref();
         write!(
             f,
@@ -135,6 +139,18 @@ impl Debug for Error {
         }?;
         write!(f, ", cd: ")?;
         if let Some(x) = cd {
+            write!(f, "{}", const_hex::encode(x))
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, ", sender: ")?;
+        if let Some(x) = sender {
+            write!(f, "{}", const_hex::encode(x))
+        } else {
+            write!(f, "None")
+        }?;
+        write!(f, ", expected_sender: ")?;
+        if let Some(x) = expected_sender {
             write!(f, "{}", const_hex::encode(x))
         } else {
             write!(f, "None")
