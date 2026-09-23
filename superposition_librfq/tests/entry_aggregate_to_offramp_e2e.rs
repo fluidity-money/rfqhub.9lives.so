@@ -1,4 +1,4 @@
-#[cfg(all(feature = "proptest", feature = "arbitrary", feature = "std"))]
+#[cfg(all(feature = "proptest", feature = "arbitrary"))]
 mod test {
     use std::{
         any::Any,

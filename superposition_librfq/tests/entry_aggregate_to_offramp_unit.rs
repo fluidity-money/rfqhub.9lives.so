@@ -6,10 +6,8 @@ use alloc::boxed::Box;
 
 use bobcat_sdk::{maths::U, storage::flush_guard_fresh};
 
-#[cfg(feature = "std")]
 use bobcat_sdk::host::set_contract_address;
 
-#[cfg(feature = "std")]
 use superposition_librfq::std_eip20;
 
 #[test]
@@ -354,7 +352,6 @@ fn test_erik_alex_after_posted_blob() {
 // (the payout is exactly backed by the pool already deducted from the
 // participants' onramped balances).
 #[test]
-#[cfg(feature = "std")]
 fn test_maker_win_offramp_pays_principal() {
     flush_guard_fresh(|| {
         set_contract_address([0x22; 20]);

@@ -59,6 +59,7 @@ fn main() {
             (hash, args.ms_ts)
         }
     };
+    let hash: [u8; 32] = hash.into();
     let sig = sign_statement(key, hash.0.to_vec(), ms_ts, acc_addr);
     println!("{}", const_hex::encode(sig.0))
 }

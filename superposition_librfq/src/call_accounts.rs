@@ -1,5 +1,5 @@
 use bobcat_sdk::{
-    call::{safe_static_call_slice, safe_static_call_unit},
+    call::{safe_static_call_slice, safe_call_unit},
     maths::U,
 };
 
@@ -21,7 +21,7 @@ pub fn get_owner(addr: [u8; 20]) -> Result<[u8; 20], Error> {
 /// its keccak form then checking to see if they signed it with the
 /// prelude that we use internally.
 pub fn check_hash_statement(addr: [u8; 20], hash: U, ms_ts: [u8; 6], sig: &[u8; 64]) -> bool {
-    safe_static_call_unit(
+    safe_call_unit(
         addr,
         &borsh::to_vec(&Args::Statement {
             args: StatementArgs {
@@ -31,6 +31,7 @@ pub fn check_hash_statement(addr: [u8; 20], hash: U, ms_ts: [u8; 6], sig: &[u8; 
             sig: Sig(*sig),
         })
         .unwrap(),
+        &U::ZERO,
         u64::MAX,
     )
 }

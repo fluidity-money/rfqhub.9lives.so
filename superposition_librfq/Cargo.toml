@@ -29,6 +29,7 @@ console = ["bobcat-sdk/console"]
 
 [dev-dependencies]
 proptest = ">=1.11.0"
+bobcat-sdk = { workspace = true, features = ["alloc", "panic-revert", "sha512", "borsh", "derive-trace", "std"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bobcat-sdk = { workspace = true, default-features = false, features = ["alloc", "panic-revert", "sha512", "borsh", "ed25519-dalek"] }
