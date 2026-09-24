@@ -9,14 +9,16 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
+
+	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
 
-	"github.com/near/borsh-go"
+	near_borsh "github.com/near/borsh-go"
 )
 
 var MaxBytes32 [32]byte
@@ -96,7 +98,7 @@ func CreateSolveArgsSigArgs(
 	permit *model.Permit,
 	msTs [6]byte,
 ) (*acc_types.SolveArgsSigArgs, error) {
-	cd, err := borsh.Serialize(types.Args{
+	cd, err := borsh.Encode(types.Args{
 		OnrampingFromBal: &types.OnrampingFromBalArgs{
 			Asset: asset,
 			Amt:   amt,
@@ -138,7 +140,9 @@ func CreateSolveArgsSigArgs(
 		}
 		solveArgs.Permit = append(solveArgs.Permit, *p)
 	}
-	solveArgsDigest, err := borsh.Serialize(solveArgs)
+	// We use two versions of borsh, since near-borsh doesn't encode
+	// complex types with pointers properly.
+	solveArgsDigest, err := near_borsh.Serialize(solveArgs)
 	if err != nil {
 		return nil, fmt.Errorf("making digest: %v", err)
 	}
