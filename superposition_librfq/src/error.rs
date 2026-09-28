@@ -1,4 +1,4 @@
-use alloc::{vec::Vec, boxed::Box};
+use alloc::{boxed::Box, vec::Vec};
 
 use crate::Sig;
 
@@ -25,6 +25,7 @@ pub enum Dis {
     AccountError,
     InconsistentAsset,
     InconsistentAccount,
+    EmptyOnrampingSrc,
 }
 
 #[derive(Clone, PartialEq)]
@@ -49,7 +50,7 @@ pub struct ErrorData {
     pub acc_msg: Option<U>,
     pub cd: Option<Vec<u8>>,
     pub sender: Option<[u8; 20]>,
-    pub expected_sender: Option<[u8; 20]>
+    pub expected_sender: Option<[u8; 20]>,
 }
 
 impl From<Dis> for Error {

@@ -1,5 +1,5 @@
 use bobcat_sdk::{
-    call::{safe_call_unit, safe_call_slice},
+    call::{safe_call_slice, safe_call_unit},
     maths::U,
 };
 

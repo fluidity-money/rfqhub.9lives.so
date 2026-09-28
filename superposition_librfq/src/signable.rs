@@ -24,7 +24,7 @@ use array_concat::concat_arrays;
 
 use bobcat_sdk::{maths::U, precompiles::superposition::sha512, storage::keccak256};
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub enum Hash {
@@ -64,7 +64,7 @@ pub struct SignableOnrampingSource {
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct SignableBundleTakerArgs {
-    pub src: SignableOnrampingSource,
+    pub src: Vec<SignableOnrampingSource>,
     pub hash: Hash,
 }
 
@@ -85,7 +85,7 @@ pub struct InnerBundleMaker {
 
 #[derive(BorshSerialize, Clone, PartialEq, Debug)]
 pub struct SignableBundleMakerArgs {
-    pub src: SignableOnrampingSource,
+    pub src: Vec<SignableOnrampingSource>,
     pub taker_args: SignableBundleTakerArgs,
     pub hash: Hash,
 }
@@ -135,7 +135,9 @@ impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
         }: &BundleMakerArgs,
     ) -> Self {
         let taker_pre = SignableBundleTakerArgs::from(args);
-        let src = SignableOnrampingSource::from(src);
+        let src = src.iter().map(|x| SignableOnrampingSource::from(x)).collect::<Vec<_>>();
+        let src_hashes = src.iter().map(|SignableOnrampingSource { hash, .. }| hash).collect::<Vec<_>>();
+        let BcSha512(src_hash) = sha512(&borsh::to_vec(&src_hashes).unwrap());
         let BcSha512(content) = sha512(
             &borsh::to_vec(&InnerBundleMaker {
                 ms_ts: *ms_ts,
@@ -143,10 +145,10 @@ impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
             })
             .unwrap(),
         );
-        let pre: [u8; 1 + 64 + 32 + 32] = concat_arrays!(
+        let pre: [u8; 1 + 64 * 2 + 32] = concat_arrays!(
             [PreDiscriminant::BundleMakerArgs as u8],
             content,
-            src.hash.clone().into(),
+            src_hash,
             taker_pre.hash.clone().into()
         );
         Self {
@@ -168,7 +170,9 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             outcome,
         }: &BundleTakerArgs,
     ) -> Self {
-        let src = SignableOnrampingSource::from(src);
+        let src = src.iter().map(|x| SignableOnrampingSource::from(x)).collect::<Vec<_>>();
+        let src_hashes = src.iter().map(|SignableOnrampingSource { hash, .. }| hash).collect::<Vec<_>>();
+        let BcSha512(src_hash) = sha512(&borsh::to_vec(&src_hashes).unwrap());
         let BcSha512(content) = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
                 expiry: *expiry,
@@ -179,10 +183,10 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             })
             .unwrap(),
         );
-        let pre: [u8; 1 + 64 + 32] = concat_arrays!(
+        let pre: [u8; 1 + 64 * 2] = concat_arrays!(
             [PreDiscriminant::BundleTakerArgs as u8],
             content,
-            src.hash.clone().into()
+            src_hash
         );
         Self {
             src,

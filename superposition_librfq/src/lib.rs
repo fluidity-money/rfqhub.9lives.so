@@ -56,7 +56,7 @@ pub use outcome::Outcome;
 
 pub use sig::Sig;
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, vec::Vec};
 
 #[cfg(feature = "arbitrary")]
 use arbitrary::Arbitrary;
@@ -111,7 +111,7 @@ pub enum OnrampingSource {
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub struct BundleTakerArgs {
     /// Onramping source that we're using for loading the user in.
-    pub src: OnrampingSource,
+    pub src: Vec<OnrampingSource>,
     /// The timestamp for when this RFQ market has expired.
     pub expiry: u32,
     /// The nonce that we use here. A millisecond timestamp.
@@ -137,7 +137,7 @@ pub struct BundleTaker {
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub struct BundleMakerArgs {
     /// The compensation for if the taker is correct:
-    pub src: OnrampingSource,
+    pub src: Vec<OnrampingSource>,
     /// The taker this is a part of:
     pub taker: BundleTaker,
     /// The nonce that we use here.
