@@ -20,13 +20,13 @@ use bobcat_sdk::{
     storage::{const_keccak256, slot_map, storage_load},
 };
 
-fn recurse_aggregate_acc_asset(src: &[OnrampingSource]) -> Option<([u8; 20], [u8; 20])> {
-    match src.iter().next()? {
+use superposition_assets::Asset;
+
+fn recurse_aggregate_acc_asset(src: &[OnrampingSource]) -> Result<([u8; 20], Asset), Error> {
+    match src.iter().next().ok_or(Dis::EmptyOnrampingSrc)? {
         OnrampingSource::OnchainPot(OnchainPotArgs {
-            acc_addr,
-            asset,
-            ..
-        }) => Some((*acc_addr, asset.addr())),
+            acc_addr, asset, ..
+        }) => Ok((*acc_addr, *asset)),
         OnrampingSource::AggregatedResult(AggregatedResultArgs { from, .. }) => {
             match from.as_ref() {
                 AggregateEnum::Args(agg) => {
@@ -35,7 +35,15 @@ fn recurse_aggregate_acc_asset(src: &[OnrampingSource]) -> Option<([u8; 20], [u8
                             AggregateArgs {
                                 maker:
                                     BundleMaker {
-                                        args: BundleMakerArgs { src, .. },
+                                        args:
+                                            BundleMakerArgs {
+                                                taker:
+                                                    BundleTaker {
+                                                        args: BundleTakerArgs { src, .. },
+                                                        ..
+                                                    },
+                                                ..
+                                            },
                                         ..
                                     },
                                 ..
@@ -45,11 +53,12 @@ fn recurse_aggregate_acc_asset(src: &[OnrampingSource]) -> Option<([u8; 20], [u8
                     recurse_aggregate_acc_asset(src)
                 }
                 AggregateEnum::Hash(h) => {
-                    let asset = storage::hash_asset::get(h);
-                    Some((
-                        storage::hash_taker_addr::get(h).into(),
-                        asset.into()
-                    ))
+                    let asset_word = storage::hash_asset::get(h);
+                    let asset = [Asset::USDC, Asset::ARB, Asset::WETH]
+                        .into_iter()
+                        .find(|asset| U::from(asset.addr()) == asset_word)
+                        .ok_or(Dis::BadAsset)?;
+                    Ok((storage::hash_taker_addr::get(h).into(), asset))
                 }
             }
         }
@@ -64,17 +73,25 @@ pub unsafe fn recurse_aggregate_src(
     src: &[OnrampingSource],
     aggregated_onramping_src: &[SignableOnrampingSource],
 ) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
-    let (exp_acc, exp_asset) = recurse_aggregate_acc_asset(src).ok_or(Dis::EmptyOnrampingSrc)?;
-    let amt = src.iter()
-        .zip(aggregated_onramping_src.iter())
-        .try_fold(0, |amt_cumulative, (src, aggregated_onramping_src)| -> Result<_, Error> {
-            let aggregated_res = aggregated_onramping_src.aggregated_res.clone().ok_or(Dis::InconsistentSignable)?;
+    let (exp_acc, exp_asset) = recurse_aggregate_acc_asset(src)?;
+    if src.len() != aggregated_onramping_src.len() {
+        return Err(Dis::InconsistentSignable.into());
+    }
+    let amt = src.iter().zip(aggregated_onramping_src.iter()).try_fold(
+        0u64,
+        |amt_cumulative, (src, aggregated_onramping_src)| -> Result<_, Error> {
             match src {
                 OnrampingSource::OnchainPot(OnchainPotArgs {
                     acc_addr,
                     amt,
                     asset,
                 }) => {
+                    if exp_asset != *asset {
+                        return Err(Dis::InconsistentAsset.into());
+                    }
+                    if exp_acc != *acc_addr {
+                        return Err(Dis::InconsistentAccount.into());
+                    }
                     let asset_u: U = asset.addr().into();
                     let amt_u = U::from(*amt);
                     let user_bal = storage::onramped_bal::checked_sub_res(
@@ -89,13 +106,23 @@ pub unsafe fn recurse_aggregate_src(
                         user_bal,
                         storage::global_bal::get(&asset_u),
                     );
-                    Ok(amt_cumulative + amt)
+                    amt_cumulative
+                        .checked_add(*amt)
+                        .ok_or_else(|| Dis::CheckedAddOverflow.into())
                 }
                 OnrampingSource::AggregatedResult(AggregatedResultArgs { from, amt_to_take }) => {
                     let (available, acc, asset, source_hash) = match from.as_ref() {
                         AggregateEnum::Args(agg) => unsafe {
-                            let (available, acc, asset) =
-                                recurse_aggregate_args(imm, &agg.args, aggregated_res.as_ref(), &agg.server_sig)?;
+                            let aggregated_res = aggregated_onramping_src
+                                .aggregated_res
+                                .as_ref()
+                                .ok_or(Dis::InconsistentSignable)?;
+                            let (available, acc, asset) = recurse_aggregate_args(
+                                imm,
+                                &agg.args,
+                                aggregated_res,
+                                &agg.server_sig,
+                            )?;
                             (available, acc, asset, aggregated_res.hash.clone().into())
                         },
                         AggregateEnum::Hash(h) => {
@@ -108,6 +135,12 @@ pub unsafe fn recurse_aggregate_src(
                             )
                         }
                     };
+                    if exp_asset.addr() != asset {
+                        return Err(Dis::InconsistentAsset.into());
+                    }
+                    if exp_acc != acc {
+                        return Err(Dis::InconsistentAccount.into());
+                    }
                     let amount_to_onramp = available
                         .checked_sub(*amt_to_take)
                         .ok_or(Dis::CheckedSubUnderflow)?;
@@ -120,11 +153,14 @@ pub unsafe fn recurse_aggregate_src(
                         "aggregated result remainder to onramped bal",
                     )?;
                     event_emit_bal_update(acc, asset, user_bal, storage::global_bal::get(&asset_u));
-                    Ok(amt_cumulative + amt_to_take)
+                    amt_cumulative
+                        .checked_add(*amt_to_take)
+                        .ok_or_else(|| Dis::CheckedAddOverflow.into())
                 }
             }
-        })?;
-    Ok((amt, exp_acc, exp_asset))
+        },
+    )?;
+    Ok((amt, exp_acc, exp_asset.addr()))
 }
 
 // Recursively descend into the aggregated bundle, updating the storage
@@ -198,13 +234,8 @@ pub unsafe fn recurse_aggregate_args(
             }),
         });
     }
-    let (taker_amt, taker_acc, asset) = unsafe {
-        recurse_aggregate_src(
-            imm,
-            src,
-            &signable.maker.taker_args.src,
-        )?
-    };
+    let (taker_amt, taker_acc, asset) =
+        unsafe { recurse_aggregate_src(imm, src, &signable.maker.taker_args.src)? };
     let (maker_amt, maker_src_acc, maker_asset) =
         unsafe { recurse_aggregate_src(imm, maker_src, &signable.maker.src)? };
     if maker_src_acc != maker_acc {

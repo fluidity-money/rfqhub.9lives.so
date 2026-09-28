@@ -89,14 +89,14 @@ impl InvertedAggregate {
                 args: AggregateArgs {
                     maker: BundleMaker {
                         args: BundleMakerArgs {
-                            src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                            src: vec![OnrampingSource::OnchainPot(OnchainPotArgs {
                                 acc_addr: submission.maker_acc,
                                 amt: submission.maker_amt,
                                 asset: self.initial_taker.asset,
-                            }),
+                            })],
                             taker: BundleTaker {
                                 args: BundleTakerArgs {
-                                    src: source,
+                                    src: vec![source],
                                     expiry: submission.expiry,
                                     ms_ts: submission.taker_ms_ts,
                                     is_up: submission.price_move.direction.is_up(),
@@ -309,7 +309,7 @@ fn bundle_taker_args_strategy(
     src: BoxedStrategy<OnrampingSource>,
 ) -> BoxedStrategy<BundleTakerArgs> {
     (
-        src,
+        vec(src, 1..=RECURSIVE_ITEMS_PER_COLLECTION as usize),
         any::<u32>(),
         any::<[u8; 6]>(),
         any::<bool>(),
@@ -339,7 +339,10 @@ fn bundle_maker_args_strategy(
     src: BoxedStrategy<OnrampingSource>,
 ) -> BoxedStrategy<BundleMakerArgs> {
     (
-        any::<OnchainPotArgs>().prop_map(OnrampingSource::OnchainPot),
+        vec(
+            any::<OnchainPotArgs>().prop_map(OnrampingSource::OnchainPot),
+            1..=RECURSIVE_ITEMS_PER_COLLECTION as usize,
+        ),
         bundle_taker_strategy(src),
         any::<[u8; 6]>(),
         any::<[u8; 20]>(),

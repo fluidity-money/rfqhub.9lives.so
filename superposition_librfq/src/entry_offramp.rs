@@ -73,7 +73,7 @@ fn get_acc_owner(acc: [u8; 20]) -> [u8; 20] {
 // runner can set for online testing.
 #[allow(unused)]
 unsafe fn arbos_recipient_hint(acc: [u8; 20]) -> [u8; 20] {
-    #[cfg(feature = "arbos")]
+    #[cfg(all(feature = "arbos", target_arch = "wasm32"))]
     assert_eq!(
         31337,
         bobcat_sdk::entry::chain_id(),

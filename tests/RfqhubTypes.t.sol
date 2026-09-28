@@ -8,13 +8,14 @@ import "./RfqhubTypes.sol";
 contract RfqhubTypesTest is Test {
     function test_u32TimestampsSerializeAsJsonNumbers() public pure {
         BundleTakerArgs memory taker;
-        taker.src.kind = OnrampingSourceKind.OnchainPot;
+        taker.src = new OnrampingSource[](1);
+        taker.src[0].kind = OnrampingSourceKind.OnchainPot;
         taker.expiry = 4_294_967_295;
         taker.outcome = Outcome.BitcoinPrice;
 
         assertEq(
             RfqhubTypes._bundleTakerArgs(taker),
-            "{\"src\":{\"OnchainPot\":{\"acc_addr\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"amt\":0,\"asset\":\"USDC\"}},\"expiry\":4294967295,\"ms_ts\":[0,0,0,0,0,0],\"is_up\":false,\"price_target\":0,\"outcome\":\"BitcoinPrice\"}"
+            "{\"src\":[{\"OnchainPot\":{\"acc_addr\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"amt\":0,\"asset\":\"USDC\"}}],\"expiry\":4294967295,\"ms_ts\":[0,0,0,0,0,0],\"is_up\":false,\"price_target\":0,\"outcome\":\"BitcoinPrice\"}"
         );
 
         Timestamplet memory timestamplet;
@@ -24,6 +25,30 @@ contract RfqhubTypesTest is Test {
         assertEq(
             RfqhubTypes._timestamplet(timestamplet),
             "{\"timestamplet_time\":1,\"timestamplet_outcome\":\"BitcoinPrice\",\"timestamplet_val\":0}"
+        );
+    }
+
+    function test_onrampingSourcesSerializeAsJsonArrayIncludingRecursiveSource() public pure {
+        BundleMakerArgs memory maker;
+        maker.src = new OnrampingSource[](2);
+        maker.src[0].kind = OnrampingSourceKind.OnchainPot;
+        maker.src[0].onchainPot.accAddr = address(0x0101010101010101010101010101010101010101);
+        maker.src[0].onchainPot.amt = 25;
+        maker.src[0].onchainPot.asset = Asset.WETH;
+        maker.src[1].kind = OnrampingSourceKind.AggregatedResult;
+        maker.src[1].aggregatedResult = bytes("{\"Hash\":[0,1,2]}");
+        maker.src[1].amtToTake = 10;
+
+        assertEq(
+            RfqhubTypes._bundleMakerArgs(maker),
+            string.concat(
+                "{\"src\":[{\"OnchainPot\":{\"acc_addr\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],",
+                "\"amt\":25,\"asset\":\"WETH\"}},{\"AggregatedResult\":{\"from\":{\"Hash\":[0,1,2]},",
+                "\"amt_to_take\":10}}],\"taker\":{\"args\":{\"src\":[],\"expiry\":0,",
+                "\"ms_ts\":[0,0,0,0,0,0],\"is_up\":false,\"price_target\":0,",
+                "\"outcome\":\"BitcoinPrice\"},\"sig\":[]},\"ms_ts\":[0,0,0,0,0,0],",
+                "\"acc\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}"
+            )
         );
     }
 

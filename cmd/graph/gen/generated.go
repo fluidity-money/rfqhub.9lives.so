@@ -37,7 +37,6 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Aggregate struct {
-		Cd            func(childComplexity int) int
 		ID            func(childComplexity int) int
 		TakerWon      func(childComplexity int) int
 		WinningAmount func(childComplexity int) int
@@ -66,7 +65,7 @@ type ComplexityRoot struct {
 		Conclude                                     func(childComplexity int, bundleTakerID int) int
 		ConcludedCalldata                            func(childComplexity int, bundleTakerID int, isTaker bool) int
 		CreateAccountExec                            func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
-		CreateAuctionFromOnrampedAmountServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) int
+		CreateAuctionServerSig                       func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) int
 		InspectBundleTakerID                         func(childComplexity int, bundleTakerID int) int
 		OnrampAmount                                 func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
 		SubmitBundleMakerFromOnrampedAmountServerSig func(childComplexity int, bundleTakerID int, minAmount string, maxAmount string) int
@@ -102,7 +101,7 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error)
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
-	CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error)
+	CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
 	Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
 	ConcludedCalldata(ctx context.Context, bundleTakerID int, isTaker bool) (string, error)
@@ -132,12 +131,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	_ = ec
 	switch typeName + "." + field {
 
-	case "Aggregate.cd":
-		if e.ComplexityRoot.Aggregate.Cd == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Aggregate.Cd(childComplexity), true
 	case "Aggregate.id":
 		if e.ComplexityRoot.Aggregate.ID == nil {
 			break
@@ -258,17 +251,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateAccountExec(childComplexity, args["createAccount"].(model.CreateAccount), args["permit"].(*model.Permit), args["amt"].(string), args["isDryrun"].(*bool)), true
-	case "Mutation.createAuctionFromOnrampedAmountServerSig":
-		if e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmountServerSig == nil {
+	case "Mutation.createAuctionServerSig":
+		if e.ComplexityRoot.Mutation.CreateAuctionServerSig == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_createAuctionFromOnrampedAmountServerSig_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_createAuctionServerSig_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAuctionFromOnrampedAmountServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int), args["deadline"].(int), args["minOffer"].(string)), true
+		return e.ComplexityRoot.Mutation.CreateAuctionServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int), args["deadline"].(int), args["minOffer"].(string)), true
 	case "Mutation.inspectBundleTakerId":
 		if e.ComplexityRoot.Mutation.InspectBundleTakerID == nil {
 			break
@@ -608,11 +601,6 @@ type Aggregate {
   takerWon: Boolean!,
 
   """
-  Calldata to earn the resulting amount the winner is earning.
-  """
-  cd: String!,
-
-  """
   Amount that the winner won.
   """
   winningAmount: String!
@@ -637,9 +625,10 @@ type Mutation {
   """
   Create an BundleTaker auction, and starting to receive BundleMaker combinations. Use the
   server provided signature for an account that's managed by the server instead of
-  validating a signature and an amount.
+  validating a signature and an amount. Optimistically uses the amount that's available from
+  the onramped amount, and any amount that it must needs to access to get funds.
   """
-  createAuctionFromOnrampedAmountServerSig(
+  createAuctionServerSig(
     """
     The minimum amount of the outstanding balance we can spend here.
     """
@@ -738,8 +727,6 @@ func (ec *executionContext) childFields_Aggregate(ctx context.Context, field gra
 		return ec.fieldContext_Aggregate_id(ctx, field)
 	case "takerWon":
 		return ec.fieldContext_Aggregate_takerWon(ctx, field)
-	case "cd":
-		return ec.fieldContext_Aggregate_cd(ctx, field)
 	case "winningAmount":
 		return ec.fieldContext_Aggregate_winningAmount(ctx, field)
 	}
@@ -1020,7 +1007,7 @@ func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Co
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_createAuctionFromOnrampedAmountServerSig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_createAuctionServerSig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "minAmount",
@@ -1296,29 +1283,6 @@ func (ec *executionContext) _Aggregate_takerWon(ctx context.Context, field graph
 }
 func (ec *executionContext) fieldContext_Aggregate_takerWon(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type Boolean does not have child fields"))
-}
-
-func (ec *executionContext) _Aggregate_cd(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Aggregate_cd(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.Cd, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNString2string(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Aggregate_cd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("Aggregate", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _Aggregate_winningAmount(ctx context.Context, field graphql.CollectedField, obj *model.Aggregate) (ret graphql.Marshaler) {
@@ -1639,17 +1603,17 @@ func (ec *executionContext) fieldContext_Mutation_onrampAmount(ctx context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_createAuctionFromOnrampedAmountServerSig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_createAuctionServerSig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_createAuctionFromOnrampedAmountServerSig(ctx, field)
+			return ec.fieldContext_Mutation_createAuctionServerSig(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAuctionFromOnrampedAmountServerSig(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(int), fc.Args["deadline"].(int), fc.Args["minOffer"].(string))
+			return ec.Resolvers.Mutation().CreateAuctionServerSig(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(int), fc.Args["deadline"].(int), fc.Args["minOffer"].(string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuctionCreatedResult) graphql.Marshaler {
@@ -1659,7 +1623,7 @@ func (ec *executionContext) _Mutation_createAuctionFromOnrampedAmountServerSig(c
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Mutation_createAuctionFromOnrampedAmountServerSig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_createAuctionServerSig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -1676,7 +1640,7 @@ func (ec *executionContext) fieldContext_Mutation_createAuctionFromOnrampedAmoun
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_createAuctionFromOnrampedAmountServerSig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_createAuctionServerSig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3515,11 +3479,6 @@ func (ec *executionContext) _Aggregate(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "cd":
-			out.Values[i] = ec._Aggregate_cd(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "winningAmount":
 			out.Values[i] = ec._Aggregate_winningAmount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -3724,9 +3683,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "createAuctionFromOnrampedAmountServerSig":
+		case "createAuctionServerSig":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_createAuctionFromOnrampedAmountServerSig(ctx, field)
+				return ec._Mutation_createAuctionServerSig(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

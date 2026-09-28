@@ -41,7 +41,7 @@ struct OnrampingSource {
 }
 
 struct BundleTakerArgs {
-    OnrampingSource src;
+    OnrampingSource[] src;
     uint32 expiry;
     bytes6 msTs;
     bool isUp;
@@ -55,7 +55,7 @@ struct BundleTaker {
 }
 
 struct BundleMakerArgs {
-    OnrampingSource src;
+    OnrampingSource[] src;
     BundleTaker taker;
     bytes6 msTs;
     address acc;
@@ -146,6 +146,8 @@ struct Args {
 /// recursive value type, so that member is represented as UTF-8 JSON in
 /// `aggregatedResult`. Rust `Sig = [u8; 64]` is represented as `bytes` and should be
 /// exactly 64 bytes long.
+/// Rust `Vec<OnrampingSource>` is represented as `OnrampingSource[]`; callers
+/// must allocate the arrays before assigning their elements.
 ///
 /// `toJson` produces JSON matching `serde_json::to_string` output so the CLI
 /// (`cli/src/main.rs`) can `serde_json::from_str` it back into `Args`.
@@ -312,7 +314,7 @@ library RfqhubTypes {
 
     function _bundleMakerArgs(BundleMakerArgs memory a) internal pure returns (string memory) {
         return string.concat(
-            "{\"src\":", _onrampingSource(a.src),
+            "{\"src\":", _onrampingSources(a.src),
             ",\"taker\":", _bundleTaker(a.taker),
             ",\"ms_ts\":", _u8Arr6(a.msTs),
             ",\"acc\":", _u8Arr20(a.acc), "}"
@@ -328,7 +330,7 @@ library RfqhubTypes {
 
     function _bundleTakerArgs(BundleTakerArgs memory a) internal pure returns (string memory) {
         return string.concat(
-            "{\"src\":", _onrampingSource(a.src),
+            "{\"src\":", _onrampingSources(a.src),
             ",\"expiry\":", _u2s(uint256(a.expiry)),
             ",\"ms_ts\":", _u8Arr6(a.msTs),
             ",\"is_up\":", _b2s(a.isUp),
@@ -347,6 +349,15 @@ library RfqhubTypes {
             string(s.aggregatedResult),
             ",\"amt_to_take\":", _u2s(uint256(s.amtToTake)), "}}"
         );
+    }
+
+    function _onrampingSources(OnrampingSource[] memory sources) internal pure returns (string memory) {
+        string memory r = "[";
+        for (uint256 i = 0; i < sources.length; i++) {
+            if (i > 0) r = string.concat(r, ",");
+            r = string.concat(r, _onrampingSource(sources[i]));
+        }
+        return string.concat(r, "]");
     }
 
     function _timestamplet(Timestamplet memory t) internal pure returns (string memory) {

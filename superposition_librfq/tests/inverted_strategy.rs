@@ -65,8 +65,9 @@ mod test {
                 panic!("inverted traces must convert to inline aggregate arguments");
             };
             let actual = aggregate.args.maker.args;
-            match actual.src {
-                OnrampingSource::OnchainPot(ref pot) => {
+            assert_eq!(actual.src.len(), 1);
+            match &actual.src[0] {
+                OnrampingSource::OnchainPot(pot) => {
                     assert_eq!(pot.amt, expected.maker_amt);
                     assert_eq!(pot.acc_addr, expected.maker_acc);
                     assert_eq!(pot.asset, trace.initial_taker.asset);
@@ -91,7 +92,8 @@ mod test {
                 expected.timestamplet_val
             );
 
-            converted = match actual.taker.args.src {
+            assert_eq!(actual.taker.args.src.len(), 1);
+            converted = match actual.taker.args.src.into_iter().next().unwrap() {
                 OnrampingSource::AggregatedResult(previous) => {
                     assert_eq!(previous.amt_to_take, expected.taker_amt);
                     *previous.from

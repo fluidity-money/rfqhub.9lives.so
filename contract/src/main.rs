@@ -1,6 +1,7 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![no_std]
 
+#[cfg(target_arch = "wasm32")]
 use bobcat_sdk::{bobcat_trace, entry::read_args_vec, storage::flush_guard};
 
 #[cfg(feature = "arbos")]
@@ -9,12 +10,16 @@ use bobcat_sdk::entry::chain_id;
 #[cfg(not(any(feature = "arbos", feature = "testing")))]
 use bobcat_sdk::maths::U;
 
+#[cfg(target_arch = "wasm32")]
 use borsh::de::BorshDeserialize;
 
+#[cfg(target_arch = "wasm32")]
 use superposition_librfq::{Args, Imm, entry};
 
+#[cfg(target_arch = "wasm32")]
 mod host_addrs;
 
+#[cfg(target_arch = "wasm32")]
 macro_rules! env_word {
     ($name:ident, $input:literal) => {
         #[cfg(not(any(feature = "arbos", feature = "testing")))]
@@ -22,10 +27,12 @@ macro_rules! env_word {
     };
 }
 
+#[cfg(target_arch = "wasm32")]
 env_word!(SERVER_PUBLIC_KEY, "SPN_SERVER_PUBLIC_KEY");
 
 #[unsafe(no_mangle)]
 #[bobcat_trace]
+#[cfg(target_arch = "wasm32")]
 pub unsafe extern "C" fn user_entrypoint(len: usize) -> usize {
     let args = read_args_vec(len);
     #[cfg(feature = "arbos")]

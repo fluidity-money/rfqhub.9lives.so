@@ -11,7 +11,7 @@ use bobcat_sdk::maths::U;
 pub enum Dis {
     TimestampletInconsistentOutcome,
     TimestampletInconsistentTime,
-    BadAssetNumber,
+    BadAsset,
     InconsistentSignable,
     StatementCheckFailed,
     BadSignature,

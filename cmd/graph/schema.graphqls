@@ -155,9 +155,10 @@ type Mutation {
   """
   Create an BundleTaker auction, and starting to receive BundleMaker combinations. Use the
   server provided signature for an account that's managed by the server instead of
-  validating a signature and an amount.
+  validating a signature and an amount. Optimistically uses the amount that's available from
+  the onramped amount, and any amount that it must needs to access to get funds.
   """
-  createAuctionFromOnrampedAmountServerSig(
+  createAuctionServerSig(
     """
     The minimum amount of the outstanding balance we can spend here.
     """

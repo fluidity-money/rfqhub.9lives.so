@@ -1,8 +1,10 @@
 #[cfg(all(feature = "proptest", feature = "arbitrary"))]
 mod test {
+    use std::collections::BTreeMap;
+
+    #[cfg(feature = "arbos")]
     use std::{
         any::Any,
-        collections::BTreeMap,
         panic::{AssertUnwindSafe, catch_unwind},
     };
 
@@ -12,8 +14,11 @@ mod test {
         entry::contract_address,
         host::{set_contract_address, set_msg_sender},
         maths::U,
-        storage::{const_keccak256, flush_guard_fresh, slot_map, storage_store},
+        storage::flush_guard_fresh,
     };
+
+    #[cfg(feature = "arbos")]
+    use bobcat_sdk::storage::{const_keccak256, slot_map, storage_store};
 
     use superposition_librfq::{
         entry_aggregate_to_offramp::recurse_aggregate_args, signable::SignableAggregateArgs,
@@ -33,6 +38,7 @@ mod test {
         })
     }
 
+    #[cfg(feature = "arbos")]
     fn panic_message(payload: Box<dyn Any + Send>) -> String {
         match payload.downcast::<String>() {
             Ok(message) => *message,
@@ -52,14 +58,14 @@ mod test {
             args: AggregateArgs {
                 maker: BundleMaker {
                     args: BundleMakerArgs {
-                        src: OnrampingSource::OnchainPot(OnchainPotArgs {
+                        src: vec![OnrampingSource::OnchainPot(OnchainPotArgs {
                             acc_addr: submission.maker_acc,
                             amt: submission.maker_amt,
                             asset,
-                        }),
+                        })],
                         taker: BundleTaker {
                             args: BundleTakerArgs {
-                                src: source,
+                                src: vec![source],
                                 expiry: submission.expiry,
                                 ms_ts: submission.taker_ms_ts,
                                 is_up: submission.price_move.direction.is_up(),
@@ -92,6 +98,10 @@ mod test {
     }
 
     proptest! {
+        // This fixture writes the ArbOS recipient-hint slot directly. The non-ArbOS
+        // backend resolves owners by calling the account contract, which Bobcat's
+        // std host does not emulate.
+        #[cfg(feature = "arbos")]
         #[test]
         fn offramp_blob_requires_the_embedded_accounts_owner(
             asset in any::<Asset>(),

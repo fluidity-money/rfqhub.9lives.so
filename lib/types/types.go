@@ -112,7 +112,7 @@ type OnrampingSource struct {
 }
 
 type BundleTakerArgs struct {
-	Src         OnrampingSource `json:"src"`
+	Src         []OnrampingSource `json:"src"`
 	Expiry      uint32          `json:"expiry"`
 	MsTs        [6]byte         `json:"ms_ts"`
 	IsUp        bool            `json:"is_up"`
@@ -126,7 +126,7 @@ type BundleTaker struct {
 }
 
 type BundleMakerArgs struct {
-	Src   OnrampingSource `json:"src"`
+	Src   []OnrampingSource `json:"src"`
 	Taker BundleTaker     `json:"taker"`
 	MsTs  [6]byte         `json:"ms_ts"`
 	Acc   [20]byte        `json:"acc"`

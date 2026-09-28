@@ -21,9 +21,9 @@ import (
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	superposition_assets "github.com/fluidity-money/superposition-assets"
@@ -208,8 +208,8 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 	return h.Hex(), nil
 }
 
-// CreateAuctionFromOnrampedAmountServerSig is the resolver for the createAuctionFromOnrampedAmountServerSig field.
-func (r *mutationResolver) CreateAuctionFromOnrampedAmountServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error) {
+// CreateAuctionServerSig is the resolver for the createAuctionFromOnrampedAmountServerSig field.
+func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	// Create an auction from a BundleTaker by taking what we can
 	// from the database, then constructing the blob signature
@@ -314,12 +314,12 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		return nil, fmt.Errorf("error creating BundleTaker")
 	}
 	bundleTakerArgs := types.BundleTakerArgs{
-		Src: types.OnrampingSource{
+		Src: []types.OnrampingSource{{
 			OnchainPot: &types.OnchainPotArgs{
 				AccAddr: accAddr,
 				Amt:     amt,
 			},
-		},
+		}},
 		MsTs:        msTs,
 		Expiry:      uint32(expiry),
 		IsUp:        isUp,
@@ -328,7 +328,7 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 	}
 	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
 		AccAddr: accAddr,
-		Bundle: types.ClientSigningBundle {
+		Bundle: types.ClientSigningBundle{
 			BundleTaker: &bundleTakerArgs,
 		},
 	})
@@ -658,12 +658,12 @@ FROM
 		return nil, fmt.Errorf("error scanning BundleMakerSig")
 	}
 	bundleMakerArgs := types.BundleMakerArgs{
-		Src: types.OnrampingSource{
+		Src: []types.OnrampingSource{{
 			OnchainPot: &types.OnchainPotArgs{
 				AccAddr: accAddr,
 				Amt:     makerAmt,
 			},
-		},
+		}},
 		Taker: bundleTaker,
 		MsTs:  msTs,
 		Acc:   accAddr,
@@ -675,7 +675,7 @@ FROM
 	)
 	signingArgs := types.ClientSigningArgs{
 		AccAddr: accAddr,
-		Bundle: types.ClientSigningBundle {
+		Bundle: types.ClientSigningBundle{
 			BundleMaker: &bundleMakerArgs,
 		},
 	}

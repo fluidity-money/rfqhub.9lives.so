@@ -12,8 +12,6 @@ import (
 type Aggregate struct {
 	ID       string `json:"id"`
 	TakerWon bool   `json:"takerWon"`
-	// Calldata to earn the resulting amount the winner is earning.
-	Cd string `json:"cd"`
 	// Amount that the winner won.
 	WinningAmount string `json:"winningAmount"`
 }

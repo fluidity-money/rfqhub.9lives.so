@@ -1165,9 +1165,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "superposition-assets"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a3bd2c8ebf69a1adcf0762b43c597a51f16aa0e994ac235339cebb27b518513"
+checksum = "45f510de8dd32c774e687432795f7948782cd43e6d314a1239eb196341e1ef8c"
 dependencies = [
  "arbitrary",
  "bobcat-cd",
