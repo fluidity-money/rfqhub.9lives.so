@@ -123,7 +123,7 @@ fn taker {
 	}
 
 	jq -cn \
-		--arg query 'mutation CreateTaker($minAmount: String!, $maxAmount: String!, $isUp: Boolean!, $priceTarget: String!, $outcome: Outcome!, $expiry: Int!, $minOffer: String!, $deadline: Int!) { createAuctionFromOnrampedAmountServerSig(minAmount: $minAmount, maxAmount: $maxAmount, isUp: $isUp, priceTarget: $priceTarget, outcome: $outcome, expiry: $expiry, minOffer: $minOffer, deadline: $deadline) { leftoverBal amountSpent bundleId } }' \
+		--arg query 'mutation CreateTaker($minAmount: String!, $maxAmount: String!, $isUp: Boolean!, $priceTarget: String!, $outcome: Outcome!, $expiry: Int!, $minOffer: String!, $deadline: Int!) { createAuctionServerSig(minAmount: $minAmount, maxAmount: $maxAmount, isUp: $isUp, priceTarget: $priceTarget, outcome: $outcome, expiry: $expiry, minOffer: $minOffer, deadline: $deadline) { leftoverBal amountSpent bundleId } }' \
 		--arg minamount $minamount \
 		--arg maxamount $maxamount \
 		--argjson isup $isup \

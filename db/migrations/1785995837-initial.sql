@@ -41,9 +41,10 @@ CREATE TRIGGER rfqhub_timestamplet_no_delete_1
 	BEFORE DELETE ON rfqhub_timestamplets_1
 	FOR EACH ROW EXECUTE FUNCTION rfqhub_protect_immutable_timestamplet_1();
 
--- A BundleTaker can take its liquidity directly from the account's onchain pot
--- (source is NULL), or from the taker result of an earlier aggregate (source is
--- the earlier taker row).
+-- source is retained for the legacy single-aggregate constructor. New bundles
+-- use rfqhub_bundles_taker_sources_1 for any number of previous taker winnings.
+-- pot_funded_amt alone reserves onchain funds; aggregate remainders are never
+-- credited locally (only a later BalanceChanged event can credit the pot).
 CREATE TABLE rfqhub_bundles_taker_1 (
 	id SERIAL PRIMARY KEY,
 	created_by TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -53,6 +54,9 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	source INTEGER REFERENCES rfqhub_bundles_taker_1 (id),
 	asset ADDRESS NOT NULL,
 	amt BIGINT NOT NULL CHECK (amt >= 0),
+	pot_funded_amt BIGINT NOT NULL DEFAULT 0
+		CHECK (pot_funded_amt >= 0 AND pot_funded_amt <= amt),
+	CHECK (source IS NULL OR pot_funded_amt = 0),
 	min_offer BIGINT NOT NULL CHECK (min_offer >= 0),
 	is_up BOOLEAN NOT NULL,
 	price_target BIGINT NOT NULL CHECK (price_target >= 0),
@@ -74,10 +78,23 @@ CREATE UNIQUE INDEX rfqhub_bundles_taker_source_uq
 	ON rfqhub_bundles_taker_1 (source)
 	WHERE source IS NOT NULL;
 
+-- Each prior result is consumed in full exactly once, even when only source_amt
+-- is reinvested. Both constructors write this ledger; source remains populated
+-- only by the legacy constructor and is not an additional balance reservation.
+CREATE TABLE rfqhub_bundles_taker_sources_1 (
+	bundle_taker_id INTEGER NOT NULL REFERENCES rfqhub_bundles_taker_1 (id),
+	source_taker_id INTEGER PRIMARY KEY REFERENCES rfqhub_bundles_taker_1 (id),
+	source_amt BIGINT NOT NULL CHECK (source_amt > 0),
+	amt_to_onramp_amt BIGINT NOT NULL CHECK (amt_to_onramp_amt >= 0),
+	CHECK (bundle_taker_id <> source_taker_id)
+);
+CREATE INDEX rfqhub_bundles_taker_sources_bundle_idx
+	ON rfqhub_bundles_taker_sources_1 (bundle_taker_id);
+
 CREATE INDEX rfqhub_bundles_taker_open_balance_idx
 	ON rfqhub_bundles_taker_1 (acc_addr, asset)
-	INCLUDE (id, amt, deadline)
-	WHERE source IS NULL
+	INCLUDE (id, pot_funded_amt, deadline)
+	WHERE pot_funded_amt > 0
 		AND end_source_amt IS NULL
 		AND was_offramped = FALSE;
 
@@ -201,12 +218,12 @@ BEGIN
 	), 0)
 	INTO v_balance;
 
-	SELECT COALESCE(SUM(t.amt), 0)
+	SELECT COALESCE(SUM(t.pot_funded_amt), 0)
 	INTO v_taker_reserved
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.acc_addr = p_acc_addr
 		AND t.asset = p_asset
-		AND t.source IS NULL
+		AND t.pot_funded_amt > 0
 		AND t.end_source_amt IS NULL
 		AND t.was_offramped = FALSE
 		-- An unmatched taker only reserves its pot balance while its auction is
@@ -288,7 +305,9 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
+-- One row per funding source, ordered by prior result size/id, pot last.
+-- amt is the total bundle funding, repeated on every output row.
+CREATE FUNCTION rfqhub_create_bundle_taker_1 (
 	p_acc_addr ADDRESS,
 	p_asset ADDRESS,
 	p_min_amt BIGINT,
@@ -304,19 +323,34 @@ CREATE FUNCTION rfqhub_create_bundle_taker_onramping_1 (
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
 	amt BIGINT,
-	leftover_bal BIGINT
+	source_taker_id INTEGER,
+	source_amt BIGINT,
+	source_maker_id INTEGER,
+	bundle_maker_structure JSON,
+	timestamplet_id INTEGER,
+	timestamplet_end_value BIGINT,
+	timestamplet_time TIMESTAMP,
+	timestamplet_outcome RFQHUB_OUTCOME
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_available BIGINT;
-	v_amt BIGINT;
+	v_amt BIGINT := 0;
+	v_pot_amt BIGINT;
+	v_take BIGINT;
 	v_user_id INTEGER;
 	v_bundle_taker_id INTEGER;
 	v_expiry TIMESTAMP;
 	v_deadline TIMESTAMP;
+	v_candidate RECORD;
+	v_source rfqhub_bundles_taker_1%ROWTYPE;
+	v_maker rfqhub_bundles_maker_1%ROWTYPE;
+	v_source_ids INTEGER[] := ARRAY[]::INTEGER[];
+	v_source_amts BIGINT[] := ARRAY[]::BIGINT[];
+	v_remainders BIGINT[] := ARRAY[]::BIGINT[];
 BEGIN
-	IF p_min_amt <= 0 OR p_max_amt < p_min_amt THEN
+	IF p_min_amt IS NULL OR p_max_amt IS NULL OR p_min_amt <= 0 OR p_max_amt < p_min_amt THEN
 		RAISE EXCEPTION 'invalid taker amount range: minimum %, maximum %', p_min_amt, p_max_amt;
 	END IF;
 	IF p_min_offer < 0 THEN
@@ -331,10 +365,71 @@ BEGIN
 		RAISE EXCEPTION 'taker deadline % cannot be after expiry %', v_deadline, v_expiry;
 	END IF;
 
+	-- All pot constructors use the same account-scoped transaction lock, BEFORE
+	-- any row locks or balance reads. Hash collisions only serialize accounts.
+	PERFORM pg_advisory_xact_lock(hashtextextended(p_acc_addr::TEXT, 1785995837));
+
+	FOR v_candidate IN
+		SELECT t.id
+		FROM rfqhub_bundles_taker_1 AS t
+		JOIN rfqhub_bundles_maker_1 AS m
+			ON m.id = t.maker_id AND m.bundle_taker_id = t.id
+		JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
+		WHERE t.acc_addr = p_acc_addr AND t.asset = p_asset
+			AND t.end_source_amt > 0 AND NOT t.was_offramped
+			AND t.structure IS NOT NULL AND m.structure IS NOT NULL
+			AND m.was_chosen = TRUE AND m.was_correct = FALSE
+			AND NOT EXISTS (
+				SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
+				WHERE s.source_taker_id = t.id
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM rfqhub_bundles_taker_1 AS child WHERE child.source = t.id
+			)
+		ORDER BY t.end_source_amt ASC, t.id ASC
+	LOOP
+		EXIT WHEN v_amt = p_max_amt;
+		-- Never lock a joined maker before its parent. Offramp and both taker
+		-- reinvestment paths serialize on this parent row. Refresh all eligibility
+		-- after waiting, including consumption inserts made by a competing call.
+		SELECT t.* INTO v_source FROM rfqhub_bundles_taker_1 AS t
+		WHERE t.id = v_candidate.id FOR UPDATE;
+		IF NOT FOUND THEN
+			CONTINUE;
+		END IF;
+		SELECT m.* INTO v_maker FROM rfqhub_bundles_maker_1 AS m
+		WHERE m.id = v_source.maker_id FOR UPDATE;
+		IF NOT FOUND THEN
+			CONTINUE;
+		END IF;
+		IF v_source.acc_addr IS DISTINCT FROM p_acc_addr
+			OR v_source.asset IS DISTINCT FROM p_asset
+			OR v_source.end_source_amt IS NULL OR v_source.end_source_amt <= 0
+			OR v_source.was_offramped OR v_source.structure IS NULL
+			OR v_maker.bundle_taker_id IS DISTINCT FROM v_source.id
+			OR v_maker.was_chosen IS DISTINCT FROM TRUE
+			OR v_maker.was_correct IS DISTINCT FROM FALSE
+			OR v_maker.structure IS NULL
+			OR NOT EXISTS (SELECT 1 FROM rfqhub_timestamplets_1 AS ts
+				WHERE ts.id = v_maker.timestamplet_id)
+			OR EXISTS (SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
+				WHERE s.source_taker_id = v_source.id)
+			OR EXISTS (SELECT 1 FROM rfqhub_bundles_taker_1 AS child
+				WHERE child.source = v_source.id) THEN
+			CONTINUE;
+		END IF;
+		v_take := LEAST(v_source.end_source_amt, p_max_amt - v_amt);
+		v_source_ids := array_append(v_source_ids, v_source.id);
+		v_source_amts := array_append(v_source_amts, v_take);
+		v_remainders := array_append(v_remainders, v_source.end_source_amt - v_take);
+		v_amt := v_amt + v_take;
+	END LOOP;
+
 	v_available := rfqhub_get_spendable_1(p_acc_addr, p_asset);
-	v_amt := LEAST(p_max_amt, v_available);
+	v_pot_amt := LEAST(p_max_amt - v_amt, v_available);
+	v_amt := v_amt + v_pot_amt;
 	IF v_amt < p_min_amt THEN
-		RAISE EXCEPTION 'insufficient spendable balance: available %, minimum %', v_available, p_min_amt;
+		RAISE EXCEPTION 'insufficient taker funding: available %, minimum %', v_amt, p_min_amt;
 	END IF;
 
 	INSERT INTO rfqhub_bundles_taker_user_count_1 AS c (addr, count)
@@ -343,16 +438,37 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_taker_1 (
-		acc_addr, user_id, source, asset, amt, min_offer, is_up, price_target,
-		outcome, ms_ts, deadline, expiry
+		acc_addr, user_id, source, asset, amt, pot_funded_amt, min_offer, is_up,
+		price_target, outcome, ms_ts, deadline, expiry
 	)
 	VALUES (
-		p_acc_addr, v_user_id, NULL, p_asset, v_amt, p_min_offer, p_is_up,
-		p_price_target, p_outcome, p_ms_ts, v_deadline, v_expiry
+		p_acc_addr, v_user_id, NULL, p_asset, v_amt, v_pot_amt, p_min_offer,
+		p_is_up, p_price_target, p_outcome, p_ms_ts, v_deadline, v_expiry
 	)
 	RETURNING id INTO v_bundle_taker_id;
 
-	RETURN QUERY SELECT v_bundle_taker_id, v_amt, v_available - v_amt;
+	INSERT INTO rfqhub_bundles_taker_sources_1 (
+		bundle_taker_id, source_taker_id, source_amt, amt_to_onramp_amt
+	)
+	SELECT v_bundle_taker_id, u.source_id, u.taken, u.remainder
+	FROM unnest(v_source_ids, v_source_amts, v_remainders) AS u(source_id, taken, remainder);
+
+	RETURN QUERY
+	SELECT v_bundle_taker_id, v_amt,
+		t.id, u.taken, m.id, m.structure,
+		ts.id, ts.timestamplet_val, ts.timestamplet_time, ts.timestamplet_outcome
+	FROM unnest(v_source_ids, v_source_amts, v_remainders)
+		WITH ORDINALITY AS u(source_id, taken, remainder, ord)
+	JOIN rfqhub_bundles_taker_1 AS t ON t.id = u.source_id
+	JOIN rfqhub_bundles_maker_1 AS m ON m.id = t.maker_id
+	JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
+	ORDER BY u.ord;
+
+	IF v_pot_amt > 0 THEN
+		RETURN QUERY SELECT v_bundle_taker_id, v_amt,
+			NULL::INTEGER, v_pot_amt, NULL::INTEGER, NULL::JSON,
+			NULL::INTEGER, NULL::BIGINT, NULL::TIMESTAMP, NULL::RFQHUB_OUTCOME;
+	END IF;
 END;
 $$;
 
@@ -403,6 +519,8 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_source rfqhub_bundles_taker_1%ROWTYPE;
+	v_source_acc ADDRESS;
+	v_maker rfqhub_bundles_maker_1%ROWTYPE;
 	v_user_id INTEGER;
 	v_bundle_taker_id INTEGER;
 	v_remainder BIGINT;
@@ -421,10 +539,32 @@ BEGIN
 		RAISE EXCEPTION 'taker deadline % cannot be after expiry %', v_deadline, v_expiry;
 	END IF;
 
+	-- Match the mixed constructor's account -> parent -> maker lock order.
+	SELECT t.acc_addr INTO STRICT v_source_acc
+	FROM rfqhub_bundles_taker_1 AS t WHERE t.id = p_source_taker_id;
+	PERFORM pg_advisory_xact_lock(hashtextextended(v_source_acc::TEXT, 1785995837));
 	SELECT t.* INTO STRICT v_source
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.id = p_source_taker_id
 	FOR UPDATE;
+	IF v_source.acc_addr IS DISTINCT FROM v_source_acc THEN
+		RAISE EXCEPTION 'source taker % changed account', p_source_taker_id;
+	END IF;
+	SELECT m.* INTO v_maker
+	FROM rfqhub_bundles_maker_1 AS m
+	WHERE m.id = v_source.maker_id
+	FOR UPDATE;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'source taker % has no selected maker', p_source_taker_id;
+	END IF;
+	IF v_maker.bundle_taker_id IS DISTINCT FROM v_source.id
+		OR v_maker.was_chosen IS DISTINCT FROM TRUE
+		OR v_maker.was_correct IS DISTINCT FROM FALSE
+		OR v_source.structure IS NULL OR v_maker.structure IS NULL
+		OR NOT EXISTS (SELECT 1 FROM rfqhub_timestamplets_1 AS ts
+			WHERE ts.id = v_maker.timestamplet_id) THEN
+		RAISE EXCEPTION 'source taker % is not a signed concluded winning aggregate', p_source_taker_id;
+	END IF;
 
 	IF v_source.end_source_amt IS NULL THEN
 		RAISE EXCEPTION 'source taker % has not been resolved', p_source_taker_id;
@@ -441,6 +581,9 @@ BEGIN
 	IF EXISTS (
 		SELECT 1 FROM rfqhub_bundles_taker_1 AS t
 		WHERE t.source = p_source_taker_id
+	) OR EXISTS (
+		SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
+		WHERE s.source_taker_id = p_source_taker_id
 	) THEN
 		RAISE EXCEPTION 'source taker % was already consumed', p_source_taker_id;
 	END IF;
@@ -466,6 +609,11 @@ BEGIN
 		v_deadline, v_expiry
 	)
 	RETURNING id INTO v_bundle_taker_id;
+
+	INSERT INTO rfqhub_bundles_taker_sources_1 (
+		bundle_taker_id, source_taker_id, source_amt, amt_to_onramp_amt
+	)
+	VALUES (v_bundle_taker_id, p_source_taker_id, p_amt_to_take, v_remainder);
 
 	RETURN QUERY SELECT v_bundle_taker_id, p_amt_to_take, v_remainder;
 END;
@@ -497,6 +645,8 @@ BEGIN
 		RAISE EXCEPTION 'invalid maker amount range: minimum %, maximum %', p_min_amt, p_max_amt;
 	END IF;
 
+	-- Acquire the same lock as taker creation before taking any parent row lock.
+	PERFORM pg_advisory_xact_lock(hashtextextended(p_acc_addr::TEXT, 1785995837));
 	SELECT t.* INTO STRICT v_taker
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.id = p_bundle_taker_id
@@ -1008,6 +1158,9 @@ BEGIN
 		IF EXISTS (
 			SELECT 1 FROM rfqhub_bundles_taker_1 AS t
 			WHERE t.source = v_taker.id
+		) OR EXISTS (
+			SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
+			WHERE s.source_taker_id = v_taker.id
 		) THEN
 			RAISE EXCEPTION 'taker result % was already consumed as a source', v_taker.id;
 		END IF;
@@ -1056,7 +1209,7 @@ DROP FUNCTION IF EXISTS rfqhub_set_bundle_maker_structure_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_onramping_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_from_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_structure_1;
-DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_onramping_1;
+DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_1;
 DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1;
 DROP FUNCTION IF EXISTS rfqhub_get_spendable_1;
 DROP FUNCTION IF EXISTS rfqhub_inspect_bundle_taker_1;
@@ -1068,6 +1221,7 @@ ALTER TABLE IF EXISTS rfqhub_bundles_taker_1
 
 DROP TABLE IF EXISTS rfqhub_bundles_maker_1;
 DROP TABLE IF EXISTS rfqhub_bundles_maker_user_count_1;
+DROP TABLE IF EXISTS rfqhub_bundles_taker_sources_1;
 DROP TABLE IF EXISTS rfqhub_bundles_taker_1;
 DROP TABLE IF EXISTS rfqhub_timestamplets_1;
 DROP TABLE IF EXISTS rfqhub_bundles_taker_user_count_1;

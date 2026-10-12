@@ -20,7 +20,7 @@ use ed25519_dalek::SigningKey;
 #[derive(Debug, Clone, SerdeDeserialize, SerdeSerialize)]
 pub enum ServerSigningArgs {
     Offramp(OfframpArgs),
-    AggregateToOfframp(AggregateArgs),
+    Aggregate(AggregateArgs),
 }
 
 fn main() {
@@ -43,7 +43,7 @@ fn main() {
         const_hex::encode(match args {
             ServerSigningArgs::Offramp(args) =>
                 ed25519_sign_post(key, SignableOfframpArgs::from(&args).hash),
-            ServerSigningArgs::AggregateToOfframp(args) => {
+            ServerSigningArgs::Aggregate(args) => {
                 let Hash::JustInTime(hash) = SignableAggregateArgs::from(&args).hash else {
                     unreachable!()
                 };

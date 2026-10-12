@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 

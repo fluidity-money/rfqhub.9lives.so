@@ -7,6 +7,7 @@ package gen
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -26,7 +27,6 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
-	superposition_assets "github.com/fluidity-money/superposition-assets"
 )
 
 // CreateAccountExec is the resolver for the createAccountExec field.
@@ -264,9 +264,14 @@ func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount
 	msTs := pickMsTs()
 	msTsI := msTsBytesToInt(msTs)
 	outcome_ := modelOutcomeToOutcome(outcome)
-	row := r.Db.QueryRow(`
+	// This query gets the bundles that were aggregated to create this
+	// position from the database. It returns the bundle, and the amount, and
+	// if the bundle is NULL we assume it came from the pot. It returns
+	// the timestamplet that we can use for the construction so we can make
+	// the aggregate for the item there.
+	rows, err := r.Db.Query(`
 SELECT bundle_taker_id, amt, leftover_bal
-FROM rfqhub_create_bundle_taker_onramping_1(
+FROM rfqhub_create_bundle_taker_1(
 	$1,
 	$2,
 	$3,
@@ -285,73 +290,143 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		maxAmount_,
 		isUp,
 		priceTarget_,
-		outcome,
+		outcome_,
 		msTsI,
 		expiry,
 		minOffer_,
 		deadline,
 	)
+	if err != nil {
+		slog.Error("Error scanning taker bundle rows from the function",
+			"err", err,
+		)
+		return nil, fmt.Errorf("creating bundle taker")
+	}
+	defer rows.Close()
 	var (
 		bundleTakerId int
-		// Both of these are int64 in the database, but we're
-		// going to make it uint64 here since if we can't cast,
-		// we need to break anyway:
-		amt, leftover uint64
+		// The amount that we took to create this:
+		bundleTakerAmt uint64
+		sources        []types.OnrampingSource
 	)
-	if err := row.Scan(&bundleTakerId, &amt, &leftover); err != nil {
-		slog.Error("Error creating a BundleTaker in the database",
-			"err", err,
-			"acc addr", accAddrStr,
-			"min amount", minAmount_,
-			"max amount", maxAmount_,
-			"price target", priceTarget_,
-			"expiry", expiry,
-			"msTs", msTsI,
-			"snowflake", snowflake,
-			"asset addr", usdcAddr(),
-			"asset id", superposition_assets.AssetUsdc,
+	for rows.Next() {
+		var (
+			// inputAmt is the amount that was either taken from the bundle maker, or
+			// the onramping pot, depending on what was used in this case:
+			inputAmt             uint64
+			makerId              *uint64
+			makerStruct          *types.BundleMaker
+			timestampletId       *int
+			timestampletEndValue *uint64
+			timestampletTime     sql.NullTime
+			timestampletOutcome  *types.Outcome
 		)
-		return nil, fmt.Errorf("error creating BundleTaker")
+		err = rows.Scan(
+			&bundleTakerId,
+			&bundleTakerAmt,
+			&inputAmt,
+			&makerId,
+			&makerStruct,
+			&timestampletId,
+			&timestampletEndValue,
+			&timestampletTime,
+			&timestampletOutcome,
+		)
+		if err != nil {
+			slog.Error("Error scanning the result from rfqhub_create_bundle_taker_1",
+				"err", err,
+				"acc addr", accAddrStr,
+				"usdc addr", usdcAddr(),
+				"min amount", minAmount_,
+				"max amount", maxAmount_,
+				"is up", isUp,
+				"price target", priceTarget_,
+				"outcome", outcome,
+				"ms ts i", msTsI,
+				"expiry", expiry,
+				"min offer", minOffer_,
+				"deadline", deadline,
+			)
+			return nil, fmt.Errorf("creating bundle scan")
+		}
+		// If the maker id is null, then we assume that the source came from a
+		// pot:
+		if makerId == nil {
+			sources = append(sources, types.OnrampingSource{
+				OnchainPot: &types.OnchainPotArgs{
+					AccAddr: accAddr,
+					Amt:     inputAmt,
+					Asset:   types.AssetUsdc,
+				},
+			})
+		} else {
+			// If this is not null, then the case is that
+			// this is a bundle. We assume everything here
+			// isn't null:
+			aggregateArgs := types.AggregateArgs{
+				Maker: *makerStruct,
+				Timestamplet: types.Timestamplet{
+					TimestampletTime:    uint32(timestampletTime.Time.Unix()),
+					TimestampletOutcome: *timestampletOutcome,
+					TimestampletVal:     *timestampletEndValue,
+				},
+			}
+			aggregateServerSig, err := signer.ServerSignAggregate(types.ServerSigningArgs{
+				Aggregate: &aggregateArgs,
+			})
+			if err != nil {
+				slog.Error("Error signing aggregate args",
+					"err", err,
+					"args", aggregateArgs,
+				)
+				return nil, fmt.Errorf("signing aggregate args")
+			}
+			aggregateEnum := types.AggregateEnum{
+				Args: &types.Aggregate{
+					Args:      aggregateArgs,
+					ServerSig: aggregateServerSig,
+				},
+			}
+			// We always append the argument type of the onramping source variant,
+			// since when the contract reverts for seeing a duplicated hash, it will
+			// revert in a way that the client should know to modify its calldata to
+			// use the hash form.
+			sources = append(sources, types.OnrampingSource{
+				AggregatedResult: &types.AggregatedResultArgs{
+					From:      aggregateEnum,
+					AmtToTake: inputAmt,
+				},
+			})
+		}
 	}
 	bundleTakerArgs := types.BundleTakerArgs{
-		Src: []types.OnrampingSource{{
-			OnchainPot: &types.OnchainPotArgs{
-				AccAddr: accAddr,
-				Amt:     amt,
-			},
-		}},
-		MsTs:        msTs,
-		Expiry:      uint32(expiry),
-		IsUp:        isUp,
+		Src: sources,
+		Expiry: uint32(expiry),
+		MsTs: msTs,
+		IsUp: isUp,
 		PriceTarget: priceTarget_,
-		Outcome:     outcome_,
+		Outcome: outcome_,
 	}
-	userSig, err := signer.ClientSignClientArgs(types.ClientSigningArgs{
+	bundleTakerSigningArgs := types.ClientSigningArgs{
 		AccAddr: accAddr,
 		Bundle: types.ClientSigningBundle{
 			BundleTaker: &bundleTakerArgs,
 		},
-	})
+	}
+	bundleTakerClientSig, err := signer.ClientSignClientArgs(bundleTakerSigningArgs)
 	if err != nil {
-		slog.Error("Error signing a BundleTaker",
+		slog.Error("Failed to sign the client arguments for a BundleTaker built recursively",
 			"err", err,
-			"acc addr", accAddrStr,
-			"min amount", minAmount_,
-			"max amount", maxAmount_,
-			"price target", priceTarget_,
-			"expiry", expiry,
-			"msTs", msTsI,
-			"snowflake", snowflake,
-			"bundle taker args", bundleTakerArgs,
+			"args", bundleTakerSigningArgs,
 		)
-		return nil, fmt.Errorf("failed to sign bundle")
+		return nil, fmt.Errorf("signing bundleTaker args")
 	}
 	_, err = r.Db.Exec(
 		"SELECT rfqhub_set_bundle_taker_structure_1($1, $2)",
 		bundleTakerId,
 		types.BundleTaker{
 			Args: bundleTakerArgs,
-			Sig:  userSig,
+			Sig:  bundleTakerClientSig,
 		},
 	)
 	if err != nil {
@@ -368,8 +443,8 @@ FROM rfqhub_create_bundle_taker_onramping_1(
 		return nil, fmt.Errorf("failed to tag the bundle with the signature")
 	}
 	return &model.AuctionCreatedResult{
-		LeftoverBal: strconv.FormatUint(leftover, 10),
-		AmountSpent: strconv.FormatUint(amt, 10),
+		//LeftoverBal: strconv.FormatUint(leftover, 10),
+		AmountSpent: strconv.FormatUint(bundleTakerAmt, 10),
 		BundleID:    bundleTakerId,
 	}, nil
 }
@@ -394,7 +469,7 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 	panic("todo")
 }
 
-// ConcludeAndAggregate is the resolver for the concludeAndAggregate field.
+// Conclude is the resolver for the conclude field.
 func (r *mutationResolver) Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	var expiry time.Time
@@ -549,9 +624,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		},
 	}
 	// It's safe for us to just redo this ourselves, since things won't change:
-	serverArgs := types.ServerSigningArgs{
-		AggregateToOfframp: &aggArgs,
-	}
+	serverArgs := types.ServerSigningArgs{ Aggregate: &aggArgs }
 	serverSig, err := signer.ServerSignAggregate(serverArgs)
 	if err != nil {
 		slog.Error("Error signing aggregate args",

@@ -113,11 +113,11 @@ type OnrampingSource struct {
 
 type BundleTakerArgs struct {
 	Src         []OnrampingSource `json:"src"`
-	Expiry      uint32          `json:"expiry"`
-	MsTs        [6]byte         `json:"ms_ts"`
-	IsUp        bool            `json:"is_up"`
-	PriceTarget uint64          `json:"price_target"`
-	Outcome     Outcome         `json:"outcome"`
+	Expiry      uint32            `json:"expiry"`
+	MsTs        [6]byte           `json:"ms_ts"`
+	IsUp        bool              `json:"is_up"`
+	PriceTarget uint64            `json:"price_target"`
+	Outcome     Outcome           `json:"outcome"`
 }
 
 type BundleTaker struct {
@@ -127,9 +127,9 @@ type BundleTaker struct {
 
 type BundleMakerArgs struct {
 	Src   []OnrampingSource `json:"src"`
-	Taker BundleTaker     `json:"taker"`
-	MsTs  [6]byte         `json:"ms_ts"`
-	Acc   [20]byte        `json:"acc"`
+	Taker BundleTaker       `json:"taker"`
+	MsTs  [6]byte           `json:"ms_ts"`
+	Acc   [20]byte          `json:"acc"`
 }
 
 type BundleMaker struct {
@@ -200,13 +200,13 @@ type ClientSigningBundle struct {
 }
 
 type ClientSigningArgs struct {
-	AccAddr [20]byte `json:"acc_addr"`
-	Bundle ClientSigningBundle `json:"bundle"`
+	AccAddr [20]byte            `json:"acc_addr"`
+	Bundle  ClientSigningBundle `json:"bundle"`
 }
 
 type ServerSigningArgs struct {
-	Offramp            *OfframpArgs   `json:"Offramp,omitempty"`
-	AggregateToOfframp *AggregateArgs `json:"AggregateToOfframp,omitempty"`
+	Offramp   *OfframpArgs   `json:"Offramp,omitempty"`
+	Aggregate *AggregateArgs `json:"Aggregate,omitempty"`
 }
 
 func (b BundleTaker) Value() (driver.Value, error) {
