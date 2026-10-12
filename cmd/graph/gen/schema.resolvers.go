@@ -328,7 +328,7 @@ FROM rfqhub_create_bundle_taker_1(
 			timestampletId       *int
 			timestampletEndValue *uint64
 			timestampletTime     sql.NullTime
-			timestampletOutcome  *types.Outcome
+			timestampletOutcome  *model.Outcome
 		)
 		err = rows.Scan(
 			&bundleTakerId,
@@ -372,11 +372,12 @@ FROM rfqhub_create_bundle_taker_1(
 			// If this is not null, then the case is that
 			// this is a bundle. We assume everything here
 			// isn't null:
+			timestampletOutcome_ := modelOutcomeToOutcome(*timestampletOutcome)
 			aggregateArgs := types.AggregateArgs{
 				Maker: *makerStruct,
 				Timestamplet: types.Timestamplet{
 					TimestampletTime:    uint32(timestampletTime.Time.Unix()),
-					TimestampletOutcome: *timestampletOutcome,
+					TimestampletOutcome: timestampletOutcome_,
 					TimestampletVal:     *timestampletEndValue,
 				},
 			}
@@ -430,6 +431,9 @@ FROM rfqhub_create_bundle_taker_1(
 		)
 		return nil, fmt.Errorf("signing bundleTaker args")
 	}
+	slog.Debug("Setting a taker structure",
+		"taker structure", bundleTakerArgs,
+	)
 	_, err = r.Db.Exec(
 		"SELECT rfqhub_set_bundle_taker_structure_1($1, $2)",
 		bundleTakerId,

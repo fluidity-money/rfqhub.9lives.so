@@ -94,9 +94,7 @@ CREATE INDEX rfqhub_bundles_taker_sources_bundle_idx
 CREATE INDEX rfqhub_bundles_taker_open_balance_idx
 	ON rfqhub_bundles_taker_1 (acc_addr, asset)
 	INCLUDE (id, pot_funded_amt, deadline)
-	WHERE pot_funded_amt > 0
-		AND end_source_amt IS NULL
-		AND was_offramped = FALSE;
+	WHERE pot_funded_amt > 0;
 
 CREATE TABLE rfqhub_bundles_maker_user_count_1 (
 	id SERIAL PRIMARY KEY,
@@ -137,9 +135,7 @@ CREATE INDEX rfqhub_bundles_maker_open_balance_idx
 	ON rfqhub_bundles_maker_1 (acc_addr, bundle_taker_id)
 	INCLUDE (amt)
 	WHERE source IS NULL
-		AND was_chosen IS DISTINCT FROM FALSE
-		AND end_source_amt IS NULL
-		AND was_offramped = FALSE;
+		AND was_chosen IS DISTINCT FROM FALSE;
 
 ALTER TABLE rfqhub_bundles_taker_1
 	ADD CONSTRAINT rfqhub_bundles_taker_maker_fk
@@ -195,6 +191,12 @@ $$;
 -- Return the unreserved part of the latest BalanceChanged amount. Aggregate
 -- results are not included here until a result is partially returned to the pot
 -- and recorded by a later BalanceChanged event.
+-- Concluding an aggregate or requesting withdrawal is not indexed settlement:
+-- both sides' matched pot stakes stay reserved, including losing stakes.
+-- BalanceChanged identifies account/asset/balance/version, not a bundle. Even a
+-- newer event for the same account/asset cannot safely release a reservation.
+-- Fail closed until bundle-linked settlement evidence is available; do not infer
+-- release from event order/timestamps or the local end_source_amt/was_offramped.
 CREATE FUNCTION rfqhub_get_spendable_1 (
 	p_acc_addr ADDRESS,
 	p_asset ADDRESS
@@ -224,8 +226,6 @@ BEGIN
 	WHERE t.acc_addr = p_acc_addr
 		AND t.asset = p_asset
 		AND t.pot_funded_amt > 0
-		AND t.end_source_amt IS NULL
-		AND t.was_offramped = FALSE
 		-- An unmatched taker only reserves its pot balance while its auction is
 		-- open. If at least one maker exists, keep the reservation because a
 		-- maker is expected to be selected automatically when the auction ends.
@@ -245,12 +245,41 @@ BEGIN
 	WHERE m.acc_addr = p_acc_addr
 		AND t.asset = p_asset
 		AND m.source IS NULL
-		AND m.was_chosen IS DISTINCT FROM FALSE
-		AND m.end_source_amt IS NULL
-		AND m.was_offramped = FALSE;
+		AND m.was_chosen IS DISTINCT FROM FALSE;
 
 	RETURN GREATEST(v_balance - v_taker_reserved - v_maker_reserved, 0);
 END;
+$$;
+
+-- Read-only snapshot of available taker funding, not a reservation or guarantee.
+-- Keep source eligibility identical to rfqhub_create_bundle_taker_1's candidate
+-- query. Maker winnings are deliberately excluded; get_spendable stays pot-only
+-- so constructors cannot count these aggregate sources twice.
+CREATE FUNCTION rfqhub_get_available_balance_1 (
+	p_acc_addr ADDRESS,
+	p_asset ADDRESS
+)
+RETURNS BIGINT
+LANGUAGE sql
+STABLE
+AS $$
+	SELECT (rfqhub_get_spendable_1(p_acc_addr, p_asset)
+		+ COALESCE(SUM(t.end_source_amt), 0))::BIGINT
+	FROM rfqhub_bundles_taker_1 AS t
+	JOIN rfqhub_bundles_maker_1 AS m
+		ON m.id = t.maker_id AND m.bundle_taker_id = t.id
+	JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
+	WHERE t.acc_addr = p_acc_addr AND t.asset = p_asset
+		AND t.end_source_amt > 0 AND NOT t.was_offramped
+		AND t.structure IS NOT NULL AND m.structure IS NOT NULL
+		AND m.was_chosen = TRUE AND m.was_correct = FALSE
+		AND NOT EXISTS (
+			SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
+			WHERE s.source_taker_id = t.id
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM rfqhub_bundles_taker_1 AS child WHERE child.source = t.id
+		);
 $$;
 
 CREATE FUNCTION rfqhub_get_or_create_timestamplet_1 (
@@ -650,6 +679,9 @@ BEGIN
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.id = p_bundle_taker_id
 	FOR SHARE;
+	IF v_taker.acc_addr = p_acc_addr THEN
+		RAISE EXCEPTION 'maker owner cannot match taker owner for taker %', p_bundle_taker_id;
+	END IF;
 	IF v_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_taker.maker_id;
 	END IF;
@@ -752,6 +784,9 @@ BEGIN
 		RAISE EXCEPTION 'source maker % changed taker', p_source_maker_id;
 	END IF;
 
+	IF v_target_taker.acc_addr = v_source.acc_addr THEN
+		RAISE EXCEPTION 'maker owner cannot match taker owner for taker %', p_bundle_taker_id;
+	END IF;
 	IF v_target_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_target_taker.maker_id;
 	END IF;
@@ -1210,6 +1245,7 @@ DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_from_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_structure_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_1;
 DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1;
+DROP FUNCTION IF EXISTS rfqhub_get_available_balance_1(ADDRESS, ADDRESS);
 DROP FUNCTION IF EXISTS rfqhub_get_spendable_1;
 DROP FUNCTION IF EXISTS rfqhub_inspect_bundle_taker_1;
 
