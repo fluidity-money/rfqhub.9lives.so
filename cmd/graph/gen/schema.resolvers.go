@@ -270,7 +270,17 @@ func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount
 	// the timestamplet that we can use for the construction so we can make
 	// the aggregate for the item there.
 	rows, err := r.Db.Query(`
-SELECT bundle_taker_id, amt, leftover_bal
+SELECT
+	bundle_taker_id,
+	amt,
+	source_taker_id,
+	source_amt,
+	source_maker_id,
+	bundle_maker_structure,
+	timestamplet_id,
+	timestamplet_end_value,
+	timestamplet_time,
+	timestamplet_outcome
 FROM rfqhub_create_bundle_taker_1(
 	$1,
 	$2,
