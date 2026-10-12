@@ -323,7 +323,6 @@ CREATE FUNCTION rfqhub_create_bundle_taker_1 (
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
 	amt BIGINT,
-	source_taker_id INTEGER,
 	source_amt BIGINT,
 	source_maker_id INTEGER,
 	bundle_maker_structure JSON,
@@ -455,7 +454,7 @@ BEGIN
 
 	RETURN QUERY
 	SELECT v_bundle_taker_id, v_amt,
-		t.id, u.taken, m.id, m.structure,
+		u.taken, m.id, m.structure,
 		ts.id, ts.timestamplet_val, ts.timestamplet_time, ts.timestamplet_outcome
 	FROM unnest(v_source_ids, v_source_amts, v_remainders)
 		WITH ORDINALITY AS u(source_id, taken, remainder, ord)
@@ -466,7 +465,7 @@ BEGIN
 
 	IF v_pot_amt > 0 THEN
 		RETURN QUERY SELECT v_bundle_taker_id, v_amt,
-			NULL::INTEGER, v_pot_amt, NULL::INTEGER, NULL::JSON,
+			v_pot_amt, NULL::INTEGER, NULL::JSON,
 			NULL::INTEGER, NULL::BIGINT, NULL::TIMESTAMP, NULL::RFQHUB_OUTCOME;
 	END IF;
 END;

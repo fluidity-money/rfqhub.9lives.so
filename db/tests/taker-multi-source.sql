@@ -69,11 +69,13 @@ BEGIN
 	LOOP
 		v_rows := v_rows + 1;
 		v_bundle := v_r.bundle_taker_id;
-		v_ids := array_append(v_ids, v_r.source_taker_id);
+		v_ids := array_append(v_ids, (SELECT m.bundle_taker_id
+			FROM rfqhub_bundles_maker_1 AS m WHERE m.id = v_r.source_maker_id));
 		v_takes := array_append(v_takes, v_r.source_amt);
 		v_remainders := array_append(v_remainders, (
 			SELECT s.amt_to_onramp_amt FROM rfqhub_bundles_taker_sources_1 AS s
-			WHERE s.source_taker_id = v_r.source_taker_id));
+			WHERE s.source_taker_id = (SELECT m.bundle_taker_id
+				FROM rfqhub_bundles_maker_1 AS m WHERE m.id = v_r.source_maker_id)));
 		ASSERT v_r.amt = 25;
 		ASSERT v_r.source_maker_id IS NOT NULL;
 		ASSERT v_r.bundle_maker_structure::JSONB = '{"signed":"maker"}'::JSONB;
@@ -105,7 +107,7 @@ BEGIN
 
 	SELECT * INTO STRICT v_r FROM rfqhub_create_bundle_taker_1(
 		v_account, v_asset, 40, 40, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
-	ASSERT v_r.source_taker_id IS NULL AND v_r.source_amt = 40;
+	ASSERT v_r.bundle_maker_structure IS NULL AND v_r.source_amt = 40;
 	ASSERT v_r.amt = 40 AND rfqhub_get_spendable_1(v_account, v_asset) = 60;
 	ASSERT v_r.source_maker_id IS NULL AND v_r.bundle_maker_structure IS NULL;
 	ASSERT v_r.timestamplet_id IS NULL;
@@ -121,9 +123,9 @@ BEGIN
 		v_bundle := v_r.bundle_taker_id;
 		ASSERT v_r.amt = 80;
 		IF v_rows = 1 THEN
-			ASSERT v_r.source_taker_id = v_source AND v_r.source_amt = 20;
+			ASSERT (SELECT m.bundle_taker_id = v_source FROM rfqhub_bundles_maker_1 AS m WHERE m.id = v_r.source_maker_id) AND v_r.source_amt = 20;
 		ELSE
-			ASSERT v_r.source_taker_id IS NULL AND v_r.source_amt = 60;
+			ASSERT v_r.bundle_maker_structure IS NULL AND v_r.source_amt = 60;
 		END IF;
 	END LOOP;
 	ASSERT v_rows = 2;
@@ -206,7 +208,7 @@ BEGIN
 		EXTRACT(EPOCH FROM CURRENT_TIMESTAMP + INTERVAL '2 hours')::INTEGER, 0,
 		EXTRACT(EPOCH FROM CURRENT_TIMESTAMP + INTERVAL '1 hour')::INTEGER);
 	v_child := v_r.bundle_taker_id;
-	ASSERT v_r.source_taker_id = v_parent AND v_r.source_amt = 45;
+	ASSERT (SELECT m.bundle_taker_id = v_parent FROM rfqhub_bundles_maker_1 AS m WHERE m.id = v_r.source_maker_id) AND v_r.source_amt = 45;
 	ASSERT v_r.bundle_maker_structure::JSONB = '{"signed":"nested maker"}'::JSONB;
 	ASSERT rfqhub_get_spendable_1(v_account, v_asset) = 0;
 	ASSERT (SELECT count(*) = 2 FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_parent);

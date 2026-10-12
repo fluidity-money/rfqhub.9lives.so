@@ -273,7 +273,6 @@ func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount
 SELECT
 	bundle_taker_id,
 	amt,
-	source_taker_id,
 	source_amt,
 	source_maker_id,
 	bundle_maker_structure,
