@@ -290,7 +290,7 @@ FROM rfqhub_create_bundle_taker_1(
 		maxAmount_,
 		isUp,
 		priceTarget_,
-		outcome_,
+		outcome,
 		msTsI,
 		expiry,
 		minOffer_,
