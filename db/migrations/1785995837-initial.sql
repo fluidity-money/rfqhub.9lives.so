@@ -1,8 +1,31 @@
 -- migrate:up
 
--- BalanceChanged is externally managed; each amount is an additive onramp credit.
--- Historical absolute-balance events must be reconciled before using this view;
--- do not mix them with additive credits. No historical conversion is done here.
+-- BEGIN TEMPORARY: convert old absolute events to deltas until the contract upgrade.
+-- Start with an empty event table; ingest deduplicated events in chain order.
+-- Decreases produce negative deltas. Remove this block for additive events.
+ALTER TABLE rfqhub_events_balance_changed ADD COLUMN temporary_absolute_amount NUMERIC;
+CREATE FUNCTION temporary_balance_changed_to_delta_1()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+	v_previous NUMERIC;
+BEGIN
+	PERFORM pg_advisory_xact_lock(hashtextextended(
+		NEW.account_addr::TEXT || ':' || NEW.asset::TEXT, 1785995838));
+	SELECT e.temporary_absolute_amount INTO v_previous
+	FROM rfqhub_events_balance_changed AS e
+	WHERE e.account_addr = NEW.account_addr AND e.asset = NEW.asset
+	ORDER BY e.id DESC LIMIT 1;
+	NEW.temporary_absolute_amount := NEW.amount;
+	NEW.amount := NEW.amount - COALESCE(v_previous, 0);
+	RETURN NEW;
+END;
+$$;
+CREATE TRIGGER temporary_balance_changed_to_delta_1
+BEFORE INSERT ON rfqhub_events_balance_changed
+FOR EACH ROW EXECUTE FUNCTION temporary_balance_changed_to_delta_1();
+-- END TEMPORARY
+
+-- BalanceChanged amounts are additive credits after the temporary conversion.
 CREATE INDEX rfqhub_events_balance_changed_account_asset_idx
 	ON rfqhub_events_balance_changed (account_addr, asset)
 	INCLUDE (amount);
@@ -1285,6 +1308,8 @@ END;
 $$;
 
 -- migrate:down
+
+DROP FUNCTION IF EXISTS temporary_balance_changed_to_delta_1() CASCADE;
 
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_winner_as_offramped_1;
