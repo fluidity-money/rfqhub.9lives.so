@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 use crate::{TOPIC_BALANCE_CHANGED, TOPIC_GLOBAL_BALANCE_CHANGED, Version};
 
 use bobcat_sdk::{events::emit, maths::U};

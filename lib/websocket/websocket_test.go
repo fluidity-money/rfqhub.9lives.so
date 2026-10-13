@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 package websocket
 
 import (
@@ -56,7 +60,7 @@ func stalledClient(t *testing.T, addr, path string) net.Conn {
 // it pushes payloads at the client until the connection dies.
 func floodEndpoint(path string) {
 	payload := bytes.Repeat([]byte("x"), 32*1024)
-	Endpoint(path, func(ctx context.Context, ip string, q url.Values, replies <-chan []byte, outgoing chan<- []byte, shutdown chan<- error, requestShutdown <-chan bool) {
+	Endpoint(path, func(ctx context.Context, ip string, q url.Values, headers http.Header, replies <-chan []byte, outgoing chan<- []byte, shutdown chan<- error, requestShutdown <-chan bool) {
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 		for {

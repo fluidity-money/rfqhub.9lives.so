@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 use crate::{
     Aggregate, AggregateArgs, AggregateEnum, AggregatedResultArgs, BundleMaker, BundleMakerArgs,
     BundleTaker, BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,

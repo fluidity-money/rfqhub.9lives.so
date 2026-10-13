@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 use bobcat_sdk::{
     call::{call_slice, safe_call_slice},
     interfaces::eip20::{make_fn_transfer, make_fn_transfer_from},

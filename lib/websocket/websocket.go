@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 package websocket
 
 import (
@@ -25,7 +29,7 @@ var websocketUpgrader = websocket.Upgrader{
 // channel to receive messages down and a reply channel to send messages
 // to the websocket. A context is also provided that is cancelled when
 // the connection is torn down.
-func Endpoint(endpoint string, handler func(ctx context.Context, ipAddr string, query url.Values, replies <-chan []byte, outgoing chan<- []byte, shutdown chan<- error, requestShutdown <-chan bool)) {
+func Endpoint(endpoint string, handler func(ctx context.Context, ipAddr string, query url.Values, headers http.Header, replies <-chan []byte, outgoing chan<- []byte, shutdown chan<- error, requestShutdown <-chan bool)) {
 	http.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "*")
@@ -37,14 +41,11 @@ func Endpoint(endpoint string, handler func(ctx context.Context, ipAddr string, 
 			return
 		}
 		defer websocketConn.Close()
-
 		ipAddress := r.RemoteAddr
-
 		// connCtx is cancelled when any part of this connection tears down.
 		// All spawned goroutines should select on connCtx.Done().
 		connCtx, connCancel := context.WithCancel(r.Context())
 		defer connCancel()
-
 		var (
 			messages                   = make(chan []byte, 1000)
 			replies                    = make(chan []byte, 1000)
@@ -52,8 +53,7 @@ func Endpoint(endpoint string, handler func(ctx context.Context, ipAddr string, 
 			chanHandlerShutdown        = make(chan bool, 1)
 			chanPongs                  = make(chan bool, 1)
 		)
-
-		// Reader goroutine
+		// Reader goroutine:
 		go func() {
 			defer connCancel() // ensure everything tears down when reader exits
 			slog.Debug("beginning to read messages",
@@ -107,8 +107,7 @@ func Endpoint(endpoint string, handler func(ctx context.Context, ipAddr string, 
 				}
 			}
 		}()
-
-		// Writer goroutine
+		// Writer goroutine:
 		go func() {
 			defer connCancel() // ensure everything tears down when writer exits
 			for {
@@ -147,6 +146,7 @@ func Endpoint(endpoint string, handler func(ctx context.Context, ipAddr string, 
 			connCtx,
 			ipAddress,
 			r.URL.Query(),
+			r.Header,
 			replies,
 			messages,
 			chanHandlerRequestShutdown,

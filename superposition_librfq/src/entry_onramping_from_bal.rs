@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 use crate::{call_eip20, events::event_emit_bal_update, storage};
 
 use bobcat_sdk::{

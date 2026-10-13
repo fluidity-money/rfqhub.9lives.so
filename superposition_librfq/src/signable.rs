@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 //! Shadow structure that can be easily signed eagerly to the format
 // we use to reconstruct signers. Inner structures are used for the
 // value part of the signing, with the Signable structures being used

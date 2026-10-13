@@ -1,23 +1,21 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"log"
-	"log/slog"
-	"net/http"
-	"net/url"
-	"os"
 	"strconv"
+	"net/http"
+	"context"
+	"os"
+	"log/slog"
+	"fmt"
 	"strings"
-	"time"
+	"net/url"
 
-	"github.com/fluidity-money/9lives.so/lib/config"
-	"github.com/fluidity-money/9lives.so/lib/features"
-	"github.com/fluidity-money/9lives.so/lib/heartbeat"
-	"github.com/fluidity-money/9lives.so/lib/setup"
-	"github.com/fluidity-money/9lives.so/lib/websocket"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/websocket"
 
 	cdc "github.com/Trendyol/go-pq-cdc"
 	cdcConfig "github.com/Trendyol/go-pq-cdc/config"
@@ -28,180 +26,33 @@ import (
 )
 
 const (
-	EnvListenAddr            = "SPN_LISTEN_ADDR"
+	EnvTimescaleUri = "SPN_TIMESCALE"
 	EnvPublicationName       = "SPN_PUBLICATION_NAME"
 	EnvPublicationSlot       = "SPN_PUBLICATION_SLOT"
 	EnvPublicationMetricSlot = "SPN_PUBLICATION_PORT"
 )
 
-const PrivateSnapshotLookback = 4000
-
-const PricesTable = "oracles_ninelives_prices_2"
-const PricesPartitionKey = "base"
-
-type TableContent struct {
-	Table            string         `json:"table"`
-	Content          map[string]any `json:"content,omitempty"`
-	Snapshot         []any          `json:"snapshot,omitempty"`
-	SnapshotToplevel []TableContent `json:"snapshot_toplevel,omitempty"`
-	encoded          []byte
-}
-
-type FilterConstraint struct {
-	Et any `json:"et"`
-}
-
-// priceRow is the compact retained form of a prices table row: one
-// small struct instead of a map[string]any and its boxed values,
-// which cost several times more per row. It marshals to the same
-// JSON shape as the decoded map.
-type priceRow struct {
-	Id        int64     `json:"id"`
-	Base      string    `json:"base"`
-	Amount    float64   `json:"amount"`
-	CreatedBy time.Time `json:"created_by"`
-}
-
-// compactPriceRow converts a decoded prices row to its compact form,
-// falling back to the map unchanged if the decoded types are ever
-// not what we expect.
-func compactPriceRow(m map[string]any) any {
-	id, ok1 := m["id"].(int64)
-	base, ok2 := m["base"].(string)
-	amount, ok3 := m["amount"].(float64)
-	createdBy, ok4 := m["created_by"].(time.Time)
-	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return m
-	}
-	return priceRow{Id: id, Base: base, Amount: amount, CreatedBy: createdBy}
-}
-
-// itemField reads a field from a buffered row, which is either a
-// decoded map or a compact priceRow.
-func itemField(item any, k string) (any, bool) {
-	switch it := item.(type) {
-	case map[string]any:
-		v, ok := it[k]
-		return v, ok
-	case priceRow:
-		switch k {
-		case "id":
-			return it.Id, true
-		case "base":
-			return it.Base, true
-		case "amount":
-			return it.Amount, true
-		case "created_by":
-			return it.CreatedBy, true
-		}
-	}
-	return nil, false
-}
-
-type ringBuffer struct {
-	i     int
-	items [PrivateSnapshotLookback]any
-}
-
-type partitionedBuffer struct {
-	buffers map[string]*ringBuffer
-}
-
-// dumpRequest wraps the snapshot reply channel with a context so the
-// buffer goroutine can abandon the send when the requester is gone.
-type dumpRequest struct {
-	ctx   context.Context
-	reply chan []TableContent
-}
-
-func newPartitionedBuffer() *partitionedBuffer {
-	return &partitionedBuffer{buffers: make(map[string]*ringBuffer)}
-}
-
-func (pb *partitionedBuffer) insert(partitionKey string, content any) {
-	x := pb.buffers[partitionKey]
-	if x == nil {
-		x = &ringBuffer{}
-		pb.buffers[partitionKey] = x
-	}
-	if x.i == PrivateSnapshotLookback {
-		x.i = 0
-	}
-	x.items[x.i] = content
-	x.i++
-}
-
-func (pb *partitionedBuffer) allItems() []any {
-	var out []any
-	for _, rb := range pb.buffers {
-		snapshot := make([]any, PrivateSnapshotLookback)
-		copy(snapshot, rb.items[:])
-		for _, item := range snapshot {
-			if item != nil {
-				out = append(out, item)
-			}
-		}
-	}
-	return out
-}
-
-func compareFmt(v1, v2 any) bool {
-	if v1 == v2 {
-		return true
-	}
-	return fmt.Sprintf("%v", v1) == fmt.Sprintf("%v", v2)
-}
-
 func main() {
-	f := features.Get()
-	config := config.Get()
-
-	u, err := url.Parse(config.PickTimescaleUrl())
+	u, err := url.Parse(os.Getenv(EnvTimescaleUri))
 	if err != nil {
-		setup.Exitf("parse error: %v", err)
+		log.Fatalf("parse error: %v", err)
 	}
-
 	if u.User == nil {
-		setup.Exitf("timescale url has no username")
+		log.Fatal("timescale url has no username")
 	}
-
-	// masterCtx is cancelled when the process is shutting down.
-	// Every long-lived goroutine should watch it.
-	masterCtx, masterCancel := context.WithCancel(context.Background())
-	defer masterCancel()
-
-	tables := getTables()
-
 	timescalePassword, _ := u.User.Password()
-
 	var port int
 	if p := u.Port(); p != "" {
 		if port, err = strconv.Atoi(strings.TrimPrefix(u.Port(), ":")); err != nil {
-			setup.Exitf("bad port: %v", u.Port())
+			log.Fatalf("bad port: %v", u.Port())
 		}
 	} else {
 		port = 5432
 	}
-
 	metricPort, err := strconv.Atoi(os.Getenv(EnvPublicationMetricSlot))
 	if err != nil {
-		setup.Exitf("metric slot: %v", err)
+		log.Fatalf("metric slot: %v", err)
 	}
-
-	go func() {
-		t := time.NewTicker(time.Minute)
-		defer t.Stop()
-		for {
-			select {
-			case <-masterCtx.Done():
-				return
-			case <-t.C:
-				heartbeat.Pulse()
-				t.Reset(time.Minute)
-			}
-		}
-	}()
-
 	cfg := cdcConfig.Config{
 		Host:     u.Hostname(),
 		Username: u.User.Username(),
@@ -217,7 +68,10 @@ func main() {
 			Operations: cdcPublication.Operations{
 				cdcPublication.OperationInsert,
 			},
-			Tables: tables,
+			Tables: []cdcPublication.Table{{
+				Name: "rfqhub_bundles_maker_1",
+				ReplicaIdentity: cdcPublication.ReplicaIdentityFull,
+			}},
 		},
 		Metric: cdcConfig.MetricConfig{
 			Port: metricPort,
@@ -228,121 +82,26 @@ func main() {
 			SlotActivityCheckerInterval: 1000,
 		},
 	}
-
+	masterCtx, masterCancel := context.WithCancel(context.Background())
+	defer masterCancel()
 	broadcast := websocket.NewBroadcast[TableContent]()
-
-	dumpChan := make(chan dumpRequest)
-
-	pricesBases := make(map[string]bool)
-	for _, b := range strings.Split(os.Getenv(EnvPricesBases), ",") {
-		if b = strings.ToUpper(strings.TrimSpace(b)); b != "" {
-			pricesBases[b] = true
-		}
-	}
-
-	go func() {
-		bufferMsgsChan := make(chan TableContent, 100*60)
-		bufferCookie := broadcast.Subscribe(bufferMsgsChan)
-
-		// Clean up when this goroutine exits.
-		defer broadcast.Unsubscribe(bufferCookie)
-
-		buffer := make(map[string]*partitionedBuffer)
-
-		for {
-			select {
-			case <-masterCtx.Done():
-				return
-
-			case v, ok := <-bufferMsgsChan:
-				if !ok {
-					return
-				}
-				pb := buffer[v.Table]
-				if pb == nil {
-					pb = newPartitionedBuffer()
-					buffer[v.Table] = pb
-				}
-
-				partitionKey := ""
-				row := any(v.Content)
-				if v.Table == PricesTable {
-					if base, ok := v.Content[PricesPartitionKey]; ok {
-						partitionKey = fmt.Sprintf("%v", base)
-					}
-					if len(pricesBases) > 0 && !pricesBases[strings.ToUpper(partitionKey)] {
-						continue
-					}
-					row = compactPriceRow(v.Content)
-				}
-
-				pb.insert(partitionKey, row)
-
-			case req, ok := <-dumpChan:
-				if !ok {
-					return
-				}
-				content := make([]TableContent, 0, len(buffer))
-				for k, pb := range buffer {
-					content = append(content, TableContent{
-						Table:    k,
-						Snapshot: pb.allItems(),
-					})
-				}
-				// Send the snapshot, but give up if the requester's
-				// context is already cancelled.
-				select {
-				case req.reply <- content:
-				case <-req.ctx.Done():
-				case <-masterCtx.Done():
-				}
-				close(req.reply)
-			}
-		}
-	}()
-
-	tableFilter := makeTableFilter()
-
-	connector, err := cdc.NewConnector(masterCtx, cfg, func(ctx *cdcReplication.ListenerContext) {
+	cdcConn, err := cdc.NewConnector(masterCtx, cfg, func(ctx *cdcReplication.ListenerContext) {
 		msg, isInsert := ctx.Message.(*cdcFormat.Insert)
 		if err := ctx.Ack(); err != nil {
-			setup.Exitf("ack: %v", err)
+			log.Fatalf("ack: %v", err)
 		}
-
 		if !isInsert {
 			slog.Debug("non insert received",
 				"msg", msg,
-				"type", fmt.Sprintf("%T", msg))
+				"type", fmt.Sprintf("%T", msg),
+			)
 			return
 		}
-
-		validKeys := tableFilter[msg.TableName]
-		if validKeys == nil {
-			slog.Debug("skipping table we can't filter for",
-				"name", msg.TableName)
-			return
-		}
-
-		o := make(map[string]any, len(validKeys))
-		for k, e := range validKeys {
-			if e {
-				o[k] = msg.Decoded[k]
-			}
-		}
-
-		m := TableContent{msg.TableName, o, nil, nil, nil}
-		e, err := json.Marshal(m)
-		if err != nil {
-			log.Fatalf("failed to encode: %v", err)
-		}
-		m.encoded = e
-
-		broadcast.Broadcast(m)
+		broadcast.Broadcast(msg)
 	})
 	if err != nil {
-		setup.Exitf("error opening connector: %v", err)
+		log.Fatalf("error opening cdc connector: %v", err)
 	}
-
 	go func() {
 		websocket.Endpoint("/", func(
 			connCtx context.Context,
@@ -368,174 +127,19 @@ func main() {
 						"ip", ipAddr,
 					)
 					break L
-
 				case <-masterCtx.Done():
 					slog.Debug("master context cancelled, tearing down connection",
 						"ip", ipAddr,
 					)
 					break L
-
 				case m, ok := <-sink:
 					if !ok {
 						break L
 					}
-					if f.Is(features.FeatureFilterTables) {
-						if !filterRulesSet[m.Table] {
-							continue L
-						}
-						for k, c := range filterRules[m.Table] {
-							v, exists := m.Content[k]
-							if !exists || !compareFmt(v, c.Et) {
-								continue L
-							}
-						}
-					}
-					select {
-					case outgoing <- m.encoded:
-					case <-connCtx.Done():
-						break L
-					case <-masterCtx.Done():
-						break L
-					default:
-						slog.Warn("outgoing channel full, dropping message",
-							"ip", ipAddr,
-							"table", m.Table,
-						)
-					}
-
 				case msg, ok := <-replies:
 					if !ok {
 						break L
 					}
-					var req struct {
-						AskForSnapshot []struct {
-							Table  string `json:"table"`
-							Fields []struct {
-								Name        string           `json:"name"`
-								Constraints FilterConstraint `json:"filter_constraints"`
-							} `json:"fields"`
-						} `json:"ask_for_snapshot"`
-						FilterReq []struct {
-							Table  string `json:"table"`
-							Fields []struct {
-								Name        string           `json:"name"`
-								Constraints FilterConstraint `json:"filter_constraints"`
-							} `json:"fields"`
-						} `json:"add"`
-					}
-
-					if err := json.Unmarshal(msg, &req); err != nil {
-						slog.Error("bad message received", "err", err)
-						break L
-					}
-
-					if len(req.AskForSnapshot) > 0 {
-						snapshotFilters := make(map[string]map[string]*FilterConstraint)
-						for _, ch := range req.AskForSnapshot {
-							t := ch.Table
-							if snapshotFilters[t] == nil {
-								snapshotFilters[t] = make(map[string]*FilterConstraint)
-							}
-							for _, field := range ch.Fields {
-								c := field.Constraints
-								snapshotFilters[t][field.Name] = &c
-							}
-						}
-
-						go func() {
-							replyChan := make(chan []TableContent)
-
-							// Send the dump request, giving up if the
-							// connection or process is shutting down.
-							select {
-							case dumpChan <- dumpRequest{ctx: connCtx, reply: replyChan}:
-							case <-connCtx.Done():
-								return
-							case <-masterCtx.Done():
-								return
-							}
-
-							// Wait for the buffer goroutine to respond.
-							var rawSnapshot []TableContent
-							select {
-							case s, ok := <-replyChan:
-								if !ok {
-									// The buffer goroutine closed the
-									// channel without sending (requester
-									// context was cancelled).
-									return
-								}
-								rawSnapshot = s
-							case <-connCtx.Done():
-								return
-							case <-masterCtx.Done():
-								return
-							}
-
-							var filteredSnapshot []TableContent
-							for _, tableContent := range rawSnapshot {
-								tableFilter, requested := snapshotFilters[tableContent.Table]
-								if !requested {
-									continue
-								}
-
-								var filteredItems []any
-								for _, item := range tableContent.Snapshot {
-									if item == nil {
-										continue
-									}
-									include := true
-									for k, c := range tableFilter {
-										v, exists := itemField(item, k)
-										if !exists || !compareFmt(v, c.Et) {
-											include = false
-											break
-										}
-									}
-									if include {
-										filteredItems = append(filteredItems, item)
-									}
-								}
-
-								if len(filteredItems) > 0 {
-									filteredSnapshot = append(filteredSnapshot, TableContent{
-										Table:    tableContent.Table,
-										Snapshot: filteredItems,
-									})
-								}
-							}
-
-							snapshot, err := json.Marshal(TableContent{
-								SnapshotToplevel: filteredSnapshot,
-							})
-							if err != nil {
-								slog.Error("failed to marshal snapshot", "err", err)
-								return
-							}
-
-							select {
-							case outgoing <- snapshot:
-							case <-connCtx.Done():
-								slog.Debug("connection gone before snapshot could be sent",
-									"ip", ipAddr,
-								)
-							case <-masterCtx.Done():
-							}
-						}()
-					}
-
-					for _, ch := range req.FilterReq {
-						t := ch.Table
-						if filterRules[t] == nil {
-							filterRules[t] = make(map[string]*FilterConstraint)
-						}
-						filterRulesSet[t] = true
-						for _, field := range ch.Fields {
-							c := field.Constraints
-							filterRules[t][field.Name] = &c
-						}
-					}
-
 				case done, ok := <-requestShutdown:
 					if !ok || done {
 						slog.Debug("shutdown requested by framework",
@@ -545,19 +149,16 @@ func main() {
 					}
 				}
 			}
-
 			select {
 			case shutdown <- nil:
 			default:
 			}
 		})
-
-		setup.Exitf("bind: %v", http.ListenAndServe(
+		log.Fatalf("bind: %v", http.ListenAndServe(
 			os.Getenv(EnvListenAddr),
 			nil,
 		))
 	}()
-
 	defer connector.Close()
 	connector.Start(masterCtx)
 }

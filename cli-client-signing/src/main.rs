@@ -1,3 +1,7 @@
+// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
+// source code is governed by a BUSL license that can be found in the
+// LICENSE file.
+
 // cli-client-signing: Take some arguments and generate the client side
 // signature for a toplevel part of the Args that we send to the on-chain
 // structure.
