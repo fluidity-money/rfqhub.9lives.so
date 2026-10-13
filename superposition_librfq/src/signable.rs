@@ -135,8 +135,14 @@ impl From<&BundleMakerArgs> for SignableBundleMakerArgs {
         }: &BundleMakerArgs,
     ) -> Self {
         let taker_pre = SignableBundleTakerArgs::from(args);
-        let src = src.iter().map(|x| SignableOnrampingSource::from(x)).collect::<Vec<_>>();
-        let src_hashes = src.iter().map(|SignableOnrampingSource { hash, .. }| hash).collect::<Vec<_>>();
+        let src = src
+            .iter()
+            .map(|x| SignableOnrampingSource::from(x))
+            .collect::<Vec<_>>();
+        let src_hashes = src
+            .iter()
+            .map(|SignableOnrampingSource { hash, .. }| hash)
+            .collect::<Vec<_>>();
         let BcSha512(src_hash) = sha512(&borsh::to_vec(&src_hashes).unwrap());
         let BcSha512(content) = sha512(
             &borsh::to_vec(&InnerBundleMaker {
@@ -170,8 +176,14 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             outcome,
         }: &BundleTakerArgs,
     ) -> Self {
-        let src = src.iter().map(|x| SignableOnrampingSource::from(x)).collect::<Vec<_>>();
-        let src_hashes = src.iter().map(|SignableOnrampingSource { hash, .. }| hash).collect::<Vec<_>>();
+        let src = src
+            .iter()
+            .map(|x| SignableOnrampingSource::from(x))
+            .collect::<Vec<_>>();
+        let src_hashes = src
+            .iter()
+            .map(|SignableOnrampingSource { hash, .. }| hash)
+            .collect::<Vec<_>>();
         let BcSha512(src_hash) = sha512(&borsh::to_vec(&src_hashes).unwrap());
         let BcSha512(content) = sha512(
             &borsh::to_vec(&InnerBundleTakerArgs {
@@ -183,11 +195,8 @@ impl From<&BundleTakerArgs> for SignableBundleTakerArgs {
             })
             .unwrap(),
         );
-        let pre: [u8; 1 + 64 * 2] = concat_arrays!(
-            [PreDiscriminant::BundleTakerArgs as u8],
-            content,
-            src_hash
-        );
+        let pre: [u8; 1 + 64 * 2] =
+            concat_arrays!([PreDiscriminant::BundleTakerArgs as u8], content, src_hash);
         Self {
             src,
             hash: Hash::JustInTime(sha512(&pre)),

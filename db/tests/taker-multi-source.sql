@@ -3,9 +3,15 @@
 -- No oracle/event fixture schema is required: a temporary table shadows the
 -- externally managed BalanceChanged feed. All changes roll back.
 BEGIN;
+SET LOCAL plpgsql.check_asserts = on;
 CREATE TEMP TABLE rfqhub_events_balance_changed (
 	id BIGSERIAL PRIMARY KEY, account_addr ADDRESS, asset ADDRESS, amount BIGINT
 );
+-- Shadow the persistent view too: it otherwise remains bound to the real feed.
+CREATE TEMP VIEW rfqhub_onramped_balances_1 AS
+SELECT account_addr, asset, SUM(amount) AS amount
+FROM rfqhub_events_balance_changed
+GROUP BY account_addr, asset;
 INSERT INTO rfqhub_events_balance_changed (account_addr, asset, amount)
 VALUES ('0x00000000000000000000000000000000000000a1',
 	'0x00000000000000000000000000000000000000b1', 100);
@@ -213,6 +219,150 @@ BEGIN
 	ASSERT rfqhub_get_spendable_1(v_account, v_asset) = 0;
 	ASSERT (SELECT count(*) = 2 FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_parent);
 	ASSERT (SELECT count(*) = 1 FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_child);
+END;
+$$;
+-- Expired makerless allocations return the FULL prior result, not merely the
+-- reinvested portion, without erasing history or crediting a local pot delta.
+DO $$
+DECLARE
+	v_account ADDRESS := '0x00000000000000000000000000000000000000e1';
+	v_maker_account ADDRESS := '0x00000000000000000000000000000000000000e2';
+	v_asset ADDRESS := '0x00000000000000000000000000000000000000b1';
+	v_deadline INTEGER := EXTRACT(EPOCH FROM CURRENT_TIMESTAMP + INTERVAL '1 hour')::INTEGER;
+	v_expiry INTEGER := EXTRACT(EPOCH FROM CURRENT_TIMESTAMP + INTERVAL '2 hours')::INTEGER;
+	v_source INTEGER;
+	v_mixed INTEGER;
+	v_legacy INTEGER;
+	v_next INTEGER;
+	v_offer INTEGER;
+	v_r RECORD;
+BEGIN
+	INSERT INTO rfqhub_events_balance_changed (account_addr, asset, amount)
+	VALUES (v_account, v_asset, 101), (v_maker_account, v_asset, 100);
+	v_source := pg_temp.seed_winner(v_account, v_asset, 200);
+	-- Model the original matched pot stake: it must NEVER be released here.
+	UPDATE rfqhub_bundles_taker_1 SET pot_funded_amt = 1 WHERE id = v_source;
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 300;
+	FOR v_r IN SELECT * FROM rfqhub_create_bundle_taker_1(
+		v_account, v_asset, 300, 300, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline)
+	LOOP v_mixed := v_r.bundle_taker_id; END LOOP;
+	ASSERT (SELECT pot_funded_amt = 100 FROM rfqhub_bundles_taker_1 WHERE id = v_mixed);
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 0;
+	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_mixed;
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 300,
+		'exact deadline returns 200 winnings plus 100 pot before lazy release';
+	ASSERT (SELECT released_at IS NULL FROM rfqhub_bundles_taker_sources_1
+		WHERE bundle_taker_id = v_mixed AND source_taker_id = v_source);
+	ASSERT (SELECT NOT sources_released FROM rfqhub_bundles_taker_1 WHERE id = v_mixed),
+		'balance must remain read-only';
+
+	-- Failed construction must roll back its lazy release too.
+	BEGIN
+		PERFORM * FROM rfqhub_create_bundle_taker_1(
+			v_account, v_asset, 301, 301, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+		RAISE EXCEPTION 'minimum failure unexpectedly accepted';
+	EXCEPTION WHEN raise_exception THEN
+		IF SQLERRM NOT LIKE 'insufficient taker funding:%' THEN RAISE; END IF;
+	END;
+	ASSERT (SELECT released_at IS NULL FROM rfqhub_bundles_taker_sources_1
+		WHERE bundle_taker_id = v_mixed AND source_taker_id = v_source);
+
+	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_from_aggregate_1(
+		v_source, 50, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	ASSERT (SELECT released_at IS NOT NULL AND source_amt = 200 AND amt_to_onramp_amt = 0
+		FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_mixed AND source_taker_id = v_source);
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100;
+	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_legacy;
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 300,
+		'expired partial allocation restores full winnings, not just 50';
+	SELECT bundle_taker_id INTO STRICT v_next FROM rfqhub_create_bundle_taker_from_aggregate_1(
+		v_source, 75, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	ASSERT (SELECT source = v_source AND sources_released FROM rfqhub_bundles_taker_1 WHERE id = v_legacy),
+		'legacy unique index must allow reuse without deleting its historical source';
+	ASSERT (SELECT count(*) = 3 FROM rfqhub_bundles_taker_sources_1 WHERE source_taker_id = v_source);
+	ASSERT (SELECT count(*) = 1 FROM rfqhub_bundles_taker_sources_1
+		WHERE source_taker_id = v_source AND released_at IS NULL);
+	BEGIN
+		UPDATE rfqhub_bundles_taker_sources_1 SET released_at = NULL
+		WHERE bundle_taker_id = v_legacy AND source_taker_id = v_source;
+		RAISE EXCEPTION 'duplicate active allocation unexpectedly accepted';
+	EXCEPTION WHEN unique_violation THEN NULL;
+	END;
+
+	-- Any offer keeps funding reserved after expiry, even unsigned, unselected,
+	-- and marked rejected. A NULL selected maker is not enough to free funding.
+	SELECT bundle_maker_id INTO STRICT v_offer FROM rfqhub_create_bundle_maker_onramping_1(
+		v_maker_account, v_next, 10, 10, 1);
+	UPDATE rfqhub_bundles_maker_1 SET was_chosen = FALSE WHERE id = v_offer;
+	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_next;
+	ASSERT (SELECT maker_id IS NULL FROM rfqhub_bundles_taker_1 WHERE id = v_next);
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100;
+	BEGIN
+		PERFORM * FROM rfqhub_create_bundle_taker_from_aggregate_1(
+			v_source, 1, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+		RAISE EXCEPTION 'maker-backed allocation unexpectedly released';
+	EXCEPTION WHEN raise_exception THEN
+		IF SQLERRM NOT LIKE '%already consumed%' THEN RAISE; END IF;
+	END;
+	BEGIN
+		PERFORM * FROM rfqhub_mark_winner_as_offramped_1(v_account, TRUE, v_source);
+		RAISE EXCEPTION 'reserved withdrawal unexpectedly accepted';
+	EXCEPTION WHEN raise_exception THEN
+		IF SQLERRM NOT LIKE '%already consumed%' THEN RAISE; END IF;
+	END;
+	ASSERT (SELECT released_at IS NULL FROM rfqhub_bundles_taker_sources_1
+		WHERE bundle_taker_id = v_next AND source_taker_id = v_source);
+
+	-- Fixture-only removal restores the makerless state. Mixed construction must
+	-- release both the legacy pointer and the ledger, and reserve the source anew.
+	DELETE FROM rfqhub_bundles_maker_1 WHERE id = v_offer;
+	SELECT bundle_taker_id INTO STRICT v_next FROM rfqhub_create_bundle_taker_1(
+		v_account, v_asset, 200, 200, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_next;
+	PERFORM * FROM rfqhub_mark_winner_as_offramped_1(v_account, TRUE, v_source);
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100,
+		'withdrawn source must not become reusable';
+	ASSERT rfqhub_get_spendable_1(v_account, v_asset) = 100,
+		'original matched pot stake remains reserved';
+	ASSERT NOT EXISTS (SELECT 1 FROM rfqhub_bundles_taker_sources_1
+		WHERE source_taker_id = v_source AND released_at IS NULL);
+	BEGIN
+		PERFORM * FROM rfqhub_create_bundle_taker_from_aggregate_1(
+			v_source, 1, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+		RAISE EXCEPTION 'withdrawn source unexpectedly reused';
+	EXCEPTION WHEN raise_exception THEN
+		IF SQLERRM NOT LIKE '%already offramped%' THEN RAISE; END IF;
+	END;
+
+	-- A future deadline simulates a maker transaction whose CURRENT_TIMESTAMP
+	-- predates expiry: release state must block BOTH maker funding constructors.
+	UPDATE rfqhub_bundles_taker_1 SET deadline = TO_TIMESTAMP(v_deadline) AT TIME ZONE 'UTC'
+	WHERE id = v_mixed;
+	BEGIN
+		PERFORM * FROM rfqhub_create_bundle_maker_onramping_1(v_maker_account, v_mixed, 1, 1, 1);
+		RAISE EXCEPTION 'released auction accepted pot maker';
+	EXCEPTION WHEN raise_exception THEN
+		IF SQLERRM NOT LIKE '%deadline has passed%' THEN RAISE; END IF;
+	END;
+	BEGIN
+		PERFORM * FROM rfqhub_create_bundle_maker_from_aggregate_1(
+			(SELECT maker_id FROM rfqhub_bundles_taker_1 WHERE id = v_source), v_mixed, 1, 1);
+		RAISE EXCEPTION 'released auction accepted aggregate maker';
+	EXCEPTION WHEN raise_exception THEN
+		IF SQLERRM NOT LIKE '%deadline has passed%' THEN RAISE; END IF;
+	END;
+
+	-- Legacy-only historical records (without a junction row) also release.
+	v_source := pg_temp.seed_winner(v_account, v_asset, 20);
+	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_from_aggregate_1(
+		v_source, 5, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	DELETE FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_legacy;
+	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_legacy;
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 120;
+	PERFORM * FROM rfqhub_mark_winner_as_offramped_1(v_account, TRUE, v_source);
+	ASSERT (SELECT source = v_source AND sources_released FROM rfqhub_bundles_taker_1 WHERE id = v_legacy);
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100;
+	RAISE NOTICE 'PASS: expired aggregate reuse, history, legacy uniqueness, offers, withdrawal, late makers';
 END;
 $$;
 ROLLBACK;

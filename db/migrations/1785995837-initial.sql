@@ -1,10 +1,17 @@
 -- migrate:up
 
--- BalanceChanged is externally managed, but RFQHub needs the latest absolute
--- balance for one account/asset pair on every spendable-balance lookup.
-CREATE INDEX rfqhub_events_balance_changed_latest_idx
-	ON rfqhub_events_balance_changed (account_addr, asset, id DESC)
+-- BalanceChanged is externally managed; each amount is an additive onramp credit.
+-- Historical absolute-balance events must be reconciled before using this view;
+-- do not mix them with additive credits. No historical conversion is done here.
+CREATE INDEX rfqhub_events_balance_changed_account_asset_idx
+	ON rfqhub_events_balance_changed (account_addr, asset)
 	INCLUDE (amount);
+
+-- SUM(BIGINT) stays NUMERIC here; BIGINT consumers reject out-of-range totals.
+CREATE VIEW rfqhub_onramped_balances_1 AS
+SELECT account_addr, asset, SUM(amount) AS amount
+FROM rfqhub_events_balance_changed
+GROUP BY account_addr, asset;
 
 CREATE TABLE rfqhub_bundles_taker_user_count_1 (
 	id SERIAL PRIMARY KEY,
@@ -52,6 +59,8 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	acc_addr ADDRESS NOT NULL,
 	user_id INTEGER NOT NULL,
 	source INTEGER REFERENCES rfqhub_bundles_taker_1 (id),
+	-- Historical source links survive release; released auctions cannot accept makers.
+	sources_released BOOLEAN NOT NULL DEFAULT FALSE,
 	asset ADDRESS NOT NULL,
 	amt BIGINT NOT NULL CHECK (amt >= 0),
 	pot_funded_amt BIGINT NOT NULL DEFAULT 0
@@ -72,22 +81,27 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	UNIQUE (acc_addr, user_id)
 );
 
--- An aggregate result is all-or-nothing. A previous taker result cannot be the
--- source of two later bundles.
+-- An aggregate result is all-or-nothing, with at most one active allocation.
+-- Retain legacy source links after an expired, makerless auction releases them.
 CREATE UNIQUE INDEX rfqhub_bundles_taker_source_uq
 	ON rfqhub_bundles_taker_1 (source)
-	WHERE source IS NOT NULL;
+	WHERE source IS NOT NULL AND NOT sources_released;
 
--- Each prior result is consumed in full exactly once, even when only source_amt
--- is reinvested. Both constructors write this ledger; source remains populated
--- only by the legacy constructor and is not an additional balance reservation.
+-- Both constructors write this ledger; source remains populated only by the
+-- legacy constructor and is not an additional balance reservation. Released
+-- allocations retain their original amounts and remainder for historical reads.
 CREATE TABLE rfqhub_bundles_taker_sources_1 (
 	bundle_taker_id INTEGER NOT NULL REFERENCES rfqhub_bundles_taker_1 (id),
-	source_taker_id INTEGER PRIMARY KEY REFERENCES rfqhub_bundles_taker_1 (id),
+	source_taker_id INTEGER NOT NULL REFERENCES rfqhub_bundles_taker_1 (id),
 	source_amt BIGINT NOT NULL CHECK (source_amt > 0),
 	amt_to_onramp_amt BIGINT NOT NULL CHECK (amt_to_onramp_amt >= 0),
+	released_at TIMESTAMP,
+	PRIMARY KEY (bundle_taker_id, source_taker_id),
 	CHECK (bundle_taker_id <> source_taker_id)
 );
+CREATE UNIQUE INDEX rfqhub_bundles_taker_sources_active_uq
+	ON rfqhub_bundles_taker_sources_1 (source_taker_id)
+	WHERE released_at IS NULL;
 CREATE INDEX rfqhub_bundles_taker_sources_bundle_idx
 	ON rfqhub_bundles_taker_sources_1 (bundle_taker_id);
 
@@ -188,12 +202,12 @@ BEGIN
 END;
 $$;
 
--- Return the unreserved part of the latest BalanceChanged amount. Aggregate
+-- Return the unreserved sum of BalanceChanged onramp credits. Aggregate
 -- results are not included here until a result is partially returned to the pot
 -- and recorded by a later BalanceChanged event.
 -- Concluding an aggregate or requesting withdrawal is not indexed settlement:
 -- both sides' matched pot stakes stay reserved, including losing stakes.
--- BalanceChanged identifies account/asset/balance/version, not a bundle. Even a
+-- BalanceChanged identifies account/asset/onramped amount, not a bundle. Even a
 -- newer event for the same account/asset cannot safely release a reservation.
 -- Fail closed until bundle-linked settlement evidence is available; do not infer
 -- release from event order/timestamps or the local end_source_amt/was_offramped.
@@ -212,11 +226,9 @@ DECLARE
 BEGIN
 	SELECT COALESCE((
 		SELECT e.amount
-		FROM rfqhub_events_balance_changed AS e
+		FROM rfqhub_onramped_balances_1 AS e
 		WHERE e.account_addr = p_acc_addr
 			AND e.asset = p_asset
-		ORDER BY e.id DESC
-		LIMIT 1
 	), 0)
 	INTO v_balance;
 
@@ -251,6 +263,68 @@ BEGIN
 END;
 $$;
 
+-- No maker offer (including unsigned/unselected offers) may exist before an
+-- expired auction can return its aggregate funding. Do not infer this from
+-- maker_id alone, or from conclusion/offramp of a matched result.
+CREATE FUNCTION rfqhub_taker_sources_releasable_1(p_bundle_taker_id INTEGER)
+RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+	SELECT EXISTS (
+		SELECT 1 FROM rfqhub_bundles_taker_1 AS t
+		WHERE t.id = p_bundle_taker_id AND t.deadline <= CURRENT_TIMESTAMP
+			AND t.maker_id IS NULL AND NOT t.was_offramped
+			AND NOT EXISTS (SELECT 1 FROM rfqhub_bundles_maker_1 AS m
+				WHERE m.bundle_taker_id = t.id)
+	);
+$$;
+
+-- Used by snapshot reads and by writers AFTER taking the source parent lock.
+-- Expired allocations are already available to reads before lazy release writes.
+CREATE FUNCTION rfqhub_taker_source_reserved_1(p_source_taker_id INTEGER)
+RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+	SELECT EXISTS (
+		SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
+		WHERE s.source_taker_id = p_source_taker_id AND s.released_at IS NULL
+			AND NOT rfqhub_taker_sources_releasable_1(s.bundle_taker_id)
+	) OR EXISTS (
+		SELECT 1 FROM rfqhub_bundles_taker_1 AS child
+		WHERE child.source = p_source_taker_id AND NOT child.sources_released
+			AND NOT rfqhub_taker_sources_releasable_1(child.id)
+	);
+$$;
+
+-- Callers lock source parent -> selected maker first, as withdrawal does.
+-- Lock each consuming parent against maker constructors' FOR SHARE, then use a
+-- separate statement to recheck offers committed while waiting (READ COMMITTED).
+-- Mark the auction closed to makers too: a transaction started before its
+-- deadline must not insert a late offer after these reservations were released.
+CREATE FUNCTION rfqhub_release_taker_source_1(p_source_taker_id INTEGER)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+	v_child_id INTEGER;
+BEGIN
+	PERFORM 1 FROM rfqhub_bundles_taker_1
+	WHERE id = p_source_taker_id AND NOT was_offramped FOR UPDATE;
+	IF NOT FOUND THEN RETURN; END IF;
+	FOR v_child_id IN
+		SELECT s.bundle_taker_id FROM rfqhub_bundles_taker_sources_1 AS s
+		WHERE s.source_taker_id = p_source_taker_id AND s.released_at IS NULL
+		UNION
+		SELECT child.id FROM rfqhub_bundles_taker_1 AS child
+		WHERE child.source = p_source_taker_id AND NOT child.sources_released
+		ORDER BY 1
+	LOOP
+		PERFORM 1 FROM rfqhub_bundles_taker_1 WHERE id = v_child_id FOR UPDATE;
+		IF rfqhub_taker_sources_releasable_1(v_child_id) THEN
+			UPDATE rfqhub_bundles_taker_1 SET sources_released = TRUE
+			WHERE id = v_child_id;
+			UPDATE rfqhub_bundles_taker_sources_1 SET released_at = CURRENT_TIMESTAMP
+			WHERE bundle_taker_id = v_child_id AND source_taker_id = p_source_taker_id
+				AND released_at IS NULL;
+		END IF;
+	END LOOP;
+END;
+$$;
+
 -- Read-only snapshot of available taker funding, not a reservation or guarantee.
 -- Keep source eligibility identical to rfqhub_create_bundle_taker_1's candidate
 -- query. Maker winnings are deliberately excluded; get_spendable stays pot-only
@@ -273,13 +347,7 @@ AS $$
 		AND t.end_source_amt > 0 AND NOT t.was_offramped
 		AND t.structure IS NOT NULL AND m.structure IS NOT NULL
 		AND m.was_chosen = TRUE AND m.was_correct = FALSE
-		AND NOT EXISTS (
-			SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
-			WHERE s.source_taker_id = t.id
-		)
-		AND NOT EXISTS (
-			SELECT 1 FROM rfqhub_bundles_taker_1 AS child WHERE child.source = t.id
-		);
+		AND NOT rfqhub_taker_source_reserved_1(t.id);
 $$;
 
 CREATE FUNCTION rfqhub_get_or_create_timestamplet_1 (
@@ -407,13 +475,7 @@ BEGIN
 			AND t.end_source_amt > 0 AND NOT t.was_offramped
 			AND t.structure IS NOT NULL AND m.structure IS NOT NULL
 			AND m.was_chosen = TRUE AND m.was_correct = FALSE
-			AND NOT EXISTS (
-				SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
-				WHERE s.source_taker_id = t.id
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM rfqhub_bundles_taker_1 AS child WHERE child.source = t.id
-			)
+			AND NOT rfqhub_taker_source_reserved_1(t.id)
 		ORDER BY t.end_source_amt ASC, t.id ASC
 	LOOP
 		EXIT WHEN v_amt = p_max_amt;
@@ -440,10 +502,11 @@ BEGIN
 			OR v_maker.structure IS NULL
 			OR NOT EXISTS (SELECT 1 FROM rfqhub_timestamplets_1 AS ts
 				WHERE ts.id = v_maker.timestamplet_id)
-			OR EXISTS (SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
-				WHERE s.source_taker_id = v_source.id)
-			OR EXISTS (SELECT 1 FROM rfqhub_bundles_taker_1 AS child
-				WHERE child.source = v_source.id) THEN
+			OR rfqhub_taker_source_reserved_1(v_source.id) THEN
+			CONTINUE;
+		END IF;
+		PERFORM rfqhub_release_taker_source_1(v_source.id);
+		IF rfqhub_taker_source_reserved_1(v_source.id) THEN
 			CONTINUE;
 		END IF;
 		v_take := LEAST(v_source.end_source_amt, p_max_amt - v_amt);
@@ -606,20 +669,15 @@ BEGIN
 	IF p_amt_to_take <= 0 OR p_amt_to_take > v_source.end_source_amt THEN
 		RAISE EXCEPTION 'invalid amount % for source taker balance %', p_amt_to_take, v_source.end_source_amt;
 	END IF;
-	IF EXISTS (
-		SELECT 1 FROM rfqhub_bundles_taker_1 AS t
-		WHERE t.source = p_source_taker_id
-	) OR EXISTS (
-		SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
-		WHERE s.source_taker_id = p_source_taker_id
-	) THEN
+	PERFORM rfqhub_release_taker_source_1(p_source_taker_id);
+	IF rfqhub_taker_source_reserved_1(p_source_taker_id) THEN
 		RAISE EXCEPTION 'source taker % was already consumed', p_source_taker_id;
 	END IF;
 
 	v_remainder := v_source.end_source_amt - p_amt_to_take;
 	-- Any leftover elected not to reinvest is returned to the pot by the
 	-- contract, which emits an event that the graph projects. We do not apply
-	-- a local delta to the absolute onramped balance; it is purely
+	-- a local credit to the summed onramped balance; it is purely
 	-- informational here for the caller.
 
 	INSERT INTO rfqhub_bundles_taker_user_count_1 AS c (addr, count)
@@ -685,7 +743,7 @@ BEGIN
 	IF v_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_taker.maker_id;
 	END IF;
-	IF v_taker.deadline <= CURRENT_TIMESTAMP THEN
+	IF v_taker.deadline <= CURRENT_TIMESTAMP OR v_taker.sources_released THEN
 		RAISE EXCEPTION 'taker % deadline has passed', p_bundle_taker_id;
 	END IF;
 	v_available := rfqhub_get_spendable_1(p_acc_addr, v_taker.asset);
@@ -790,7 +848,7 @@ BEGIN
 	IF v_target_taker.maker_id IS NOT NULL THEN
 		RAISE EXCEPTION 'taker % already selected maker %', p_bundle_taker_id, v_target_taker.maker_id;
 	END IF;
-	IF v_target_taker.deadline <= CURRENT_TIMESTAMP THEN
+	IF v_target_taker.deadline <= CURRENT_TIMESTAMP OR v_target_taker.sources_released THEN
 		RAISE EXCEPTION 'taker % deadline has passed', p_bundle_taker_id;
 	END IF;
 	IF v_source.end_source_amt IS NULL THEN
@@ -821,7 +879,7 @@ BEGIN
 	v_remainder := v_source.end_source_amt - p_amt_to_take;
 	-- Any leftover elected not to reinvest is returned to the pot by the
 	-- contract, which emits an event that the graph projects. We do not apply
-	-- a local delta to the absolute onramped balance; it is purely
+	-- a local credit to the summed onramped balance; it is purely
 	-- informational here for the caller.
 
 	INSERT INTO rfqhub_bundles_maker_user_count_1 AS c (addr, count)
@@ -1189,13 +1247,8 @@ BEGIN
 		IF v_maker.was_correct IS DISTINCT FROM FALSE OR v_taker.end_source_amt <= 0 THEN
 			RAISE EXCEPTION 'taker % is not the winner', v_taker.id;
 		END IF;
-		IF EXISTS (
-			SELECT 1 FROM rfqhub_bundles_taker_1 AS t
-			WHERE t.source = v_taker.id
-		) OR EXISTS (
-			SELECT 1 FROM rfqhub_bundles_taker_sources_1 AS s
-			WHERE s.source_taker_id = v_taker.id
-		) THEN
+		PERFORM rfqhub_release_taker_source_1(v_taker.id);
+		IF rfqhub_taker_source_reserved_1(v_taker.id) THEN
 			RAISE EXCEPTION 'taker result % was already consumed as a source', v_taker.id;
 		END IF;
 
@@ -1246,6 +1299,9 @@ DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_structure_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_1;
 DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1;
 DROP FUNCTION IF EXISTS rfqhub_get_available_balance_1(ADDRESS, ADDRESS);
+DROP FUNCTION IF EXISTS rfqhub_release_taker_source_1(INTEGER);
+DROP FUNCTION IF EXISTS rfqhub_taker_source_reserved_1(INTEGER);
+DROP FUNCTION IF EXISTS rfqhub_taker_sources_releasable_1(INTEGER);
 DROP FUNCTION IF EXISTS rfqhub_get_spendable_1;
 DROP FUNCTION IF EXISTS rfqhub_inspect_bundle_taker_1;
 
@@ -1265,4 +1321,5 @@ DROP FUNCTION IF EXISTS rfqhub_protect_immutable_timestamplet_1;
 DROP TYPE IF EXISTS RFQHUB_OUTCOME;
 
 DROP INDEX IF EXISTS rfqhub_oracles_ninelives_prices_3_lookup_idx;
-DROP INDEX IF EXISTS rfqhub_events_balance_changed_latest_idx;
+DROP VIEW IF EXISTS rfqhub_onramped_balances_1;
+DROP INDEX IF EXISTS rfqhub_events_balance_changed_account_asset_idx;

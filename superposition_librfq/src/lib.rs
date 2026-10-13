@@ -68,7 +68,9 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 compile_error!("arbos and arbitrum cannot both be enabled");
 
 /// Onramping topic that's emitted on the underlying balance changing
-/// due to onrampind and offramping.
+/// due to onramping and offramping. For users, this is the amount that
+/// was just onramped, so that the system works on a cumulatively
+/// increasing system.
 pub const TOPIC_BALANCE_CHANGED: U =
     const_keccak256(b"BalanceChanged(address,address,uint64,uint256)");
 

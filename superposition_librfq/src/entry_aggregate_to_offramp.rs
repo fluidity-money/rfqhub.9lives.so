@@ -94,7 +94,7 @@ pub unsafe fn recurse_aggregate_src(
                     }
                     let asset_u: U = asset.addr().into();
                     let amt_u = U::from(*amt);
-                    let user_bal = storage::onramped_bal::checked_sub_res(
+                    storage::onramped_bal::checked_sub_res(
                         &asset_u,
                         &acc_addr.into(),
                         &amt_u,
@@ -103,7 +103,7 @@ pub unsafe fn recurse_aggregate_src(
                     event_emit_bal_update(
                         *acc_addr,
                         asset.addr(),
-                        user_bal,
+                        U::ZERO,
                         storage::global_bal::get(&asset_u),
                     );
                     amt_cumulative
@@ -146,13 +146,18 @@ pub unsafe fn recurse_aggregate_src(
                         .ok_or(Dis::CheckedSubUnderflow)?;
                     let asset_u = U::from(asset);
                     storage::hash_taker_leftover::set(&source_hash, &asset_u, &U::ZERO);
-                    let user_bal = storage::onramped_bal::checked_add_res(
+                    storage::onramped_bal::checked_add_res(
                         &asset_u,
                         &acc.into(),
                         &amount_to_onramp.into(),
                         "aggregated result remainder to onramped bal",
                     )?;
-                    event_emit_bal_update(acc, asset, user_bal, storage::global_bal::get(&asset_u));
+                    event_emit_bal_update(
+                        acc,
+                        asset,
+                        amount_to_onramp.into(),
+                        storage::global_bal::get(&asset_u),
+                    );
                     amt_cumulative
                         .checked_add(*amt_to_take)
                         .ok_or_else(|| Dis::CheckedAddOverflow.into())
@@ -393,12 +398,7 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     let leftover_u = U::from(leftover);
     let global_bal =
         storage::global_bal::checked_sub_res(&asset_u, &leftover_u, "aggregate offramp").unwrap();
-    event_emit_bal_update(
-        acc_addr,
-        asset,
-        storage::onramped_bal::get(&asset_u, &acc_addr.into()),
-        global_bal,
-    );
+    event_emit_bal_update(acc_addr, asset, U::ZERO, global_bal);
     assert!(
         call_eip20::transfer(asset, sender, &leftover_u),
         "eip20 transfer err"

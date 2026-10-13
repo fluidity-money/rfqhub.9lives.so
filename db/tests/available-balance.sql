@@ -7,6 +7,11 @@ CREATE TEMP TABLE rfqhub_events_balance_changed (
 	id BIGSERIAL PRIMARY KEY, account_addr ADDRESS, asset ADDRESS,
 	amount BIGINT, version BIGINT
 );
+-- Shadow the persistent view too: it otherwise remains bound to the real feed.
+CREATE TEMP VIEW rfqhub_onramped_balances_1 AS
+SELECT account_addr, asset, SUM(amount) AS amount
+FROM rfqhub_events_balance_changed
+GROUP BY account_addr, asset;
 
 DO $$
 DECLARE
@@ -29,8 +34,8 @@ BEGIN
 		'available balance must return BIGINT and be STABLE';
 	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 0, 'empty balance';
 	INSERT INTO rfqhub_events_balance_changed (account_addr, asset, amount, version)
-	VALUES (v_account, v_asset, 50, 1), (v_account, v_asset, 100, 2);
-	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100, 'pure latest pot';
+	VALUES (v_account, v_asset, 50, 1), (v_account, v_asset, 50, 2);
+	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100, 'sum equal-valued onramp credits';
 
 	-- The open child reserves 20 pot units and later models consumed sources.
 	INSERT INTO rfqhub_bundles_taker_1 (
@@ -86,7 +91,8 @@ BEGIN
 				acc_addr, user_id, source, asset, amt, min_offer, is_up,
 				price_target, outcome, ms_ts, deadline, expiry
 			) VALUES (v_account, 101, v_taker, v_asset, 10, 0, TRUE,
-				100, 'BitcoinPrice', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+				100, 'BitcoinPrice', 1, CURRENT_TIMESTAMP + INTERVAL '1 hour',
+				CURRENT_TIMESTAMP + INTERVAL '2 hours');
 		END IF;
 		IF v_case IN ('eligible', 'eligible second') THEN
 			v_expected := v_expected + 30;

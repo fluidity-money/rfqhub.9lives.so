@@ -5,7 +5,7 @@ interface IRfqhub9Lives {
     event BalanceChanged(
         address indexed recipient,
         address indexed asset,
-        uint64 indexed userBal,
+        uint256 indexed userBal,
         uint256 version
     );
 

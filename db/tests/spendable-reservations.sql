@@ -9,6 +9,11 @@ CREATE TEMP TABLE rfqhub_events_balance_changed (
 	id BIGSERIAL PRIMARY KEY, account_addr ADDRESS, asset ADDRESS,
 	amount BIGINT, version BIGINT
 );
+-- Shadow the persistent view too: it otherwise remains bound to the real feed.
+CREATE TEMP VIEW rfqhub_onramped_balances_1 AS
+SELECT account_addr, asset, SUM(amount) AS amount
+FROM rfqhub_events_balance_changed
+GROUP BY account_addr, asset;
 
 DO $$
 DECLARE
@@ -23,8 +28,8 @@ DECLARE
 	v_i INTEGER;
 BEGIN
 	INSERT INTO rfqhub_events_balance_changed (account_addr, asset, amount, version)
-	VALUES (v_taker_account, v_asset, 100, 1),
-		(v_maker_account, v_asset, 100, 1),
+	VALUES (v_taker_account, v_asset, 50, 1), (v_taker_account, v_asset, 50, 2),
+		(v_maker_account, v_asset, 50, 1), (v_maker_account, v_asset, 50, 2),
 		(v_rejected_account, v_asset, 100, 1);
 
 	-- An open auction reserves pot, but an expired auction with NO makers releases.
@@ -95,18 +100,19 @@ BEGIN
 			'withdrawal request must not release maker pot';
 	END LOOP;
 
-	-- Unrelated deposits for the SAME account/asset are newer events, but contain
-	-- no bundle link: credit only the new absolute balance, never release stakes.
+	-- Unrelated deposits for the SAME account/asset add credits, but contain
+	-- no bundle link: never release matched stakes.
 	INSERT INTO rfqhub_events_balance_changed (account_addr, asset, amount, version)
-	VALUES (v_taker_account, v_asset, 110, 2), (v_maker_account, v_asset, 110, 2);
+	VALUES (v_taker_account, v_asset, 10, 3), (v_maker_account, v_asset, 10, 3);
 	ASSERT rfqhub_get_spendable_1(v_taker_account, v_asset) = 70,
 		'unrelated BalanceChanged must not release taker reservations';
 	ASSERT rfqhub_get_spendable_1(v_maker_account, v_asset) = 50,
 		'unrelated BalanceChanged must not release maker reservations';
 
-	-- If indexed balance falls below reservations, keep the existing zero floor.
-	INSERT INTO rfqhub_events_balance_changed (account_addr, asset, amount, version)
-	VALUES (v_taker_account, v_asset, 1, 3), (v_maker_account, v_asset, 1, 3);
+	-- Model missing indexed credits (fixture-only removal), not a debit event.
+	-- Reservations above the indexed onramp sum retain the existing zero floor.
+	DELETE FROM rfqhub_events_balance_changed
+	WHERE account_addr IN (v_taker_account, v_maker_account) AND asset = v_asset;
 	ASSERT rfqhub_get_spendable_1(v_taker_account, v_asset) = 0;
 	ASSERT rfqhub_get_spendable_1(v_maker_account, v_asset) = 0;
 	RAISE NOTICE 'PASS: conclude, withdrawal, unrelated balance events, expired unmatched, rejected makers, zero floor';
