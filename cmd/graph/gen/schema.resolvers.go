@@ -900,16 +900,18 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 	if !ethCommon.IsHexAddress(addr) {
 		return "", fmt.Errorf("not valid address")
 	}
-	addr = strings.ToLower(addr)
-	addr_ := ethCommon.HexToAddress(addr)
+	accAddr := acc_types.GetClientAddr(
+		r.AccountsFactoryAddr,
+		ethCommon.HexToAddress(addr),
+	)
 	slog.Debug("Getting spendable for",
-		"addr", addr_,
+		"acc addr", accAddr,
 		"usdc addr", usdcAddr(),
 		"snowflake", snowflake,
 	)
 	row := r.Db.QueryRowContext(ctx, `
 SELECT * FROM rfqhub_get_available_balance_1($1, $2)`,
-		addr,
+		accAddr,
 		usdcAddr(),
 	)
 	var amt int64

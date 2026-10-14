@@ -110,6 +110,8 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	UNIQUE (acc_addr, user_id)
 );
 
+ALTER PUBLICATION rfqhub_websocket ADD TABLE rfqhub_bundles_taker_1;
+
 -- An aggregate result is all-or-nothing, with at most one active allocation.
 -- Retain legacy source links after an expired, makerless auction releases them.
 CREATE UNIQUE INDEX rfqhub_bundles_taker_source_uq
@@ -176,6 +178,8 @@ CREATE TABLE rfqhub_bundles_maker_1 (
 	end_source_amt BIGINT CHECK (end_source_amt >= 0),
 	UNIQUE (acc_addr, user_id)
 );
+
+ALTER PUBLICATION rfqhub_websocket ADD TABLE rfqhub_bundles_maker_1;
 
 ALTER TABLE rfqhub_bundles_taker_sources_1
 	ADD FOREIGN KEY (bundle_maker_id) REFERENCES rfqhub_bundles_maker_1 (id);
