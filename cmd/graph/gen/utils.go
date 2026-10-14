@@ -23,6 +23,8 @@ import (
 
 const ProgDalek = "/bin/rfqhub-ed25519-dalek-ph"
 
+const DefaultDecayRate = 0
+
 func isDryrun(x *bool) bool {
 	if x != nil && *x {
 		return true

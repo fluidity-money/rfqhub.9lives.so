@@ -295,7 +295,8 @@ FROM rfqhub_create_bundle_taker_1(
 	$8,
 	$9,
 	$10,
-	$11
+	$11,
+	$12
 )`,
 		accAddrStr,
 		usdcAddr(),
@@ -308,6 +309,7 @@ FROM rfqhub_create_bundle_taker_1(
 		expiry,
 		minOffer_,
 		deadline,
+		DefaultDecayRate,
 	)
 	if err != nil {
 		slog.Error("Error scanning taker bundle rows from the function",

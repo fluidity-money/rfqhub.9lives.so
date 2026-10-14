@@ -75,7 +75,8 @@ type BundleTaker struct {
 	AccAddr     string            `json:"acc_addr"`
 	Asset       string            `json:"asset"`
 	Amt         int64             `json:"amt"`
-	MinOffer    int64             `json:"min_offer"`
+	MinOffer    *int64            `json:"min_offer"`
+	DecayRate   json.Number       `json:"decay_rate"`
 	IsUp        bool              `json:"is_up"`
 	PriceTarget int64             `json:"price_target"`
 	Outcome     string            `json:"outcome"`
@@ -139,6 +140,7 @@ SELECT json_build_object(
 			'asset', t.asset,
 			'amt', t.amt,
 			'min_offer', t.min_offer,
+			'decay_rate', t.decay_rate,
 			'is_up', t.is_up,
 			'price_target', t.price_target,
 			'outcome', t.outcome,
