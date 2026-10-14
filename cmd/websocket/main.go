@@ -348,6 +348,9 @@ func main() {
 			log.Fatal(err)
 		}
 		defer l.Close()
+		if err := os.Chmod(HttpUnixSocket, 0777); err != nil {
+			log.Fatalf("chmod websocket socket: %v", err)
+		}
 		log.Fatal(http.Serve(l, nil))
 	}()
 	defer cdcConn.Close()
