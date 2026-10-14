@@ -148,7 +148,7 @@ fn maker {
 	maxamount=$3
 
 	jq -cn \
-		--arg query 'mutation SubmitMaker($bundleTakerId: Int!, $minAmount: String!, $maxAmount: String!) { submitBundleMakerFromOnrampedAmountServerSig(bundleTakerId: $bundleTakerId, minAmount: $minAmount, maxAmount: $maxAmount) { id bundleMakerId } }' \
+		--arg query 'mutation SubmitMaker($bundleTakerId: Int!, $minAmount: String!, $maxAmount: String!) { submitBundleMakerServerSig(bundleTakerId: $bundleTakerId, minAmount: $minAmount, maxAmount: $maxAmount) { id bundleMakerId } }' \
 		--arg bundletakerid $bundletakerid \
 		--arg minamount $minamount \
 		--arg maxamount $maxamount \

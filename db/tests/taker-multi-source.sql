@@ -346,6 +346,10 @@ BEGIN
 		IF SQLERRM NOT LIKE '%deadline has passed%' THEN RAISE; END IF;
 	END;
 
+	-- Restore the expired fixture after the late-maker check so its pot stake
+	-- does not remain reserved during the independent legacy-history checks.
+	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_mixed;
+
 	-- Legacy-only historical records (without a junction row) also release.
 	v_source := pg_temp.seed_winner(v_account, v_asset, 20);
 	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_1(
