@@ -105,9 +105,8 @@ BEGIN
 	END LOOP;
 	ASSERT rfqhub_get_spendable_1(v_account, v_asset) = 80, 'spendable must remain pot-only';
 	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 140, 'pot plus multiple eligible winnings';
-	-- Other account has exactly one eligible taker result; its maker winnings
-	-- must not contribute (its pot is zero, regardless of maker reservations).
-	ASSERT rfqhub_get_available_balance_1(v_other, v_asset) = 30, 'exclude maker winnings';
+	-- Other account owns both the foreign taker result and the maker winner.
+	ASSERT rfqhub_get_available_balance_1(v_other, v_asset) = 60, 'include maker winnings';
 	ASSERT rfqhub_get_available_balance_1(v_account, v_other_asset) = 30, 'asset isolation';
 
 	SELECT jsonb_build_array(
@@ -124,7 +123,7 @@ BEGIN
 		(SELECT jsonb_agg(to_jsonb(s) ORDER BY source_taker_id) FROM rfqhub_bundles_taker_sources_1 s)
 	) INTO v_after;
 	ASSERT v_before IS NOT DISTINCT FROM v_after, 'balance reads must not consume or modify sources';
-	RAISE NOTICE 'PASS: zero, pure pot, reservations, multiple winnings, maker exclusion, no read consumption';
+	RAISE NOTICE 'PASS: zero, pure pot, reservations, both winning sides, no read consumption';
 END;
 $$;
 ROLLBACK;

@@ -269,7 +269,7 @@ func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount
 	// if the bundle is NULL we assume it came from the pot. It returns
 	// the timestamplet that we can use for the construction so we can make
 	// the aggregate for the item there.
-	rows, err := r.Db.Query(`
+	rows, err := r.Db.QueryContext(ctx, `
 SELECT
 	bundle_taker_id,
 	amt,
@@ -709,11 +709,19 @@ func (r *mutationResolver) SubmitBundleMakerServerSig(ctx context.Context, bundl
 	msTs := pickMsTs()
 	msTsI := msTsBytesToInt(msTs)
 	// Note that we always assume a USDC asset for now, and always the onramped amount.
-	row := r.Db.QueryRowContext(ctx, `
+	rows, err := r.Db.QueryContext(ctx, `
 SELECT
 	bundle_maker_id,
 	maker_amt,
-	structure_bundle_taker
+	taker_outcome,
+	structure_bundle_taker,
+	source_amt,
+	source_maker_id,
+	bundle_maker_structure,
+	timestamplet_id,
+	timestamplet_end_value,
+	timestamplet_time,
+	timestamplet_outcome
 FROM
 	rfqhub_create_bundle_maker_1(
 		$1,
@@ -728,37 +736,114 @@ FROM
 		maxAmount_,
 		msTsI,
 	)
-	// Note that we don't select the source for now, always assuming
-	// that the amount being used here is the onramped source:
-	var (
-		makerAmt    uint64
-		makerId     int
-		bundleTaker types.BundleTaker
-	)
-	if err = row.Scan(&makerId, &makerAmt, &bundleTaker); err != nil {
-		slog.Error("Error scanning taker signature for constructing the BundleTaker",
+	if err != nil {
+		slog.Error("Error creating maker bundle in the database",
 			"err", err,
-			"snowflake", snowflake,
+			"acc addr", accAddrStr,
 			"bundle taker id", bundleTakerID,
+			"min amount", minAmount_,
+			"max amount", maxAmount_,
+			"ms ts", msTsI,
 		)
-		return nil, fmt.Errorf("error scanning BundleMakerSig")
+		return nil, fmt.Errorf("creating maker bundle")
+	}
+	var (
+		bundleMakerId int
+		bundleMakerAmt uint64
+		bundleTaker types.BundleTaker
+		sources        []types.OnrampingSource
+	)
+	for rows.Next() {
+		var (
+			inputAmt             uint64
+			makerId              *uint64
+			makerStruct          *types.BundleMaker
+			timestampletId       *int
+			timestampletEndValue *uint64
+			timestampletTime     sql.NullTime
+			takerOutcome, timestampletOutcome  *model.Outcome
+		)
+		err = rows.Scan(
+			&bundleMakerId,
+			&bundleMakerAmt,
+			&takerOutcome,
+			&bundleTaker,
+			&inputAmt,
+			&makerId,
+			&makerStruct,
+			&timestampletId,
+			&timestampletEndValue,
+			&timestampletTime,
+			&timestampletOutcome,
+		)
+		if err != nil {
+			slog.Error("Error scanning the result from rfqhub_create_bundle_taker_1",
+				"err", err,
+				"acc addr", accAddrStr,
+				"usdc addr", usdcAddr(),
+				"min amount", minAmount_,
+				"max amount", maxAmount_,
+				"ms ts i", msTsI,
+			)
+			return nil, fmt.Errorf("creating bundle scan")
+		}
+		// If the maker id is null, then we assume that the source came from a
+		// pot:
+		if makerId == nil {
+			sources = append(sources, types.OnrampingSource{
+				OnchainPot: &types.OnchainPotArgs{
+					AccAddr: accAddr,
+					Amt:     inputAmt,
+					Asset:   types.AssetUsdc,
+				},
+			})
+		} else {
+			// If this is not null, then the case is that
+			// this is a bundle. We assume everything here
+			// isn't null:
+			timestampletOutcome_ := modelOutcomeToOutcome(*timestampletOutcome)
+			aggregateArgs := types.AggregateArgs{
+				Maker: *makerStruct,
+				Timestamplet: types.Timestamplet{
+					TimestampletTime:    uint32(timestampletTime.Time.Unix()),
+					TimestampletOutcome: timestampletOutcome_,
+					TimestampletVal:     *timestampletEndValue,
+				},
+			}
+			aggregateServerSig, err := signer.ServerSignAggregate(types.ServerSigningArgs{
+				Aggregate: &aggregateArgs,
+			})
+			if err != nil {
+				slog.Error("Error signing aggregate args",
+					"err", err,
+					"args", aggregateArgs,
+				)
+				return nil, fmt.Errorf("signing aggregate args")
+			}
+			aggregateEnum := types.AggregateEnum{
+				Args: &types.Aggregate{
+					Args:      aggregateArgs,
+					ServerSig: aggregateServerSig,
+				},
+			}
+			// We always append the argument type of the onramping source variant,
+			// since when the contract reverts for seeing a duplicated hash, it will
+			// revert in a way that the client should know to modify its calldata to
+			// use the hash form.
+			sources = append(sources, types.OnrampingSource{
+				AggregatedResult: &types.AggregatedResultArgs{
+					From:      aggregateEnum,
+					AmtToTake: inputAmt,
+				},
+			})
+		}
 	}
 	bundleMakerArgs := types.BundleMakerArgs{
-		Src: []types.OnrampingSource{{
-			OnchainPot: &types.OnchainPotArgs{
-				AccAddr: accAddr,
-				Amt:     makerAmt,
-			},
-		}},
+		Src: sources,
 		Taker: bundleTaker,
 		MsTs:  msTs,
 		Acc:   accAddr,
 	}
-	slog.Debug("Started to insert a BundleMaker",
-		"maker id", makerId,
-		"maker amt", makerAmt,
-		"bundle bundle taker", bundleTaker,
-	)
 	signingArgs := types.ClientSigningArgs{
 		AccAddr: accAddr,
 		Bundle: types.ClientSigningBundle{
@@ -777,7 +862,7 @@ FROM
 	makerUserSigX := hex.EncodeToString(makerUserSig[:])
 	_, err = r.Db.Exec(`
 SELECT rfqhub_set_bundle_maker_structure_1($1, $2)`,
-		makerId,
+		bundleMakerId,
 		types.BundleMaker{
 			Args: bundleMakerArgs,
 			Sig:  makerUserSig,
@@ -787,14 +872,14 @@ SELECT rfqhub_set_bundle_maker_structure_1($1, $2)`,
 		slog.Error("Error setting bundle maker user signature",
 			"err", err,
 			"snowflake", snowflake,
-			"bundle maker id", makerId,
+			"bundle maker id", bundleMakerId,
 			"user signature", makerUserSigX,
 		)
 		return nil, fmt.Errorf("error setting signature")
 	}
 	return &model.BundleMakerInfo{
-		ID:            strconv.Itoa(makerId),
-		BundleMakerID: makerId,
+		ID:            strconv.Itoa(bundleMakerId),
+		BundleMakerID: bundleMakerId,
 	}, nil
 }
 
@@ -833,7 +918,7 @@ SELECT * FROM rfqhub_get_available_balance_1($1, $2)`,
 
 // OpenAuctions is the resolver for the openAuctions field.
 func (r *queryResolver) OpenAuctions(ctx context.Context) (*model.OpenAuctions, error) {
-	rows, err := r.Db.Query(`
+	rows, err := r.Db.QueryContext(ctx, `
 SELECT updated_by, acc_addr, amt, is_up, price_target, outcome, expiry, id, auction_deadline
 FROM rfqhub_bundles_taker_ongoing_1`,
 	)

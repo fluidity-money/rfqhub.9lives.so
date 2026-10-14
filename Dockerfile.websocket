@@ -17,4 +17,4 @@ FROM alpine:3.24 AS runner
 
 COPY --from=build-go /usr/src/rfqhub.9lives.so/rfqhub-websocket /bin/rfqhub-websocket
 
-ENTRYPOINT ["/bin/rfqhub-graph"]
+ENTRYPOINT ["/bin/rfqhub-websocket"]

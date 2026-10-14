@@ -101,6 +101,423 @@ mod test {
         assert_eq!(eip20_balance(asset_addr, account), U::ZERO);
     }
 
+    #[cfg(feature = "arbos")]
+    fn set_owner(account: [u8; 20], owner: [u8; 20]) {
+        storage_store(
+            &slot_map(&U::from(account), &const_keccak256(b"arbos.recipient")),
+            &U::from(owner),
+        );
+    }
+
+    fn pot(account: [u8; 20], amount: u64, asset: Asset) -> OnrampingSource {
+        OnrampingSource::OnchainPot(OnchainPotArgs {
+            acc_addr: account,
+            amt: amount,
+            asset,
+        })
+    }
+
+    fn reuse(from: AggregateEnum, amount: u64) -> OnrampingSource {
+        OnrampingSource::AggregatedResult(AggregatedResultArgs {
+            from: Box::new(from),
+            amt_to_take: amount,
+        })
+    }
+
+    fn game(
+        taker_src: OnrampingSource,
+        maker_src: OnrampingSource,
+        maker: [u8; 20],
+        taker_wins: bool,
+        generation: u8,
+    ) -> Aggregate {
+        Aggregate {
+            args: AggregateArgs {
+                maker: BundleMaker {
+                    args: BundleMakerArgs {
+                        src: vec![maker_src],
+                        taker: BundleTaker {
+                            args: BundleTakerArgs {
+                                src: vec![taker_src],
+                                expiry: u32::from(generation) * 10,
+                                ms_ts: [generation; 6],
+                                is_up: true,
+                                price_target: 100,
+                                outcome: Outcome::BitcoinPrice,
+                            },
+                            sig: Sig::default(),
+                        },
+                        ms_ts: [generation; 6],
+                        acc: maker,
+                    },
+                    sig: Sig::default(),
+                },
+                timestamplet: Timestamplet {
+                    timestamplet_time: u32::from(generation) * 10,
+                    timestamplet_outcome: Outcome::BitcoinPrice,
+                    // Equality deliberately exercises the maker-winning boundary.
+                    timestamplet_val: if taker_wins { 101 } else { 100 },
+                },
+            },
+            server_sig: Sig::default(),
+        }
+    }
+
+    fn hash(aggregate: &Aggregate) -> U {
+        SignableAggregateArgs::from(&aggregate.args).hash.into()
+    }
+
+    fn settle(aggregate: &Aggregate) -> entry_aggregate_to_offramp::RecurseAggregateArgs {
+        unsafe {
+            recurse_aggregate_args(
+                &Imm::default(),
+                &aggregate.args,
+                &SignableAggregateArgs::from(&aggregate.args),
+                &aggregate.server_sig,
+            )
+            .unwrap()
+        }
+    }
+
+    fn assert_leftovers(hash: U, asset: Asset, taker: u64, maker: u64) {
+        assert_eq!(
+            storage::hash_taker_leftover::get(&hash, &asset.u()),
+            U::from(taker)
+        );
+        assert_eq!(
+            storage::hash_maker_leftover::get(&hash, &asset.u()),
+            U::from(maker)
+        );
+    }
+
+    #[test]
+    fn all_winner_to_role_transitions_args_hash_and_nested_generations() {
+        transition_matrix(false);
+    }
+
+    // Bobcat's current std host has chain ID 0 and no chain-ID setter. Keep
+    // real withdrawal coverage explicit, but do not confuse it with native
+    // settlement coverage or pretend account-contract calls are emulated.
+    #[cfg(feature = "arbos")]
+    #[test]
+    #[ignore = "requires a host with chain ID 31337 for ArbOS recipient hints"]
+    fn transition_matrix_through_real_offramp() {
+        transition_matrix(true);
+    }
+
+    // Uses real onramping and recursive resolution; signatures are disabled.
+    fn transition_matrix(withdraw: bool) {
+        for asset in [Asset::USDC, Asset::ARB, Asset::WETH] {
+            for prior_taker_wins in [false, true] {
+                for new_is_taker in [false, true] {
+                    for by_hash in [false, true] {
+                        for take in [17, 50] {
+                            flush_guard_fresh(|| {
+                                std_eip20::reset_balances();
+                                set_contract_address(CONTRACT);
+                                let (a, b, c, d) = ([0x21; 20], [0x22; 20], [0x23; 20], [0x24; 20]);
+                                let owner = [0x31; 20];
+                                let winner = if prior_taker_wins { a } else { b };
+                                for (account, amount) in [(a, 30), (b, 20), (c, 7), (d, 9)] {
+                                    onramp(asset, account, amount);
+                                }
+                                #[cfg(feature = "arbos")]
+                                set_owner(winner, owner);
+                                let first = game(
+                                    pot(a, 30, asset),
+                                    pot(b, 20, asset),
+                                    b,
+                                    prior_taker_wins,
+                                    1,
+                                );
+                                let first_hash = hash(&first);
+                                let from = if by_hash {
+                                    let result = settle(&first);
+                                    assert_eq!(result.taker_acc, a);
+                                    assert_eq!(result.maker_acc, b);
+                                    assert_leftovers(
+                                        first_hash,
+                                        asset,
+                                        if prior_taker_wins { 50 } else { 0 },
+                                        if prior_taker_wins { 0 } else { 50 },
+                                    );
+                                    AggregateEnum::Hash(first_hash)
+                                } else {
+                                    AggregateEnum::Args(Box::new(first.clone()))
+                                };
+                                let source = reuse(from.clone(), take);
+                                let second = if new_is_taker {
+                                    game(source, pot(c, 7, asset), c, true, 2)
+                                } else {
+                                    game(pot(c, 7, asset), source, winner, false, 2)
+                                };
+                                let second_hash = hash(&second);
+                                // Hash mode posts an intermediate generation. Args mode
+                                // leaves both earlier generations nested in one call.
+                                let second_from = if by_hash {
+                                    let result = settle(&second);
+                                    assert_eq!(
+                                        result.taker_acc,
+                                        if new_is_taker { winner } else { c }
+                                    );
+                                    assert_eq!(
+                                        result.maker_acc,
+                                        if new_is_taker { c } else { winner }
+                                    );
+                                    assert_leftovers(
+                                        second_hash,
+                                        asset,
+                                        if new_is_taker { take + 7 } else { 0 },
+                                        if new_is_taker { 0 } else { take + 7 },
+                                    );
+                                    AggregateEnum::Hash(second_hash)
+                                } else {
+                                    AggregateEnum::Args(Box::new(second.clone()))
+                                };
+                                // Switch roles once more, retain the same winning account,
+                                // and leave a second nonzero remainder in its pot.
+                                let third = if new_is_taker {
+                                    game(
+                                        pot(d, 9, asset),
+                                        reuse(second_from, take),
+                                        winner,
+                                        false,
+                                        3,
+                                    )
+                                } else {
+                                    game(reuse(second_from, take), pot(d, 9, asset), d, true, 3)
+                                };
+                                let third_hash = hash(&third);
+                                if withdraw {
+                                    #[cfg(feature = "arbos")]
+                                    {
+                                        set_msg_sender(owner);
+                                        entry_aggregate_to_offramp::entry_aggregate_to_offramp(
+                                            &Imm::default(),
+                                            AggregateEnum::Args(Box::new(third)),
+                                            !new_is_taker,
+                                        );
+                                    }
+                                    #[cfg(not(feature = "arbos"))]
+                                    panic!("withdrawal requires the ArbOS owner backend");
+                                } else {
+                                    let result = settle(&third);
+                                    assert_eq!(result.asset, asset.addr());
+                                    assert_eq!(
+                                        result.taker_acc,
+                                        if new_is_taker { d } else { winner }
+                                    );
+                                    assert_eq!(
+                                        result.maker_acc,
+                                        if new_is_taker { winner } else { d }
+                                    );
+                                    assert_eq!(
+                                        result.taker_leftover,
+                                        if new_is_taker { 0 } else { take + 9 }
+                                    );
+                                    assert_eq!(
+                                        result.maker_leftover,
+                                        if new_is_taker { take + 9 } else { 0 }
+                                    );
+                                }
+                                for h in [first_hash, second_hash] {
+                                    assert_leftovers(h, asset, 0, 0);
+                                }
+                                assert_leftovers(
+                                    third_hash,
+                                    asset,
+                                    if withdraw || new_is_taker {
+                                        0
+                                    } else {
+                                        take + 9
+                                    },
+                                    if withdraw || !new_is_taker {
+                                        0
+                                    } else {
+                                        take + 9
+                                    },
+                                );
+                                let remainder = 50 - take + 7;
+                                for account in [a, b, c, d] {
+                                    assert_eq!(
+                                        storage::onramped_bal::get(&asset.u(), &account.into()),
+                                        U::from(if account == winner { remainder } else { 0 })
+                                    );
+                                }
+                                let paid = if withdraw { take + 9 } else { 0 };
+                                assert_eq!(eip20_balance(asset.addr(), owner), U::from(paid));
+                                assert_eq!(
+                                    eip20_balance(asset.addr(), CONTRACT),
+                                    U::from(66 - paid)
+                                );
+                                assert_eq!(
+                                    storage::global_bal::get(&asset.u()),
+                                    U::from(66 - paid)
+                                );
+                                assert_eq!(remainder + take + 9, 66);
+                                // A consumed source cannot be used again, even for zero.
+                                // Full Args fail the seen-hash check; Hash fails winner lookup.
+                                for amount in [0, take] {
+                                    let replay = game(
+                                        reuse(from.clone(), amount),
+                                        pot(c, 0, asset),
+                                        c,
+                                        true,
+                                        4,
+                                    );
+                                    let error = unsafe {
+                                        recurse_aggregate_args(
+                                            &Imm::default(),
+                                            &replay.args,
+                                            &SignableAggregateArgs::from(&replay.args),
+                                            &replay.server_sig,
+                                        )
+                                    }
+                                    .unwrap_err();
+                                    assert_eq!(
+                                        error.dis,
+                                        if by_hash {
+                                            error::Dis::CheckedSubUnderflow
+                                        } else {
+                                            error::Dis::HashAlreadySeen
+                                        }
+                                    );
+                                    assert_eq!(
+                                        storage::onramped_bal::get(&asset.u(), &winner.into()),
+                                        U::from(remainder)
+                                    );
+                                    assert_eq!(eip20_balance(asset.addr(), owner), U::from(paid));
+                                }
+                                std_eip20::reset_balances();
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn recursive_sources_reject_mixed_owner_or_asset() {
+        for by_hash in [false, true] {
+            for wrong_asset in [false, true] {
+                for prior_taker_wins in [false, true] {
+                    flush_guard_fresh(|| {
+                        std_eip20::reset_balances();
+                        set_contract_address(CONTRACT);
+                        let (a, b, c) = ([0x21; 20], [0x22; 20], [0x23; 20]);
+                        onramp(Asset::USDC, a, 30);
+                        onramp(Asset::USDC, b, 20);
+                        let first = game(
+                            pot(a, 30, Asset::USDC),
+                            pot(b, 20, Asset::USDC),
+                            b,
+                            prior_taker_wins,
+                            1,
+                        );
+                        let winner = if prior_taker_wins { a } else { b };
+                        let from = if by_hash {
+                            settle(&first);
+                            AggregateEnum::Hash(hash(&first))
+                        } else {
+                            AggregateEnum::Args(Box::new(first))
+                        };
+                        let mut next = game(
+                            pot(
+                                if wrong_asset { winner } else { c },
+                                0,
+                                if wrong_asset { Asset::ARB } else { Asset::USDC },
+                            ),
+                            pot(c, 0, Asset::USDC),
+                            c,
+                            true,
+                            2,
+                        );
+                        next.args.maker.args.taker.args.src.push(reuse(from, 17));
+                        let error = unsafe {
+                            recurse_aggregate_args(
+                                &Imm::default(),
+                                &next.args,
+                                &SignableAggregateArgs::from(&next.args),
+                                &next.server_sig,
+                            )
+                        }
+                        .unwrap_err();
+                        assert_eq!(
+                            error.dis,
+                            if wrong_asset {
+                                error::Dis::InconsistentAsset
+                            } else {
+                                error::Dis::InconsistentAccount
+                            }
+                        );
+                        // Host Err does not roll back earlier recursive writes. Each
+                        // rejection has fresh storage; this is not an atomicity test.
+                        assert_eq!(eip20_balance(Asset::USDC.addr(), CONTRACT), U::from(50));
+                        std_eip20::reset_balances();
+                    });
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "arbos")]
+    #[test]
+    #[ignore = "requires a host with chain ID 31337 for ArbOS recipient hints"]
+    fn settled_winnings_require_selected_accounts_owner() {
+        for taker_wins in [false, true] {
+            flush_guard_fresh(|| {
+                std_eip20::reset_balances();
+                set_contract_address(CONTRACT);
+                let (a, b, owner) = ([0x21; 20], [0x22; 20], [0x31; 20]);
+                onramp(Asset::USDC, a, 30);
+                onramp(Asset::USDC, b, 20);
+                set_owner(a, if taker_wins { owner } else { [0x32; 20] });
+                set_owner(b, if taker_wins { [0x32; 20] } else { owner });
+                let first = game(
+                    pot(a, 30, Asset::USDC),
+                    pot(b, 20, Asset::USDC),
+                    b,
+                    taker_wins,
+                    1,
+                );
+                settle(&first);
+                let from = AggregateEnum::Hash(hash(&first));
+                set_msg_sender([0x32; 20]);
+                let error = entry_aggregate_to_offramp::entry_recurse_aggregate_enum(
+                    &Imm::default(),
+                    &from,
+                    taker_wins,
+                )
+                .unwrap_err();
+                assert_eq!(
+                    error.dis,
+                    if taker_wins {
+                        error::Dis::SenderNotTaker
+                    } else {
+                        error::Dis::SenderNotMaker
+                    }
+                );
+                assert_leftovers(
+                    hash(&first),
+                    Asset::USDC,
+                    if taker_wins { 50 } else { 0 },
+                    if taker_wins { 0 } else { 50 },
+                );
+                set_msg_sender(owner);
+                entry_aggregate_to_offramp::entry_aggregate_to_offramp(
+                    &Imm::default(),
+                    from,
+                    taker_wins,
+                );
+                assert_eq!(eip20_balance(Asset::USDC.addr(), owner), U::from(50));
+                assert_eq!(storage::global_bal::get(&Asset::USDC.u()), U::ZERO);
+                assert_leftovers(hash(&first), Asset::USDC, 0, 0);
+                std_eip20::reset_balances();
+            });
+        }
+    }
+
     proptest! {
         // This fixture writes the ArbOS recipient-hint slot directly. The non-ArbOS
         // backend resolves owners by calling the account contract, which Bobcat's
@@ -282,12 +699,18 @@ mod test {
                                     .get_mut(&inverted.initial_taker.acc_addr)
                                     .unwrap() -= inverted.initial_taker.amt;
                             } else {
-                                let prior_return = submissions[settled_index - 1]
-                                    .price_move
-                                    .expected_return;
-                                *expected_onramped
-                                    .get_mut(&inverted.initial_taker.acc_addr)
-                                    .unwrap() += prior_return - settled.taker_amt;
+                                let prior = &submissions[settled_index - 1];
+                                let prior_return = prior.taker_amt + prior.maker_amt;
+                                let prior_owner = submissions[..settled_index].iter().fold(
+                                    inverted.initial_taker.acc_addr,
+                                    |owner, node| if node.price_move.expected_return > 0 {
+                                        owner
+                                    } else {
+                                        node.maker_acc
+                                    },
+                                );
+                                *expected_onramped.get_mut(&prior_owner).unwrap() +=
+                                    prior_return - settled.taker_amt;
                             }
                         }
                         next_unsettled = index + 1;
@@ -321,21 +744,18 @@ mod test {
                 }
 
                 let final_hash = latest_hash.expect("the final chunk is always posted");
-                let (amount, taker, result_asset) = final_result.unwrap();
-                assert_eq!(result_asset, asset_addr);
+                let result = final_result.unwrap();
+                assert_eq!(result.asset, asset_addr);
+                let amount = result.taker_leftover + result.maker_leftover;
+                let pot_total = expected_onramped.values().copied().sum::<u64>();
+                assert_eq!(pot_total + amount, total_deposited);
+                assert_eq!(storage::global_bal::get(&asset.u()), U::from(total_deposited));
 
-                // Model the final user offramp through the std EIP-20 implementation.
-                storage::hash_taker_leftover::set(
-                    &final_hash,
-                    &U::from(asset_addr),
-                    &U::ZERO,
-                );
-                assert!(call_eip20::transfer(asset_addr, taker, &U::from(amount)));
-                assert_eq!(eip20_balance(asset_addr, taker), U::from(amount));
-                assert_eq!(
-                    eip20_balance(asset_addr, CONTRACT),
-                    U::from(total_deposited - amount)
-                );
+                // No synthetic transfer: native settlement leaves the final
+                // claim in escrow. The ignored ArbOS matrix covers real withdrawal
+                // once its host can satisfy the recipient-hint chain-ID guard.
+                assert_leftovers(final_hash, asset, result.taker_leftover, result.maker_leftover);
+                assert_eq!(eip20_balance(asset_addr, CONTRACT), U::from(total_deposited));
 
                 std_eip20::reset_balances();
             });

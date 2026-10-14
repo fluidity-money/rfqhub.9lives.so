@@ -96,13 +96,13 @@ BEGIN
 	ASSERT (SELECT count(*) = 3 FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_bundle);
 	ASSERT rfqhub_get_spendable_1(v_account, v_asset) = 100;
 
-	-- New consumption must block both legacy reinvestment and offramp.
+	-- New consumption must block reuse (only the 100-unit pot remains) and offramp.
 	BEGIN
-		PERFORM * FROM rfqhub_create_bundle_taker_from_aggregate_1(
-			v_big, 1, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
-		RAISE EXCEPTION 'legacy reinvestment unexpectedly accepted';
+		PERFORM * FROM rfqhub_create_bundle_taker_1(
+			v_account, v_asset, 101, 101, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+		RAISE EXCEPTION 'duplicate reinvestment unexpectedly accepted';
 	EXCEPTION WHEN raise_exception THEN
-		IF SQLERRM NOT LIKE '%already consumed%' THEN RAISE; END IF;
+		IF SQLERRM NOT LIKE 'insufficient taker funding:%' THEN RAISE; END IF;
 	END;
 	BEGIN
 		PERFORM * FROM rfqhub_mark_winner_as_offramped_1(v_account, TRUE, v_big);
@@ -153,15 +153,15 @@ BEGIN
 	ASSERT (SELECT count = v_count FROM rfqhub_bundles_taker_user_count_1 WHERE addr = v_account);
 	ASSERT NOT EXISTS (SELECT 1 FROM rfqhub_bundles_taker_sources_1 WHERE source_taker_id = v_source);
 
-	-- Legacy consumption also enters the shared ledger and never reserves pot.
-	SELECT * INTO STRICT v_r FROM rfqhub_create_bundle_taker_from_aggregate_1(
-		v_source, 2, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
-	ASSERT v_r.amt = 2 AND v_r.amt_to_onramp_amt = 3;
-	ASSERT (SELECT source = v_source AND pot_funded_amt = 0 FROM rfqhub_bundles_taker_1 WHERE id = v_r.bundle_taker_id);
+	-- Partial consumption enters the shared ledger and never reserves pot.
+	SELECT * INTO STRICT v_r FROM rfqhub_create_bundle_taker_1(
+		v_account, v_asset, 2, 2, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	ASSERT v_r.amt = 2 AND v_r.source_amt = 2;
+	ASSERT (SELECT source IS NULL AND pot_funded_amt = 0 FROM rfqhub_bundles_taker_1 WHERE id = v_r.bundle_taker_id);
 	ASSERT (SELECT source_amt = 2 AND amt_to_onramp_amt = 3 FROM rfqhub_bundles_taker_sources_1 WHERE source_taker_id = v_source);
 	ASSERT rfqhub_get_spendable_1(v_account, v_asset) = 0;
 
-	-- Offramped, foreign-account/asset, unsigned and maker-winning rows are ineligible.
+	-- Offramped, foreign-account/asset, unsigned and foreign maker winners are ineligible.
 	v_source := pg_temp.seed_winner(v_account, v_asset, 9);
 	PERFORM * FROM rfqhub_mark_winner_as_offramped_1(v_account, TRUE, v_source);
 	PERFORM pg_temp.seed_winner('0x00000000000000000000000000000000000000a2', v_asset, 9);
@@ -267,18 +267,18 @@ BEGIN
 	ASSERT (SELECT released_at IS NULL FROM rfqhub_bundles_taker_sources_1
 		WHERE bundle_taker_id = v_mixed AND source_taker_id = v_source);
 
-	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_from_aggregate_1(
-		v_source, 50, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_1(
+		v_account, v_asset, 50, 50, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
 	ASSERT (SELECT released_at IS NOT NULL AND source_amt = 200 AND amt_to_onramp_amt = 0
 		FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_mixed AND source_taker_id = v_source);
 	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100;
 	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_legacy;
 	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 300,
 		'expired partial allocation restores full winnings, not just 50';
-	SELECT bundle_taker_id INTO STRICT v_next FROM rfqhub_create_bundle_taker_from_aggregate_1(
-		v_source, 75, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
-	ASSERT (SELECT source = v_source AND sources_released FROM rfqhub_bundles_taker_1 WHERE id = v_legacy),
-		'legacy unique index must allow reuse without deleting its historical source';
+	SELECT bundle_taker_id INTO STRICT v_next FROM rfqhub_create_bundle_taker_1(
+		v_account, v_asset, 75, 75, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	ASSERT (SELECT sources_released FROM rfqhub_bundles_taker_1 WHERE id = v_legacy),
+		'reuse preserves the released consumer and ledger history';
 	ASSERT (SELECT count(*) = 3 FROM rfqhub_bundles_taker_sources_1 WHERE source_taker_id = v_source);
 	ASSERT (SELECT count(*) = 1 FROM rfqhub_bundles_taker_sources_1
 		WHERE source_taker_id = v_source AND released_at IS NULL);
@@ -299,11 +299,11 @@ BEGIN
 	ASSERT (SELECT maker_id IS NULL FROM rfqhub_bundles_taker_1 WHERE id = v_next);
 	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 100;
 	BEGIN
-		PERFORM * FROM rfqhub_create_bundle_taker_from_aggregate_1(
-			v_source, 1, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+		PERFORM * FROM rfqhub_create_bundle_taker_1(
+			v_account, v_asset, 101, 101, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
 		RAISE EXCEPTION 'maker-backed allocation unexpectedly released';
 	EXCEPTION WHEN raise_exception THEN
-		IF SQLERRM NOT LIKE '%already consumed%' THEN RAISE; END IF;
+		IF SQLERRM NOT LIKE 'insufficient taker funding:%' THEN RAISE; END IF;
 	END;
 	BEGIN
 		PERFORM * FROM rfqhub_mark_winner_as_offramped_1(v_account, TRUE, v_source);
@@ -328,11 +328,11 @@ BEGIN
 	ASSERT NOT EXISTS (SELECT 1 FROM rfqhub_bundles_taker_sources_1
 		WHERE source_taker_id = v_source AND released_at IS NULL);
 	BEGIN
-		PERFORM * FROM rfqhub_create_bundle_taker_from_aggregate_1(
-			v_source, 1, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+		PERFORM * FROM rfqhub_create_bundle_taker_1(
+			v_account, v_asset, 101, 101, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
 		RAISE EXCEPTION 'withdrawn source unexpectedly reused';
 	EXCEPTION WHEN raise_exception THEN
-		IF SQLERRM NOT LIKE '%already offramped%' THEN RAISE; END IF;
+		IF SQLERRM NOT LIKE 'insufficient taker funding:%' THEN RAISE; END IF;
 	END;
 
 	-- A future deadline simulates a maker transaction whose CURRENT_TIMESTAMP
@@ -348,8 +348,9 @@ BEGIN
 
 	-- Legacy-only historical records (without a junction row) also release.
 	v_source := pg_temp.seed_winner(v_account, v_asset, 20);
-	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_from_aggregate_1(
-		v_source, 5, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	SELECT bundle_taker_id INTO STRICT v_legacy FROM rfqhub_create_bundle_taker_1(
+		v_account, v_asset, 5, 5, TRUE, 100, 'BitcoinPrice', 1, v_expiry, 0, v_deadline);
+	UPDATE rfqhub_bundles_taker_1 SET source = v_source WHERE id = v_legacy;
 	DELETE FROM rfqhub_bundles_taker_sources_1 WHERE bundle_taker_id = v_legacy;
 	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_legacy;
 	ASSERT rfqhub_get_available_balance_1(v_account, v_asset) = 120;

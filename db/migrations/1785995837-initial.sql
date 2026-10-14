@@ -76,7 +76,7 @@ CREATE TRIGGER rfqhub_timestamplet_no_delete_1
 	FOR EACH ROW EXECUTE FUNCTION rfqhub_protect_immutable_timestamplet_1();
 
 -- source is retained for the legacy single-aggregate constructor. New bundles
--- use rfqhub_bundles_taker_sources_1 for any number of previous taker winnings.
+-- use rfqhub_bundles_taker_sources_1 for any number of previous winnings.
 -- pot_funded_amt alone reserves onchain funds; aggregate remainders are never
 -- credited locally (only a later BalanceChanged event can credit the pot).
 CREATE TABLE rfqhub_bundles_taker_1 (
@@ -114,10 +114,11 @@ CREATE UNIQUE INDEX rfqhub_bundles_taker_source_uq
 	ON rfqhub_bundles_taker_1 (source)
 	WHERE source IS NOT NULL AND NOT sources_released;
 
--- Historical name: this is the shared TAKer-winnings reservation ledger for
--- both new roles and the legacy single-source taker path. The legacy source
--- pointer is not an additional reservation. Released allocations retain amounts
--- and remainders for historical reconstruction; uniqueness spans both roles.
+-- Historical name: this shared winnings ledger supports either prior winning
+-- side and either new role. source_taker_id is the aggregate parent identity,
+-- not the winner's role; one winner per aggregate means one active source key.
+-- The legacy source pointer is not an additional reservation. Released rows
+-- retain amounts and remainders for reconstruction; uniqueness spans both roles.
 CREATE TABLE rfqhub_bundles_taker_sources_1 (
 	id BIGSERIAL PRIMARY KEY,
 	bundle_taker_id INTEGER REFERENCES rfqhub_bundles_taker_1 (id),
@@ -331,6 +332,12 @@ RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
 		SELECT 1 FROM rfqhub_bundles_taker_1 AS child
 		WHERE child.source = p_source_taker_id AND NOT child.sources_released
 			AND NOT rfqhub_taker_sources_releasable_1(child.id)
+	) OR EXISTS (
+		-- Legacy maker.source names the prior selected maker, not its parent.
+		SELECT 1 FROM rfqhub_bundles_maker_1 AS child
+		JOIN rfqhub_bundles_taker_1 AS parent ON parent.maker_id = child.source
+		WHERE parent.id = p_source_taker_id
+			AND child.was_chosen IS DISTINCT FROM FALSE
 	);
 $$;
 
@@ -345,7 +352,7 @@ DECLARE
 	v_child_id INTEGER;
 BEGIN
 	PERFORM 1 FROM rfqhub_bundles_taker_1
-	WHERE id = p_source_taker_id AND NOT was_offramped FOR UPDATE;
+	WHERE id = p_source_taker_id FOR UPDATE;
 	IF NOT FOUND THEN RETURN; END IF;
 	FOR v_child_id IN
 		SELECT s.bundle_taker_id FROM rfqhub_bundles_taker_sources_1 AS s
@@ -368,9 +375,9 @@ BEGIN
 END;
 $$;
 
--- Read-only snapshot of available taker funding, not a reservation or guarantee.
+-- Read-only snapshot of available funding, not a reservation or guarantee.
 -- Keep source eligibility identical to rfqhub_create_bundle_taker_1's candidate
--- query. Maker winnings are deliberately excluded; get_spendable stays pot-only
+-- query. Either prior winning side is eligible; get_spendable stays pot-only
 -- so constructors cannot count these aggregate sources twice.
 CREATE FUNCTION rfqhub_get_available_balance_1 (
 	p_acc_addr ADDRESS,
@@ -381,15 +388,16 @@ LANGUAGE sql
 STABLE
 AS $$
 	SELECT (rfqhub_get_spendable_1(p_acc_addr, p_asset)
-		+ COALESCE(SUM(t.end_source_amt), 0))::BIGINT
+		+ COALESCE(SUM(CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END), 0))::BIGINT
 	FROM rfqhub_bundles_taker_1 AS t
 	JOIN rfqhub_bundles_maker_1 AS m
 		ON m.id = t.maker_id AND m.bundle_taker_id = t.id
 	JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
-	WHERE t.acc_addr = p_acc_addr AND t.asset = p_asset
-		AND t.end_source_amt > 0 AND NOT t.was_offramped
+	WHERE CASE WHEN m.was_correct THEN m.acc_addr ELSE t.acc_addr END = p_acc_addr AND t.asset = p_asset
+		AND CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END > 0
+		AND NOT CASE WHEN m.was_correct THEN m.was_offramped ELSE t.was_offramped END
 		AND t.structure IS NOT NULL AND m.structure IS NOT NULL
-		AND m.was_chosen = TRUE AND m.was_correct = FALSE
+		AND m.was_chosen = TRUE AND m.was_correct IS NOT NULL
 		AND NOT rfqhub_taker_source_reserved_1(t.id);
 $$;
 
@@ -478,6 +486,9 @@ DECLARE
 	v_amt BIGINT := 0;
 	v_pot_amt BIGINT;
 	v_take BIGINT;
+	v_winner_amt BIGINT;
+	v_winner_acc ADDRESS;
+	v_winner_offramped BOOLEAN;
 	v_user_id INTEGER;
 	v_bundle_taker_id INTEGER;
 	v_expiry TIMESTAMP;
@@ -514,12 +525,13 @@ BEGIN
 		JOIN rfqhub_bundles_maker_1 AS m
 			ON m.id = t.maker_id AND m.bundle_taker_id = t.id
 		JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
-		WHERE t.acc_addr = p_acc_addr AND t.asset = p_asset
-			AND t.end_source_amt > 0 AND NOT t.was_offramped
+		WHERE CASE WHEN m.was_correct THEN m.acc_addr ELSE t.acc_addr END = p_acc_addr AND t.asset = p_asset
+			AND CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END > 0
+			AND NOT CASE WHEN m.was_correct THEN m.was_offramped ELSE t.was_offramped END
 			AND t.structure IS NOT NULL AND m.structure IS NOT NULL
-			AND m.was_chosen = TRUE AND m.was_correct = FALSE
+			AND m.was_chosen = TRUE AND m.was_correct IS NOT NULL
 			AND NOT rfqhub_taker_source_reserved_1(t.id)
-		ORDER BY t.end_source_amt ASC, t.id ASC
+		ORDER BY CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END ASC, t.id ASC
 	LOOP
 		EXIT WHEN v_amt = p_max_amt;
 		-- Never lock a joined maker before its parent. Offramp and both taker
@@ -535,13 +547,16 @@ BEGIN
 		IF NOT FOUND THEN
 			CONTINUE;
 		END IF;
-		IF v_source.acc_addr IS DISTINCT FROM p_acc_addr
+		v_winner_amt := CASE WHEN v_maker.was_correct THEN v_maker.end_source_amt ELSE v_source.end_source_amt END;
+		v_winner_acc := CASE WHEN v_maker.was_correct THEN v_maker.acc_addr ELSE v_source.acc_addr END;
+		v_winner_offramped := CASE WHEN v_maker.was_correct THEN v_maker.was_offramped ELSE v_source.was_offramped END;
+		IF v_winner_acc IS DISTINCT FROM p_acc_addr
 			OR v_source.asset IS DISTINCT FROM p_asset
-			OR v_source.end_source_amt IS NULL OR v_source.end_source_amt <= 0
-			OR v_source.was_offramped OR v_source.structure IS NULL
+			OR v_winner_amt IS NULL OR v_winner_amt <= 0
+			OR v_winner_offramped OR v_source.structure IS NULL
 			OR v_maker.bundle_taker_id IS DISTINCT FROM v_source.id
 			OR v_maker.was_chosen IS DISTINCT FROM TRUE
-			OR v_maker.was_correct IS DISTINCT FROM FALSE
+			OR v_maker.was_correct IS NULL
 			OR v_maker.structure IS NULL
 			OR NOT EXISTS (SELECT 1 FROM rfqhub_timestamplets_1 AS ts
 				WHERE ts.id = v_maker.timestamplet_id)
@@ -552,10 +567,10 @@ BEGIN
 		IF rfqhub_taker_source_reserved_1(v_source.id) THEN
 			CONTINUE;
 		END IF;
-		v_take := LEAST(v_source.end_source_amt, p_max_amt - v_amt);
+		v_take := LEAST(v_winner_amt, p_max_amt - v_amt);
 		v_source_ids := array_append(v_source_ids, v_source.id);
 		v_source_amts := array_append(v_source_amts, v_take);
-		v_remainders := array_append(v_remainders, v_source.end_source_amt - v_take);
+		v_remainders := array_append(v_remainders, v_winner_amt - v_take);
 		v_amt := v_amt + v_take;
 	END LOOP;
 
@@ -633,8 +648,9 @@ BEGIN
 END;
 $$;
 
--- Prior taker winnings can fund either new role. Maker winnings cannot be
--- executed by the contract's recursive funding path and are not candidates here.
+-- Either prior winning side can fund either new role. The historical ledger
+-- name source_taker_id denotes the aggregate parent, not the winning side:
+-- there is only one winner per aggregate, hence one active reservation key.
 CREATE FUNCTION rfqhub_create_bundle_maker_1 (
 	p_acc_addr ADDRESS,
 	p_bundle_taker_id INTEGER,
@@ -663,6 +679,9 @@ DECLARE
 	v_amt BIGINT := 0;
 	v_pot_amt BIGINT;
 	v_take BIGINT;
+	v_winner_amt BIGINT;
+	v_winner_acc ADDRESS;
+	v_winner_offramped BOOLEAN;
 	v_user_id INTEGER;
 	v_bundle_maker_id INTEGER;
 	v_candidate RECORD;
@@ -701,12 +720,13 @@ BEGIN
 		JOIN rfqhub_bundles_maker_1 AS m
 			ON m.id = t.maker_id AND m.bundle_taker_id = t.id
 		JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
-		WHERE t.acc_addr = p_acc_addr AND t.asset = v_taker.asset
-			AND t.end_source_amt > 0 AND NOT t.was_offramped
+		WHERE CASE WHEN m.was_correct THEN m.acc_addr ELSE t.acc_addr END = p_acc_addr AND t.asset = v_taker.asset
+			AND CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END > 0
+			AND NOT CASE WHEN m.was_correct THEN m.was_offramped ELSE t.was_offramped END
 			AND t.structure IS NOT NULL AND m.structure IS NOT NULL
-			AND m.was_chosen = TRUE AND m.was_correct = FALSE
+			AND m.was_chosen = TRUE AND m.was_correct IS NOT NULL
 			AND NOT rfqhub_taker_source_reserved_1(t.id)
-		ORDER BY t.end_source_amt ASC, t.id ASC
+		ORDER BY CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END ASC, t.id ASC
 	LOOP
 		EXIT WHEN v_amt = p_max_amt;
 		SELECT t.* INTO v_source FROM rfqhub_bundles_taker_1 AS t
@@ -715,13 +735,16 @@ BEGIN
 		SELECT m.* INTO v_maker FROM rfqhub_bundles_maker_1 AS m
 		WHERE m.id = v_source.maker_id FOR UPDATE;
 		IF NOT FOUND THEN CONTINUE; END IF;
-		IF v_source.acc_addr IS DISTINCT FROM p_acc_addr
+		v_winner_amt := CASE WHEN v_maker.was_correct THEN v_maker.end_source_amt ELSE v_source.end_source_amt END;
+		v_winner_acc := CASE WHEN v_maker.was_correct THEN v_maker.acc_addr ELSE v_source.acc_addr END;
+		v_winner_offramped := CASE WHEN v_maker.was_correct THEN v_maker.was_offramped ELSE v_source.was_offramped END;
+		IF v_winner_acc IS DISTINCT FROM p_acc_addr
 			OR v_source.asset IS DISTINCT FROM v_taker.asset
-			OR v_source.end_source_amt IS NULL OR v_source.end_source_amt <= 0
-			OR v_source.was_offramped OR v_source.structure IS NULL
+			OR v_winner_amt IS NULL OR v_winner_amt <= 0
+			OR v_winner_offramped OR v_source.structure IS NULL
 			OR v_maker.bundle_taker_id IS DISTINCT FROM v_source.id
 			OR v_maker.was_chosen IS DISTINCT FROM TRUE
-			OR v_maker.was_correct IS DISTINCT FROM FALSE
+			OR v_maker.was_correct IS NULL
 			OR v_maker.structure IS NULL
 			OR NOT EXISTS (SELECT 1 FROM rfqhub_timestamplets_1 AS ts
 				WHERE ts.id = v_maker.timestamplet_id)
@@ -730,10 +753,10 @@ BEGIN
 		END IF;
 		PERFORM rfqhub_release_taker_source_1(v_source.id);
 		IF rfqhub_taker_source_reserved_1(v_source.id) THEN CONTINUE; END IF;
-		v_take := LEAST(v_source.end_source_amt, p_max_amt - v_amt);
+		v_take := LEAST(v_winner_amt, p_max_amt - v_amt);
 		v_source_ids := array_append(v_source_ids, v_source.id);
 		v_source_amts := array_append(v_source_amts, v_take);
-		v_remainders := array_append(v_remainders, v_source.end_source_amt - v_take);
+		v_remainders := array_append(v_remainders, v_winner_amt - v_take);
 		v_amt := v_amt + v_take;
 	END LOOP;
 
@@ -1122,6 +1145,8 @@ BEGIN
 		RAISE EXCEPTION 'sender side cannot be null';
 	END IF;
 
+	-- Serialize winner withdrawal with either funding constructor for this owner.
+	PERFORM pg_advisory_xact_lock(hashtextextended(p_acc_addr::TEXT, 1785995837));
 	SELECT t.* INTO STRICT v_taker
 	FROM rfqhub_bundles_taker_1 AS t
 	WHERE t.id = p_bundle_taker_id
@@ -1179,10 +1204,8 @@ BEGIN
 		IF v_maker.was_correct IS DISTINCT FROM TRUE OR v_maker.end_source_amt <= 0 THEN
 			RAISE EXCEPTION 'maker % is not the winner', v_maker.id;
 		END IF;
-		IF EXISTS (
-			SELECT 1 FROM rfqhub_bundles_maker_1 AS m
-			WHERE m.source = v_maker.id
-		) THEN
+		PERFORM rfqhub_release_taker_source_1(v_taker.id);
+		IF rfqhub_taker_source_reserved_1(v_taker.id) THEN
 			RAISE EXCEPTION 'maker result % was already consumed as a source', v_maker.id;
 		END IF;
 
