@@ -904,7 +904,7 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 		r.AccountsFactoryAddr,
 		ethCommon.HexToAddress(addr),
 	)
-	accAddrS := accAddr.String()
+	accAddrS := strings.ToLower(accAddr.String())
 	slog.Debug("Getting spendable for",
 		"acc addr", accAddrS,
 		"usdc addr", usdcAddr(),
