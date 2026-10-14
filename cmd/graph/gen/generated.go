@@ -65,7 +65,7 @@ type ComplexityRoot struct {
 		Conclude                   func(childComplexity int, bundleTakerID int) int
 		ConcludedCalldata          func(childComplexity int, bundleTakerID int, isTaker bool) int
 		CreateAccountExec          func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
-		CreateAuctionServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) int
+		CreateAuctionServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer *string) int
 		InspectBundleTakerID       func(childComplexity int, bundleTakerID int) int
 		OnrampAmount               func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
 		SubmitBundleMakerServerSig func(childComplexity int, bundleTakerID int, minAmount string, maxAmount string) int
@@ -101,7 +101,7 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	CreateAccountExec(ctx context.Context, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) (bool, error)
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
-	CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error)
+	CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer *string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
 	Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
 	ConcludedCalldata(ctx context.Context, bundleTakerID int, isTaker bool) (string, error)
@@ -261,7 +261,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.CreateAuctionServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int), args["deadline"].(int), args["minOffer"].(string)), true
+		return e.ComplexityRoot.Mutation.CreateAuctionServerSig(childComplexity, args["minAmount"].(string), args["maxAmount"].(string), args["isUp"].(bool), args["priceTarget"].(string), args["outcome"].(model.Outcome), args["expiry"].(int), args["deadline"].(int), args["minOffer"].(*string)), true
 	case "Mutation.inspectBundleTakerId":
 		if e.ComplexityRoot.Mutation.InspectBundleTakerID == nil {
 			break
@@ -641,6 +641,9 @@ type Mutation {
 
     isUp: Boolean!,
 
+    """
+    Price target that this is up or down for.
+    """
     priceTarget: String!,
 
     outcome: Outcome!,
@@ -657,8 +660,9 @@ type Mutation {
 
     """
     Minimum offer of amount to take from the Maker in exchange for this liquidity.
+    Null if we're preferring a decay strategy ran by the system.
     """
-    minOffer: String!,
+    minOffer: String,
   ): AuctionCreatedResult!
 
   """
@@ -1066,8 +1070,8 @@ func (ec *executionContext) field_Mutation_createAuctionServerSig_args(ctx conte
 	}
 	args["deadline"] = arg6
 	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "minOffer",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNString2string(ctx, v)
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
 		})
 	if err != nil {
 		return nil, err
@@ -1612,7 +1616,7 @@ func (ec *executionContext) _Mutation_createAuctionServerSig(ctx context.Context
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAuctionServerSig(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(int), fc.Args["deadline"].(int), fc.Args["minOffer"].(string))
+			return ec.Resolvers.Mutation().CreateAuctionServerSig(ctx, fc.Args["minAmount"].(string), fc.Args["maxAmount"].(string), fc.Args["isUp"].(bool), fc.Args["priceTarget"].(string), fc.Args["outcome"].(model.Outcome), fc.Args["expiry"].(int), fc.Args["deadline"].(int), fc.Args["minOffer"].(*string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *model.AuctionCreatedResult) graphql.Marshaler {

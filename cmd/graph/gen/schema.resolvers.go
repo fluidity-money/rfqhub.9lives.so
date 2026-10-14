@@ -209,7 +209,7 @@ func (r *mutationResolver) OnrampAmount(ctx context.Context, amt string, permit 
 }
 
 // CreateAuctionServerSig is the resolver for the createAuctionFromOnrampedAmountServerSig field.
-func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer string) (*model.AuctionCreatedResult, error) {
+func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer *string) (*model.AuctionCreatedResult, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	// Create an auction from a BundleTaker by taking what we can
 	// from the database, then constructing the blob signature
@@ -240,9 +240,13 @@ func (r *mutationResolver) CreateAuctionServerSig(ctx context.Context, minAmount
 	if err != nil {
 		return nil, fmt.Errorf("price target: %v", err)
 	}
-	minOffer_, err := strconv.ParseUint(minOffer, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("min offer: %v", err)
+	var minOffer_ *uint64
+	if minOffer != nil {
+		m, err := strconv.ParseUint(*minOffer, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("min offer: %v", err)
+		}
+		*minOffer_ = m
 	}
 	curTs := int(time.Now().Unix())
 	if curTs > expiry {
@@ -748,20 +752,20 @@ FROM
 		return nil, fmt.Errorf("creating maker bundle")
 	}
 	var (
-		bundleMakerId int
+		bundleMakerId  int
 		bundleMakerAmt uint64
-		bundleTaker types.BundleTaker
+		bundleTaker    types.BundleTaker
 		sources        []types.OnrampingSource
 	)
 	for rows.Next() {
 		var (
-			inputAmt             uint64
-			makerId              *uint64
-			makerStruct          *types.BundleMaker
-			timestampletId       *int
-			timestampletEndValue *uint64
-			timestampletTime     sql.NullTime
-			takerOutcome, timestampletOutcome  *model.Outcome
+			inputAmt                          uint64
+			makerId                           *uint64
+			makerStruct                       *types.BundleMaker
+			timestampletId                    *int
+			timestampletEndValue              *uint64
+			timestampletTime                  sql.NullTime
+			takerOutcome, timestampletOutcome *model.Outcome
 		)
 		err = rows.Scan(
 			&bundleMakerId,
@@ -839,7 +843,7 @@ FROM
 		}
 	}
 	bundleMakerArgs := types.BundleMakerArgs{
-		Src: sources,
+		Src:   sources,
 		Taker: bundleTaker,
 		MsTs:  msTs,
 		Acc:   accAddr,
