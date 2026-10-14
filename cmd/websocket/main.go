@@ -5,16 +5,20 @@
 package main
 
 import (
-	"log"
-	"strconv"
-	"net/http"
 	"context"
-	"os"
-	"log/slog"
+	"encoding/json"
 	"fmt"
-	"strings"
+	"log"
+	"log/slog"
+	"net"
+	"net/http"
 	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 
+	types "github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/websocket"
 
 	cdc "github.com/Trendyol/go-pq-cdc"
@@ -25,12 +29,73 @@ import (
 	cdcSlot "github.com/Trendyol/go-pq-cdc/pq/slot"
 )
 
+const HttpUnixSocket = "/run/rfqhub.9lives.so/websocket.sock"
+
 const (
-	EnvTimescaleUri = "SPN_TIMESCALE"
+	EnvTimescaleUri          = "SPN_TIMESCALE"
 	EnvPublicationName       = "SPN_PUBLICATION_NAME"
 	EnvPublicationSlot       = "SPN_PUBLICATION_SLOT"
 	EnvPublicationMetricSlot = "SPN_PUBLICATION_PORT"
 )
+
+type Response struct {
+	BundleTaker *BundleTaker
+}
+
+type BundleTaker struct {
+	ID          int32             `json:"id"`
+	AccAddr     string            `json:"acc_addr"`
+	Asset       string            `json:"asset"`
+	Amt         int64             `json:"amt"`
+	MinOffer    int64             `json:"min_offer"`
+	IsUp        bool              `json:"is_up"`
+	PriceTarget int64             `json:"price_target"`
+	Outcome     string            `json:"outcome"`
+	Deadline    time.Time         `json:"deadline"`
+	Expiry      time.Time         `json:"expiry"`
+	Structure   types.BundleTaker `json:"structure"`
+}
+
+func bundleTakerFromUpdate(row map[string]any) (*BundleTaker, bool, error) {
+	rawStructure, set := row["structure"]
+	if !set || rawStructure == nil {
+		return nil, false, nil
+	}
+	var structure types.BundleTaker
+	switch value := rawStructure.(type) {
+	case []byte:
+		if err := json.Unmarshal(value, &structure); err != nil {
+			return nil, false, fmt.Errorf("decode structure: %w", err)
+		}
+	case string:
+		if err := json.Unmarshal([]byte(value), &structure); err != nil {
+			return nil, false, fmt.Errorf("decode structure: %w", err)
+		}
+	default:
+		data, err := json.Marshal(value)
+		if err != nil {
+			return nil, false, fmt.Errorf("encode structure: %w", err)
+		}
+		if err := json.Unmarshal(data, &structure); err != nil {
+			return nil, false, fmt.Errorf("decode structure: %w", err)
+		}
+	}
+	normalised := make(map[string]any, len(row))
+	for key, value := range row {
+		normalised[key] = value
+	}
+	normalised["structure"] = structure
+	data, err := json.Marshal(normalised)
+	if err != nil {
+		return nil, false, fmt.Errorf("encode bundle taker update: %w", err)
+	}
+
+	var bundle BundleTaker
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		return nil, false, fmt.Errorf("decode bundle taker update: %w", err)
+	}
+	return &bundle, true, nil
+}
 
 func main() {
 	u, err := url.Parse(os.Getenv(EnvTimescaleUri))
@@ -66,10 +131,10 @@ func main() {
 			CreateIfNotExists: true,
 			Name:              os.Getenv(EnvPublicationName),
 			Operations: cdcPublication.Operations{
-				cdcPublication.OperationInsert,
+				cdcPublication.OperationUpdate,
 			},
 			Tables: []cdcPublication.Table{{
-				Name: "rfqhub_bundles_maker_1",
+				Name:            "rfqhub_bundles_taker_1",
 				ReplicaIdentity: cdcPublication.ReplicaIdentityFull,
 			}},
 		},
@@ -84,20 +149,27 @@ func main() {
 	}
 	masterCtx, masterCancel := context.WithCancel(context.Background())
 	defer masterCancel()
-	broadcast := websocket.NewBroadcast[TableContent]()
+	broadcast := websocket.NewBroadcast[Response]()
 	cdcConn, err := cdc.NewConnector(masterCtx, cfg, func(ctx *cdcReplication.ListenerContext) {
-		msg, isInsert := ctx.Message.(*cdcFormat.Insert)
 		if err := ctx.Ack(); err != nil {
 			log.Fatalf("ack: %v", err)
 		}
-		if !isInsert {
-			slog.Debug("non insert received",
-				"msg", msg,
-				"type", fmt.Sprintf("%T", msg),
+		msg, isUpdate := ctx.Message.(*cdcFormat.Update)
+		if !isUpdate {
+			slog.Debug("non update received",
+				"type", fmt.Sprintf("%T", ctx.Message),
 			)
 			return
 		}
-		broadcast.Broadcast(msg)
+		bundle, structureSet, err := bundleTakerFromUpdate(msg.NewDecoded)
+		if err != nil {
+			slog.Error("failed to decode bundle taker update", "err", err)
+			return
+		}
+		if !structureSet {
+			return
+		}
+		broadcast.Broadcast(Response{BundleTaker: bundle})
 	})
 	if err != nil {
 		log.Fatalf("error opening cdc connector: %v", err)
@@ -107,17 +179,15 @@ func main() {
 			connCtx context.Context,
 			ipAddr string,
 			query url.Values,
+			header http.Header,
 			replies <-chan []byte,
 			outgoing chan<- []byte,
 			shutdown chan<- error,
 			requestShutdown <-chan bool,
 		) {
-			sink := make(chan TableContent, 5*60)
+			sink := make(chan Response, 5*60)
 			cookie := broadcast.Subscribe(sink)
 			defer broadcast.Unsubscribe(cookie)
-
-			filterRules := make(map[string]map[string]*FilterConstraint)
-			filterRulesSet := make(map[string]bool)
 
 		L:
 			for {
@@ -136,7 +206,19 @@ func main() {
 					if !ok {
 						break L
 					}
-				case msg, ok := <-replies:
+					payload, err := json.Marshal(m)
+					if err != nil {
+						slog.Error("failed to encode websocket update", "err", err)
+						continue
+					}
+					select {
+					case outgoing <- payload:
+					case <-connCtx.Done():
+						break L
+					case <-masterCtx.Done():
+						break L
+					}
+				case _, ok := <-replies:
 					if !ok {
 						break L
 					}
@@ -154,11 +236,14 @@ func main() {
 			default:
 			}
 		})
-		log.Fatalf("bind: %v", http.ListenAndServe(
-			os.Getenv(EnvListenAddr),
-			nil,
-		))
+		_ = os.Remove(HttpUnixSocket)
+		l, err := net.Listen("unix", HttpUnixSocket)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer l.Close()
+		log.Fatal(http.Serve(l, nil))
 	}()
-	defer connector.Close()
-	connector.Start(masterCtx)
+	defer cdcConn.Close()
+	cdcConn.Start(masterCtx)
 }

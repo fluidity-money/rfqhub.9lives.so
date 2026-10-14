@@ -291,7 +291,8 @@ BEGIN
 
 	-- Any offer keeps funding reserved after expiry, even unsigned, unselected,
 	-- and marked rejected. A NULL selected maker is not enough to free funding.
-	SELECT bundle_maker_id INTO STRICT v_offer FROM rfqhub_create_bundle_maker_onramping_1(
+	PERFORM rfqhub_set_bundle_taker_structure_1(v_next, '{"signed":"taker"}');
+	SELECT bundle_maker_id INTO STRICT v_offer FROM rfqhub_create_bundle_maker_1(
 		v_maker_account, v_next, 10, 10, 1);
 	UPDATE rfqhub_bundles_maker_1 SET was_chosen = FALSE WHERE id = v_offer;
 	UPDATE rfqhub_bundles_taker_1 SET deadline = CURRENT_TIMESTAMP WHERE id = v_next;
@@ -335,19 +336,12 @@ BEGIN
 	END;
 
 	-- A future deadline simulates a maker transaction whose CURRENT_TIMESTAMP
-	-- predates expiry: release state must block BOTH maker funding constructors.
+	-- predates expiry: release state must block the maker funding constructor.
 	UPDATE rfqhub_bundles_taker_1 SET deadline = TO_TIMESTAMP(v_deadline) AT TIME ZONE 'UTC'
 	WHERE id = v_mixed;
 	BEGIN
-		PERFORM * FROM rfqhub_create_bundle_maker_onramping_1(v_maker_account, v_mixed, 1, 1, 1);
+		PERFORM * FROM rfqhub_create_bundle_maker_1(v_maker_account, v_mixed, 1, 1, 1);
 		RAISE EXCEPTION 'released auction accepted pot maker';
-	EXCEPTION WHEN raise_exception THEN
-		IF SQLERRM NOT LIKE '%deadline has passed%' THEN RAISE; END IF;
-	END;
-	BEGIN
-		PERFORM * FROM rfqhub_create_bundle_maker_from_aggregate_1(
-			(SELECT maker_id FROM rfqhub_bundles_taker_1 WHERE id = v_source), v_mixed, 1, 1);
-		RAISE EXCEPTION 'released auction accepted aggregate maker';
 	EXCEPTION WHEN raise_exception THEN
 		IF SQLERRM NOT LIKE '%deadline has passed%' THEN RAISE; END IF;
 	END;

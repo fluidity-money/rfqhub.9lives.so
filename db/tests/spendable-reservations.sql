@@ -58,12 +58,12 @@ BEGIN
 			CURRENT_TIMESTAMP - v_i * INTERVAL '1 minute', '{"signed":"taker"}')
 		RETURNING id INTO v_taker;
 		INSERT INTO rfqhub_bundles_maker_1 (
-			acc_addr, user_id, bundle_taker_id, ms_ts, amt, structure
-		) VALUES (v_maker_account, v_i, v_taker, 1, 30, '{"signed":"maker"}')
+			acc_addr, user_id, bundle_taker_id, ms_ts, amt, pot_funded_amt, structure
+		) VALUES (v_maker_account, v_i, v_taker, 1, 30, 30, '{"signed":"maker"}')
 		RETURNING id INTO v_maker;
 		INSERT INTO rfqhub_bundles_maker_1 (
-			acc_addr, user_id, bundle_taker_id, ms_ts, amt, structure
-		) VALUES (v_rejected_account, v_i, v_taker, 1, 10, '{"signed":"rejected"}')
+			acc_addr, user_id, bundle_taker_id, ms_ts, amt, pot_funded_amt, structure
+		) VALUES (v_rejected_account, v_i, v_taker, 1, 10, 10, '{"signed":"rejected"}')
 		RETURNING id INTO v_rejected;
 
 		ASSERT rfqhub_get_spendable_1(v_taker_account, v_asset) = 100 - 20 * v_i,

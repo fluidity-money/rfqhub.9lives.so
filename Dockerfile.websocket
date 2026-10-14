@@ -1,0 +1,20 @@
+
+FROM golang:alpine3.24 AS build-go
+
+WORKDIR /usr/src/rfqhub.9lives.so
+
+COPY go.mod go.mod
+COPY go.sum go.sum
+
+RUN go get ./...
+
+COPY lib/ lib/
+COPY cmd/ cmd/
+
+RUN cd cmd/websocket && go build -o ../../rfqhub-websocket
+
+FROM alpine:3.24 AS runner
+
+COPY --from=build-go /usr/src/rfqhub.9lives.so/rfqhub-websocket /bin/rfqhub-websocket
+
+ENTRYPOINT ["/bin/rfqhub-graph"]

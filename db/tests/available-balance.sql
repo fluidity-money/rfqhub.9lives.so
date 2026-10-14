@@ -84,7 +84,9 @@ BEGIN
 			UPDATE rfqhub_bundles_taker_1 SET maker_id = v_maker WHERE id = v_taker;
 		END IF;
 		IF v_case = 'ledger consumed' THEN
-			INSERT INTO rfqhub_bundles_taker_sources_1 VALUES (v_child, v_taker, 10, 20);
+			INSERT INTO rfqhub_bundles_taker_sources_1
+				(bundle_taker_id, source_taker_id, source_amt, amt_to_onramp_amt)
+			VALUES (v_child, v_taker, 10, 20);
 		ELSIF v_case = 'legacy consumed' THEN
 			-- A separate legacy child has no ledger entry and no pot reservation.
 			INSERT INTO rfqhub_bundles_taker_1 (

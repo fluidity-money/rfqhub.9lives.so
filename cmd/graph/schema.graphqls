@@ -220,13 +220,12 @@ type Mutation {
   cancelAuction(bundleTakerId: Int!): Boolean!
 
   """
-  Submit a BundleMaker from the liquidity we have here using a server signature and an
-  onramped amount. The BundleMaker is not necessarily consumed unless it's chosen at
-  the end of the BundleTaker's life by the server or by the end user, depending on
-  the Taker's strategy for choosing. The BundleMaker here will take the opposite
-  position of the BundleTaker.
+  Submit a BundleMaker. The BundleMaker is not necessarily consumed unless it's chosen at
+  the end of the BundleTaker's life by the server or by the end user, depending on the
+  Taker's strategy for choosing. The BundleMaker here will take the opposite position of
+  the BundleTaker.
   """
-  submitBundleMakerFromOnrampedAmountServerSig(
+  submitBundleMakerServerSig(
     """
     The bundle taker to point to to make this interaction work.
     """

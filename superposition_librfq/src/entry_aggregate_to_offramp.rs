@@ -1,11 +1,6 @@
-// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
-// source code is governed by a BUSL license that can be found in the
-// LICENSE file.
-
 use crate::{
-    Aggregate, AggregateArgs, AggregateEnum, AggregatedResultArgs, BundleMaker, BundleMakerArgs,
-    BundleTaker, BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet,
-    call_eip20,
+    AggregateArgs, AggregateEnum, AggregatedResultArgs, BundleMaker, BundleMakerArgs, BundleTaker,
+    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_eip20,
     error::{Dis, Error, ErrorData},
     events::event_emit_bal_update,
     signable::{Hash, SignableAggregateArgs, SignableOnrampingSource},
@@ -34,27 +29,16 @@ fn recurse_aggregate_acc_asset(src: &[OnrampingSource]) -> Result<([u8; 20], Ass
         OnrampingSource::AggregatedResult(AggregatedResultArgs { from, .. }) => {
             match from.as_ref() {
                 AggregateEnum::Args(agg) => {
-                    let Aggregate {
-                        args:
-                            AggregateArgs {
-                                maker:
-                                    BundleMaker {
-                                        args:
-                                            BundleMakerArgs {
-                                                taker:
-                                                    BundleTaker {
-                                                        args: BundleTakerArgs { src, .. },
-                                                        ..
-                                                    },
-                                                ..
-                                            },
-                                        ..
-                                    },
-                                ..
-                            },
-                        ..
-                    } = agg.as_ref();
-                    recurse_aggregate_acc_asset(src)
+                    let maker = &agg.args.maker.args;
+                    let taker = &maker.taker.args;
+                    // The source winner is independent of the new consumer's role.
+                    let did_taker_win = taker.is_up
+                        == (agg.args.timestamplet.timestamplet_val > taker.price_target);
+                    recurse_aggregate_acc_asset(if did_taker_win {
+                        &taker.src
+                    } else {
+                        &maker.src
+                    })
                 }
                 AggregateEnum::Hash(h) => {
                     let asset_word = storage::hash_asset::get(h);
@@ -62,21 +46,43 @@ fn recurse_aggregate_acc_asset(src: &[OnrampingSource]) -> Result<([u8; 20], Ass
                         .into_iter()
                         .find(|asset| U::from(asset.addr()) == asset_word)
                         .ok_or(Dis::BadAsset)?;
-                    Ok((storage::hash_taker_addr::get(h).into(), asset))
+                    let (_, acc, _) = aggregate_hash_winner(h, &asset_word)?;
+                    Ok((acc, asset))
                 }
             }
         }
     }
 }
 
-// Recursively descend into the aggregated bundle, returning the address
-// of the taker, and the amount they provided.
+// A settled aggregate has exactly one funded side. Reject consumed/unknown
+// hashes (including zero-amount replays), and never guess for ambiguous storage.
+fn aggregate_hash_winner(h: &U, asset: &U) -> Result<(u64, [u8; 20], bool), Error> {
+    let taker = storage::hash_taker_leftover::get(h, asset);
+    let maker = storage::hash_maker_leftover::get(h, asset);
+    match (taker.is_some(), maker.is_some()) {
+        (true, false) => Ok((taker.into(), storage::hash_taker_addr::get(h).into(), true)),
+        (false, true) => Ok((maker.into(), storage::hash_maker_addr::get(h).into(), false)),
+        _ => Err(Dis::CheckedSubUnderflow.into()),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecurseAggregateSrc {
+    pub taker_amt: u64,
+    pub maker_amt: u64,
+    pub taker_acc: [u8; 20],
+    pub asset: [u8; 20],
+    pub maker_acc: [u8; 20],
+}
+
+// Recursively descend into the aggregated bundle.
 #[bobcat_trace]
 pub unsafe fn recurse_aggregate_src(
     imm: &Imm,
     src: &[OnrampingSource],
     aggregated_onramping_src: &[SignableOnrampingSource],
-) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
+    is_taker: bool,
+) -> Result<RecurseAggregateSrc, Error> {
     let (exp_acc, exp_asset) = recurse_aggregate_acc_asset(src)?;
     if src.len() != aggregated_onramping_src.len() {
         return Err(Dis::InconsistentSignable.into());
@@ -115,30 +121,28 @@ pub unsafe fn recurse_aggregate_src(
                         .ok_or_else(|| Dis::CheckedAddOverflow.into())
                 }
                 OnrampingSource::AggregatedResult(AggregatedResultArgs { from, amt_to_take }) => {
-                    let (available, acc, asset, source_hash) = match from.as_ref() {
+                    let source_hash = match from.as_ref() {
                         AggregateEnum::Args(agg) => unsafe {
                             let aggregated_res = aggregated_onramping_src
                                 .aggregated_res
                                 .as_ref()
                                 .ok_or(Dis::InconsistentSignable)?;
-                            let (available, acc, asset) = recurse_aggregate_args(
+                            recurse_aggregate_args(
                                 imm,
                                 &agg.args,
                                 aggregated_res,
                                 &agg.server_sig,
                             )?;
-                            (available, acc, asset, aggregated_res.hash.clone().into())
+                            aggregated_res.hash.clone().into()
                         },
-                        AggregateEnum::Hash(h) => {
-                            let asset = storage::hash_asset::get(h);
-                            (
-                                storage::hash_taker_leftover::get(h, &asset).into(),
-                                storage::hash_taker_addr::get(h).into(),
-                                asset.into(),
-                                *h,
-                            )
-                        }
+                        AggregateEnum::Hash(h) => *h,
                     };
+                    // Both representations consume the same settled ledger. The
+                    // nonzero side identifies the prior winner, NOT is_taker.
+                    let asset_u = storage::hash_asset::get(&source_hash);
+                    let asset: [u8; 20] = asset_u.into();
+                    let (available, acc, source_is_taker) =
+                        aggregate_hash_winner(&source_hash, &asset_u)?;
                     if exp_asset.addr() != asset {
                         return Err(Dis::InconsistentAsset.into());
                     }
@@ -149,7 +153,11 @@ pub unsafe fn recurse_aggregate_src(
                         .checked_sub(*amt_to_take)
                         .ok_or(Dis::CheckedSubUnderflow)?;
                     let asset_u = U::from(asset);
-                    storage::hash_taker_leftover::set(&source_hash, &asset_u, &U::ZERO);
+                    if source_is_taker {
+                        storage::hash_taker_leftover::set(&source_hash, &asset_u, &U::ZERO);
+                    } else {
+                        storage::hash_maker_leftover::set(&source_hash, &asset_u, &U::ZERO);
+                    }
                     storage::onramped_bal::checked_add_res(
                         &asset_u,
                         &acc.into(),
@@ -169,7 +177,23 @@ pub unsafe fn recurse_aggregate_src(
             }
         },
     )?;
-    Ok((amt, exp_acc, exp_asset.addr()))
+    // These fields describe the NEW bundle role; the other role is unset.
+    Ok(RecurseAggregateSrc {
+        taker_amt: if is_taker { amt } else { 0 },
+        maker_amt: if is_taker { 0 } else { amt },
+        taker_acc: if is_taker { exp_acc } else { [0; 20] },
+        maker_acc: if is_taker { [0; 20] } else { exp_acc },
+        asset: exp_asset.addr(),
+    })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecurseAggregateArgs {
+    pub taker_leftover: u64,
+    pub maker_leftover: u64,
+    pub taker_acc: [u8; 20],
+    pub asset: [u8; 20],
+    pub maker_acc: [u8; 20],
 }
 
 // Recursively descend into the aggregated bundle, updating the storage
@@ -218,7 +242,7 @@ pub unsafe fn recurse_aggregate_args(
     }: &AggregateArgs,
     signable: &SignableAggregateArgs,
     server_sig: &Sig,
-) -> Result<(u64, [u8; 20], [u8; 20]), Error> {
+) -> Result<RecurseAggregateArgs, Error> {
     if timestamplet_outcome != outcome {
         return Err(Dis::TimestampletInconsistentOutcome.into());
     }
@@ -243,10 +267,18 @@ pub unsafe fn recurse_aggregate_args(
             }),
         });
     }
-    let (taker_amt, taker_acc, asset) =
-        unsafe { recurse_aggregate_src(imm, src, &signable.maker.taker_args.src)? };
-    let (maker_amt, maker_src_acc, maker_asset) =
-        unsafe { recurse_aggregate_src(imm, maker_src, &signable.maker.src)? };
+    let RecurseAggregateSrc {
+        taker_amt,
+        taker_acc,
+        asset,
+        ..
+    } = unsafe { recurse_aggregate_src(imm, src, &signable.maker.taker_args.src, true)? };
+    let RecurseAggregateSrc {
+        maker_amt,
+        maker_acc: maker_src_acc,
+        asset: maker_asset,
+        ..
+    } = unsafe { recurse_aggregate_src(imm, maker_src, &signable.maker.src, false)? };
     if maker_src_acc != maker_acc {
         return Err(Dis::InconsistentAccount.into());
     }
@@ -279,28 +311,40 @@ pub unsafe fn recurse_aggregate_args(
     let maker_acc_u = U::from(maker_acc);
     storage::hash_taker_addr::set(&signable_hash_u, &taker_acc_u);
     storage::hash_maker_addr::set(&signable_hash_u, &maker_acc_u);
-    let taker_leftover = if did_taker_win {
-        taker_amt
-            .checked_add(maker_amt)
-            .ok_or(Dis::CheckedAddOverflow)?
+    let winnings = taker_amt
+        .checked_add(maker_amt)
+        .ok_or(Dis::CheckedAddOverflow)?;
+    let (taker_leftover, maker_leftover) = if did_taker_win {
+        (winnings, 0)
     } else {
-        0
+        (0, winnings)
     };
+    storage::hash_asset::set(&signable_hash_u, &asset_u);
     if did_taker_win {
         storage::hash_taker_leftover::set(&signable_hash_u, &asset_u, &U::from(taker_leftover));
     } else {
-        let maker_winnings = taker_amt
-            .checked_add(maker_amt)
-            .ok_or(Dis::CheckedAddOverflow)?;
         storage::hash_maker_leftover::checked_add_res(
             &signable_hash_u,
             &asset_u,
-            &U::from(maker_winnings),
+            &U::from(maker_leftover),
             "hash maker leftover checked add",
         )?;
     }
-    storage::hash_asset::set(&signable_hash_u, &asset_u);
-    Ok((taker_leftover, taker_acc, asset))
+    Ok(RecurseAggregateArgs {
+        taker_leftover,
+        maker_leftover,
+        taker_acc,
+        maker_acc,
+        asset,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntryRecurseAggregateEnum {
+    pub sender: [u8; 20],
+    pub asset: [u8; 20],
+    pub taker_leftover: u64,
+    pub maker_leftover: u64,
 }
 
 // Entry the aggregate recursive function, returning the amount that's
@@ -310,13 +354,18 @@ pub fn entry_recurse_aggregate_enum(
     imm: &Imm,
     args: &AggregateEnum,
     is_taker: bool,
-) -> Result<([u8; 20], [u8; 20], u64), Error> {
+) -> Result<EntryRecurseAggregateEnum, Error> {
     let sender = msg_sender();
     match args {
         AggregateEnum::Args(agg) => {
             let signable = SignableAggregateArgs::from(&agg.args);
-            let (taker_leftover, taker_acc, asset) =
-                unsafe { recurse_aggregate_args(imm, &agg.args, &signable, &agg.server_sig)? };
+            let RecurseAggregateArgs {
+                taker_leftover,
+                maker_leftover,
+                taker_acc,
+                maker_acc,
+                asset,
+            } = unsafe { recurse_aggregate_args(imm, &agg.args, &signable, &agg.server_sig)? };
             if is_taker {
                 let recipient = get_acc_owner(taker_acc)?;
                 if recipient != sender {
@@ -330,14 +379,17 @@ pub fn entry_recurse_aggregate_enum(
                     });
                 }
                 storage::hash_taker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
-                Ok((sender, asset, taker_leftover))
+                Ok(EntryRecurseAggregateEnum {
+                    sender,
+                    asset,
+                    taker_leftover,
+                    maker_leftover: 0,
+                })
             } else {
-                let signable_hash_u: U = signable.hash.clone().into();
-                let maker_acc: [u8; 20] = storage::hash_maker_addr::get(&signable_hash_u).into();
                 let recipient = get_acc_owner(maker_acc)?;
                 if recipient != sender {
                     return Err(Error {
-                        dis: Dis::SenderNotTaker,
+                        dis: Dis::SenderNotMaker,
                         data: Box::new(ErrorData {
                             sender: Some(sender),
                             expected_sender: Some(recipient),
@@ -345,16 +397,20 @@ pub fn entry_recurse_aggregate_enum(
                         }),
                     });
                 }
-                let maker_leftover =
-                    storage::hash_maker_leftover::get(&signable_hash_u, &asset.into());
                 storage::hash_maker_leftover::set(&signable.hash.into(), &asset.into(), &U::ZERO);
-                Ok((sender, asset, maker_leftover.into()))
+                Ok(EntryRecurseAggregateEnum {
+                    sender,
+                    asset,
+                    taker_leftover: 0,
+                    maker_leftover: maker_leftover.into(),
+                })
             }
         }
         AggregateEnum::Hash(h) => {
             let asset = storage::hash_asset::get(h);
-            let (sender, asset, amt) = if is_taker {
-                let amt = storage::hash_taker_leftover::get(h, &asset);
+            let asset_addr = asset.addr();
+            if is_taker {
+                let taker_leftover = storage::hash_taker_leftover::get(h, &asset);
                 let recipient = get_acc_owner(storage::hash_taker_addr::get(h).into())?;
                 if recipient != sender {
                     return Err(Error {
@@ -368,17 +424,26 @@ pub fn entry_recurse_aggregate_enum(
                     });
                 }
                 storage::hash_taker_leftover::set(h, &asset, &U::ZERO);
-                (sender, asset, amt)
+                Ok(EntryRecurseAggregateEnum {
+                    sender,
+                    asset: asset_addr,
+                    taker_leftover: taker_leftover.into(),
+                    maker_leftover: 0,
+                })
             } else {
                 let recipient = get_acc_owner(storage::hash_maker_addr::get(h).into())?;
                 if recipient != sender {
                     return Err(Dis::SenderNotMaker.into());
                 }
-                let amt = storage::hash_maker_leftover::get(h, &asset);
+                let maker_leftover = storage::hash_maker_leftover::get(h, &asset);
                 storage::hash_maker_leftover::set(h, &asset, &U::ZERO);
-                (sender, asset, amt)
-            };
-            Ok((sender, asset.into(), amt.into()))
+                Ok(EntryRecurseAggregateEnum {
+                    sender,
+                    asset: asset_addr,
+                    taker_leftover: 0,
+                    maker_leftover: maker_leftover.into(),
+                })
+            }
         }
     }
 }
@@ -388,7 +453,12 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
-    let (sender, asset, leftover) = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
+    let EntryRecurseAggregateEnum {
+        sender,
+        asset,
+        taker_leftover,
+        maker_leftover,
+    } = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
     let hash = match &args {
         AggregateEnum::Args(agg) => SignableAggregateArgs::from(&agg.args).hash.into(),
         AggregateEnum::Hash(hash) => *hash,
@@ -399,7 +469,7 @@ pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool
         storage::hash_maker_addr::get(&hash).into()
     };
     let asset_u = U::from(asset);
-    let leftover_u = U::from(leftover);
+    let leftover_u = U::from(taker_leftover) + U::from(maker_leftover);
     let global_bal =
         storage::global_bal::checked_sub_res(&asset_u, &leftover_u, "aggregate offramp").unwrap();
     event_emit_bal_update(acc_addr, asset, U::ZERO, global_bal);

@@ -214,6 +214,9 @@ mod test {
                 let mut next_unsettled = 0;
 
                 for (index, submission) in submissions.iter().enumerate() {
+                    // The legacy strategy sizes the next stake from the prior taker
+                    // return (possibly zero), but the source belongs to the actual
+                    // prior winner, which can now be a maker.
                     let aggregate = aggregate_from_submission(submission, source, asset);
                     let is_last = index + 1 == submissions.len();
                     // Always post the first game separately when possible, ensuring
@@ -236,9 +239,20 @@ mod test {
                             .unwrap()
                         };
 
-                        assert_eq!(result.0, submission.price_move.expected_return);
-                        assert_eq!(result.1, inverted.initial_taker.acc_addr);
-                        assert_eq!(result.2, asset_addr);
+                        assert_eq!(result.taker_leftover, submission.price_move.expected_return);
+                        let expected_taker = submissions[..index].iter().fold(
+                            inverted.initial_taker.acc_addr,
+                            |owner, prior| if prior.price_move.expected_return > 0 {
+                                owner
+                            } else {
+                                prior.maker_acc
+                            },
+                        );
+                        assert_eq!(result.taker_acc, expected_taker);
+                        assert_eq!(result.maker_acc, submission.maker_acc);
+                        assert_eq!(result.asset, asset_addr);
+                        assert_eq!(result.taker_leftover + result.maker_leftover,
+                            submission.taker_amt + submission.maker_amt);
                         if let Some(previous_hash) = latest_hash {
                             assert_eq!(
                                 storage::hash_taker_leftover::get(
@@ -247,16 +261,18 @@ mod test {
                                 ),
                                 U::ZERO
                             );
+                            assert_eq!(storage::hash_maker_leftover::get(
+                                &previous_hash, &asset.u()), U::ZERO);
                         }
                         assert_eq!(storage::hash_asset::get(&posted_hash), U::from(asset_addr));
+                        assert_eq!(storage::hash_maker_leftover::get(&posted_hash, &asset.u()),
+                            U::from(result.maker_leftover));
                         assert_eq!(
                             storage::hash_taker_leftover::get(&posted_hash, &U::from(asset_addr)),
                             U::from(submission.price_move.expected_return)
                         );
 
-                        // Apply every newly settled node to the off-chain ledger model.
-                        // A recursive source consumes only `taker_amt`; the balance of
-                        // the prior result is returned to the original taker's onramp.
+                        // Apply each newly settled node to an independent ledger model.
                         for settled_index in next_unsettled..=index {
                             let settled = &submissions[settled_index];
                             *expected_onramped.get_mut(&settled.maker_acc).unwrap() -=

@@ -6,9 +6,11 @@ tool github.com/99designs/gqlgen
 
 require (
 	github.com/99designs/gqlgen v0.17.94
+	github.com/Trendyol/go-pq-cdc v1.12.15
 	github.com/ethereum/go-ethereum v1.17.5
 	github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685
 	github.com/fluidity-money/superposition-assets v0.0.0-20260916122515-dc035d5c17dc
+	github.com/gorilla/websocket v1.5.3
 	github.com/lib/pq v1.12.3
 	github.com/near/borsh-go v0.3.1
 	github.com/vektah/gqlparser/v2 v2.5.36
@@ -17,7 +19,6 @@ require (
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20260814054414-7dc2037c6ef9 // indirect
-	github.com/Trendyol/go-pq-cdc v1.12.15 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/avast/retry-go/v4 v4.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -38,7 +39,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

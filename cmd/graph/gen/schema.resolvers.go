@@ -1,7 +1,3 @@
-// Copyright 2026 Fluid Assets Limited. All rights reserved. Use of this
-// source code is governed by a BUSL license that can be found in the
-// LICENSE file.
-
 package gen
 
 // This file will be automatically regenerated based on the schema, any resolver
@@ -414,12 +410,12 @@ FROM rfqhub_create_bundle_taker_1(
 		}
 	}
 	bundleTakerArgs := types.BundleTakerArgs{
-		Src: sources,
-		Expiry: uint32(expiry),
-		MsTs: msTs,
-		IsUp: isUp,
+		Src:         sources,
+		Expiry:      uint32(expiry),
+		MsTs:        msTs,
+		IsUp:        isUp,
 		PriceTarget: priceTarget_,
-		Outcome: outcome_,
+		Outcome:     outcome_,
 	}
 	bundleTakerSigningArgs := types.ClientSigningArgs{
 		AccAddr: accAddr,
@@ -641,7 +637,7 @@ FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
 		},
 	}
 	// It's safe for us to just redo this ourselves, since things won't change:
-	serverArgs := types.ServerSigningArgs{ Aggregate: &aggArgs }
+	serverArgs := types.ServerSigningArgs{Aggregate: &aggArgs}
 	serverSig, err := signer.ServerSignAggregate(serverArgs)
 	if err != nil {
 		slog.Error("Error signing aggregate args",
@@ -685,8 +681,8 @@ func (r *mutationResolver) CancelAuction(ctx context.Context, bundleTakerID int)
 	panic(fmt.Errorf("not implemented: CancelAuction - cancelAuction"))
 }
 
-// SubmitBundleMakerFromOnrampedAmountServerSig is the resolver for the submitBundleMakerFromOnrampedAmountServerSig field.
-func (r *mutationResolver) SubmitBundleMakerFromOnrampedAmountServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error) {
+// SubmitBundleMakerServerSig is the resolver for the submitBundleMakerServerSig field.
+func (r *mutationResolver) SubmitBundleMakerServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error) {
 	snowflake, _ := ctx.Value("snowflake").(int)
 	if authed, _ := ctx.Value("authed").(bool); !authed {
 		return nil, fmt.Errorf("not authed in the handler")
@@ -719,7 +715,7 @@ SELECT
 	maker_amt,
 	structure_bundle_taker
 FROM
-	rfqhub_create_bundle_maker_onramping_1(
+	rfqhub_create_bundle_maker_1(
 		$1,
 		$2,
 		$3,
