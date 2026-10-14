@@ -904,14 +904,15 @@ func (r *queryResolver) Balance(ctx context.Context, addr string) (string, error
 		r.AccountsFactoryAddr,
 		ethCommon.HexToAddress(addr),
 	)
+	accAddrS := accAddr.String()
 	slog.Debug("Getting spendable for",
-		"acc addr", accAddr,
+		"acc addr", accAddrS,
 		"usdc addr", usdcAddr(),
 		"snowflake", snowflake,
 	)
 	row := r.Db.QueryRowContext(ctx, `
 SELECT * FROM rfqhub_get_available_balance_1($1, $2)`,
-		accAddr,
+		accAddrS,
 		usdcAddr(),
 	)
 	var amt int64
