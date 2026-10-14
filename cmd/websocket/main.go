@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -27,6 +28,7 @@ import (
 	cdcPublication "github.com/Trendyol/go-pq-cdc/pq/publication"
 	cdcReplication "github.com/Trendyol/go-pq-cdc/pq/replication"
 	cdcSlot "github.com/Trendyol/go-pq-cdc/pq/slot"
+	_ "github.com/lib/pq"
 )
 
 const HttpUnixSocket = "/run/rfqhub.9lives.so/websocket.sock"
@@ -123,7 +125,50 @@ func bundleTakerFromUpdate(row map[string]any) (*BundleTaker, bool, error) {
 	return &bundle, true, nil
 }
 
+// One statement gives both lists the same database snapshot. Select public
+// fields explicitly, particularly for makers whose structure must stay private.
+const activeBundlesQuery = `
+WITH active_takers AS MATERIALIZED (
+	SELECT * FROM rfqhub_bundles_taker_ongoing_1
+)
+SELECT json_build_object(
+	'BundleTakers', COALESCE((
+		SELECT json_agg(json_build_object(
+			'id', t.id,
+			'acc_addr', t.acc_addr,
+			'asset', t.asset,
+			'amt', t.amt,
+			'min_offer', t.min_offer,
+			'is_up', t.is_up,
+			'price_target', t.price_target,
+			'outcome', t.outcome,
+			'deadline', to_char(t.deadline, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+			'expiry', to_char(t.expiry, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+			'structure', t.structure
+		) ORDER BY t.id)
+		FROM active_takers t
+	), '[]'::json),
+	'BundleMakers', COALESCE((
+		SELECT json_agg(json_build_object(
+			'acc_addr', m.acc_addr,
+			'amt', m.amt,
+			'bundle_taker_id', m.bundle_taker_id
+		) ORDER BY m.bundle_taker_id, m.id)
+		FROM rfqhub_bundles_maker_1 m
+		JOIN active_takers t ON t.id = m.bundle_taker_id
+		WHERE m.structure IS NOT NULL
+	), '[]'::json)
+)`
+
 func main() {
+	db, err := sql.Open("postgres", os.Getenv(EnvTimescaleUri))
+	if err != nil {
+		log.Fatalf("open snapshot database: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+
 	u, err := url.Parse(os.Getenv(EnvTimescaleUri))
 	if err != nil {
 		log.Fatalf("parse error: %v", err)
@@ -231,6 +276,24 @@ func main() {
 			sink := make(chan Response, 5*60)
 			cookie := broadcast.Subscribe(sink)
 			defer broadcast.Unsubscribe(cookie)
+
+			// Subscribe before querying so live updates can queue while the
+			// snapshot loads. Clients may see a row again in the live feed.
+			snapshotCtx, snapshotCancel := context.WithTimeout(connCtx, 10*time.Second)
+			var snapshot []byte
+			err := db.QueryRowContext(snapshotCtx, activeBundlesQuery).Scan(&snapshot)
+			snapshotCancel()
+			if err != nil {
+				slog.Error("failed to load active bundles", "err", err, "ip", ipAddr)
+				return
+			}
+			select {
+			case outgoing <- snapshot:
+			case <-connCtx.Done():
+				return
+			case <-masterCtx.Done():
+				return
+			}
 
 		L:
 			for {
