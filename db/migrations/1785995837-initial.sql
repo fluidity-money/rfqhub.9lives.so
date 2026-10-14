@@ -93,7 +93,9 @@ CREATE TABLE rfqhub_bundles_taker_1 (
 	pot_funded_amt BIGINT NOT NULL DEFAULT 0
 		CHECK (pot_funded_amt >= 0 AND pot_funded_amt <= amt),
 	CHECK (source IS NULL OR pot_funded_amt = 0),
-	min_offer BIGINT NOT NULL CHECK (min_offer >= 0),
+	min_offer BIGINT CHECK (min_offer >= 0),
+	-- Fraction removed from the remaining minimum per whole second.
+	decay_rate NUMERIC NOT NULL DEFAULT 0 CHECK (decay_rate >= 0 AND decay_rate <= 1),
 	is_up BOOLEAN NOT NULL,
 	price_target BIGINT NOT NULL CHECK (price_target >= 0),
 	outcome RFQHUB_OUTCOME NOT NULL,
@@ -466,7 +468,8 @@ CREATE FUNCTION rfqhub_create_bundle_taker_1 (
 	p_ms_ts BIGINT,
 	p_expiry INTEGER,
 	p_min_offer BIGINT,
-	p_deadline INTEGER
+	p_deadline INTEGER,
+	p_decay_rate NUMERIC DEFAULT 0
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
@@ -502,6 +505,9 @@ DECLARE
 BEGIN
 	IF p_min_amt IS NULL OR p_max_amt IS NULL OR p_min_amt <= 0 OR p_max_amt < p_min_amt THEN
 		RAISE EXCEPTION 'invalid taker amount range: minimum %, maximum %', p_min_amt, p_max_amt;
+	END IF;
+	IF p_decay_rate IS NULL OR NOT (p_decay_rate >= 0 AND p_decay_rate <= 1) THEN
+		RAISE EXCEPTION 'decay rate must be between zero and one: %', p_decay_rate;
 	END IF;
 	IF p_min_offer < 0 THEN
 		RAISE EXCEPTION 'minimum offer cannot be negative: %', p_min_offer;
@@ -587,11 +593,11 @@ BEGIN
 	RETURNING count INTO v_user_id;
 
 	INSERT INTO rfqhub_bundles_taker_1 (
-		acc_addr, user_id, source, asset, amt, pot_funded_amt, min_offer, is_up,
+		acc_addr, user_id, source, asset, amt, pot_funded_amt, min_offer, decay_rate, is_up,
 		price_target, outcome, ms_ts, deadline, expiry
 	)
 	VALUES (
-		p_acc_addr, v_user_id, NULL, p_asset, v_amt, v_pot_amt, p_min_offer,
+		p_acc_addr, v_user_id, NULL, p_asset, v_amt, v_pot_amt, p_min_offer, p_decay_rate,
 		p_is_up, p_price_target, p_outcome, p_ms_ts, v_deadline, v_expiry
 	)
 	RETURNING id INTO v_bundle_taker_id;
@@ -675,6 +681,8 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
 	v_taker rfqhub_bundles_taker_1%ROWTYPE;
+	v_min_offer NUMERIC;
+	v_elapsed_seconds NUMERIC;
 	v_available BIGINT;
 	v_amt BIGINT := 0;
 	v_pot_amt BIGINT;
@@ -766,8 +774,16 @@ BEGIN
 	IF v_amt < p_min_amt THEN
 		RAISE EXCEPTION 'insufficient maker funding: available %, minimum %', v_amt, p_min_amt;
 	END IF;
-	IF v_amt <= v_taker.min_offer THEN
-		RAISE EXCEPTION 'maker offer % must exceed taker minimum offer %', v_amt, v_taker.min_offer;
+	-- Compute decay on demand; never mutate the original minimum. NULL means zero.
+	-- Keep fractional token units for comparison rather than rounding the floor.
+	v_elapsed_seconds := GREATEST(0, FLOOR(EXTRACT(EPOCH FROM
+		(LEAST(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', v_taker.deadline) - v_taker.created_by))));
+	v_min_offer := CASE
+		WHEN v_elapsed_seconds = 0 THEN COALESCE(v_taker.min_offer, 0)
+		ELSE COALESCE(v_taker.min_offer, 0) * POWER(1 - v_taker.decay_rate, v_elapsed_seconds)
+	END;
+	IF v_amt <= v_min_offer THEN
+		RAISE EXCEPTION 'maker offer % must exceed taker minimum offer %', v_amt, v_min_offer;
 	END IF;
 	INSERT INTO rfqhub_bundles_maker_user_count_1 AS c (addr, count)
 	VALUES (p_acc_addr, 1)

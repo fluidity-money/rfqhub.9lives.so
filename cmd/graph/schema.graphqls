@@ -171,6 +171,9 @@ type Mutation {
 
     isUp: Boolean!,
 
+    """
+    Price target that this is up or down for.
+    """
     priceTarget: String!,
 
     outcome: Outcome!,
@@ -187,8 +190,9 @@ type Mutation {
 
     """
     Minimum offer of amount to take from the Maker in exchange for this liquidity.
+    Null if we're preferring a decay strategy ran by the system.
     """
-    minOffer: String!,
+    minOffer: String,
   ): AuctionCreatedResult!
 
   """

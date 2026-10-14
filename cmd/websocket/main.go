@@ -39,7 +39,33 @@ const (
 )
 
 type Response struct {
-	BundleTaker *BundleTaker
+	BundleTaker *BundleTaker `json:"BundleTaker,omitempty"`
+	BundleMaker *BundleMaker `json:"BundleMaker,omitempty"`
+}
+
+type BundleMaker struct {
+	AccAddr       string `json:"acc_addr"`
+	Amt           int64  `json:"amt"`
+	BundleTakerID int32  `json:"bundle_taker_id"`
+}
+
+func bundleMakerFromUpdate(row map[string]any) (*BundleMaker, bool, error) {
+	if structure, set := row["structure"]; !set || structure == nil {
+		return nil, false, nil
+	}
+	data, err := json.Marshal(map[string]any{
+		"acc_addr":        row["acc_addr"],
+		"amt":             row["amt"],
+		"bundle_taker_id": row["bundle_taker_id"],
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("encode bundle maker update: %w", err)
+	}
+	var bundle BundleMaker
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		return nil, false, fmt.Errorf("decode bundle maker update: %w", err)
+	}
+	return &bundle, true, nil
 }
 
 type BundleTaker struct {
@@ -133,10 +159,16 @@ func main() {
 			Operations: cdcPublication.Operations{
 				cdcPublication.OperationUpdate,
 			},
-			Tables: []cdcPublication.Table{{
-				Name:            "rfqhub_bundles_taker_1",
-				ReplicaIdentity: cdcPublication.ReplicaIdentityFull,
-			}},
+			Tables: []cdcPublication.Table{
+				{
+					Name:            "rfqhub_bundles_taker_1",
+					ReplicaIdentity: cdcPublication.ReplicaIdentityFull,
+				},
+				{
+					Name:            "rfqhub_bundles_maker_1",
+					ReplicaIdentity: cdcPublication.ReplicaIdentityFull,
+				},
+			},
 		},
 		Metric: cdcConfig.MetricConfig{
 			Port: metricPort,
@@ -161,15 +193,26 @@ func main() {
 			)
 			return
 		}
-		bundle, structureSet, err := bundleTakerFromUpdate(msg.NewDecoded)
-		if err != nil {
-			slog.Error("failed to decode bundle taker update", "err", err)
-			return
+		switch msg.TableName {
+		case "rfqhub_bundles_taker_1":
+			bundle, structureSet, err := bundleTakerFromUpdate(msg.NewDecoded)
+			if err != nil {
+				slog.Error("failed to decode bundle taker update", "err", err)
+				return
+			}
+			if structureSet {
+				broadcast.Broadcast(Response{BundleTaker: bundle})
+			}
+		case "rfqhub_bundles_maker_1":
+			bundle, structureSet, err := bundleMakerFromUpdate(msg.NewDecoded)
+			if err != nil {
+				slog.Error("failed to decode bundle maker update", "err", err)
+				return
+			}
+			if structureSet {
+				broadcast.Broadcast(Response{BundleMaker: bundle})
+			}
 		}
-		if !structureSet {
-			return
-		}
-		broadcast.Broadcast(Response{BundleTaker: bundle})
 	})
 	if err != nil {
 		log.Fatalf("error opening cdc connector: %v", err)
