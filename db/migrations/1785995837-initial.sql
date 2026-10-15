@@ -1062,8 +1062,7 @@ CREATE VIEW rfqhub_takers_to_conclude_1 AS
 
 -- Select the largest signed maker offer for a taker, record the supplied
 -- timestamplet at the taker's expiry, and resolve the pair in place: the maker's
--- was_correct and both end_source_amt values are set from the outcome. Returns
--- the payload needed for server signing plus the resolution results. An existing
+-- was_correct and both end_source_amt values are set from the outcome. An existing
 -- selection and identical timestamplet are reused on retries; a later call to
 -- rfqhub_resolve_aggregate_1 is idempotent because the maker already carries a
 -- timestamplet_id.
@@ -1071,13 +1070,7 @@ CREATE FUNCTION rfqhub_conclude_aggregate_1 (
 	p_bundle_taker_id INTEGER,
 	p_timestamplet_val BIGINT
 )
-RETURNS TABLE (
-	bundle_maker_id INTEGER,
-	taker_was_correct BOOLEAN,
-	taker_amt BIGINT,
-	maker_amt BIGINT,
-	structure JSON
-)
+RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -1152,12 +1145,6 @@ BEGIN
 		updated_by = CURRENT_TIMESTAMP
 	WHERE m.id = v_maker.id;
 
-	RETURN QUERY SELECT
-		v_maker.id,
-		v_taker_correct,
-		v_taker.amt,
-		v_maker.amt,
-		v_taker.structure;
 END;
 $$;
 

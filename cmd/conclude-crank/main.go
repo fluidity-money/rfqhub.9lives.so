@@ -37,7 +37,7 @@ SELECT bundle_taker_id FROM rfqhub_takers_to_conclude_1`,
 			log.Fatalf("query conclude takers: %v", err)
 		}
 		defer rows.Close()
-		count := 0
+		var count int
 		for count = 0; rows.Next(); count++ {
 			var bundleTakerId int
 			if err := rows.Scan(&bundleTakerId); err != nil {
@@ -68,35 +68,20 @@ SELECT bundle_taker_id FROM rfqhub_takers_to_conclude_1`,
 					log.Fatalf("answer too large from chainlink: %v", err)
 				}
 				timestampletVal := answer.Uint64()
-				row := db.QueryRow(`
-SELECT
-	bundle_maker_id,
-	taker_was_correct,
-	taker_amt,
-	maker_amt,
-	structure
-FROM rfqhub_conclude_aggregate_1($1, $2)`,
+				_, err := db.Exec(`
+SELECT rfqhub_conclude_aggregate_1($1, $2)`,
 					bundleTakerId,
 					timestampletVal,
 				)
-				var (
-					bundleMakerId      int
-					takerWon           bool
-					takerAmt, makerAmt uint64
-					makerStructure     types.BundleMaker
-				)
-				err = row.Scan(
-					&bundleMakerId,
-					&takerWon,
-					&takerAmt,
-					&makerAmt,
-					&makerStructure,
-				)
 				if err != nil {
-					log.Fatalf("conclude blob scan: %v", err)
+					log.Fatalf("conclude taker market execute: %v", err)
 				}
 				chanConcluded <- true
 			}(bundleTakerId)
+		}
+		if count == 0 {
+			slog.Info("No takers that need resolution")
+			continue
 		}
 		i := 0
 		for range chanConcluded {
