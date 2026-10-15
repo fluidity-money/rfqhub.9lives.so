@@ -43,7 +43,7 @@ func GetOutcomePrice(ctx context.Context, c *ethclient.Client, o types.Outcome, 
 	copy(b[:4], []byte{0x69, 0x5a, 0x94, 0x36})
 	chainlinkAddr := o.ChainlinkOracleAddrArb()
 	copy(b[4+32-20:4+32], chainlinkAddr[:])
-	binary.PutUvarint(b[4+32*2-8:4+32*2], uint64(t.Unix()))
+	binary.BigEndian.PutUint64(b[4+32*2-8:4+32*2], uint64(t.Unix()))
 	rd, err := c.CallContract(ctx, ethereum.CallMsg{
 		To:   &AddrChainlinkProxy,
 		Data: b,
