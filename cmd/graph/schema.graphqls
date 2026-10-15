@@ -52,6 +52,18 @@ type OpenAuctions {
   openAuctions: [OpenAuction!]!
 }
 
+type Offramp {
+  """
+  Calldata that needs to be provided on-chain to get withdraw open positions.
+  """
+  cd: String!,
+
+  """
+  Bundles that need to be confirmed to prevent the UI from displaying them for claiming.
+  """
+  ids: [Int!]!
+}
+
 type Query {
   """
   Get the balance that can be spent after it was onramped.
@@ -207,7 +219,7 @@ type Mutation {
   bundles included here as being consumed. Needs a call to `offrampMarkDone` to not
   return some bundled calldata anymore.
   """
-  offramp(minAmt: String!): String!
+  offramp(minAmt: String!): Offramp!
 
   """
   Cancel an auction, using the taker id to do so. Only possible to be invoked by the

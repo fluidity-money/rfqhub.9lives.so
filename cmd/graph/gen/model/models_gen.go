@@ -53,6 +53,13 @@ type CreateAccount struct {
 type Mutation struct {
 }
 
+type Offramp struct {
+	// Calldata that needs to be provided on-chain to get withdraw open positions.
+	Cd string `json:"cd"`
+	// Bundles that need to be confirmed to prevent the UI from displaying them for claiming.
+	Ids []int `json:"ids"`
+}
+
 type OpenAuction struct {
 	ID string `json:"id"`
 	// Open to be won if this user is predicting incorrectly.

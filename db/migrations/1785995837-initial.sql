@@ -1148,6 +1148,63 @@ BEGIN
 END;
 $$;
 
+-- Prepare whole winning bundles without reserving or marking them. Callers must
+-- supply the aggregate timestamplet/server signature separately and confirm chain
+-- execution before marking withdrawal. This snapshot can become stale after return.
+CREATE FUNCTION rfqhub_offramp_pre_1 (
+	p_acc_addr ADDRESS,
+	p_asset ADDRESS,
+	p_amt BIGINT
+)
+RETURNS TABLE (
+	bundle_taker_id INTEGER,
+	bundle_maker_id INTEGER,
+	bundle_maker_structure JSON
+)
+LANGUAGE plpgsql STABLE
+AS $$
+DECLARE
+	v_candidate RECORD;
+	v_total NUMERIC := 0;
+BEGIN
+	IF p_acc_addr IS NULL OR p_asset IS NULL THEN
+		RAISE EXCEPTION 'account and asset cannot be null';
+	END IF;
+	IF p_amt IS NULL OR p_amt <= 0 THEN
+		RAISE EXCEPTION 'offramp amount must be positive: %', p_amt;
+	END IF;
+
+	FOR v_candidate IN
+		SELECT t.id AS taker_id, m.id AS maker_id, m.structure,
+			CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END AS amt
+		FROM rfqhub_bundles_taker_1 AS t
+		JOIN rfqhub_bundles_maker_1 AS m
+			ON m.id = t.maker_id AND m.bundle_taker_id = t.id
+		JOIN rfqhub_timestamplets_1 AS ts ON ts.id = m.timestamplet_id
+		WHERE t.asset = p_asset
+			AND t.structure IS NOT NULL AND m.structure IS NOT NULL
+			AND m.was_chosen = TRUE AND m.was_correct IS NOT NULL
+			AND t.end_source_amt IS NOT NULL AND m.end_source_amt IS NOT NULL
+			AND CASE WHEN m.was_correct THEN m.acc_addr ELSE t.acc_addr END = p_acc_addr
+			AND NOT CASE WHEN m.was_correct THEN m.was_offramped ELSE t.was_offramped END
+			AND CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END > 0
+			AND NOT rfqhub_taker_source_reserved_1(t.id)
+		ORDER BY amt ASC, t.id ASC
+	LOOP
+		bundle_taker_id := v_candidate.taker_id;
+		bundle_maker_id := v_candidate.maker_id;
+		bundle_maker_structure := v_candidate.structure;
+		RETURN NEXT;
+		v_total := v_total + v_candidate.amt;
+		EXIT WHEN v_total >= p_amt;
+	END LOOP;
+
+	IF v_total < p_amt THEN
+		RAISE EXCEPTION 'insufficient offramp winnings: available %, requested %', v_total, p_amt;
+	END IF;
+END;
+$$;
+
 -- Mark exactly one resolved winner as offramped. The caller identifies whether
 -- it is claiming the taker or maker side, and its account address must match
 -- that side of the selected aggregate. Return the selected maker structure and
@@ -1259,6 +1316,7 @@ $$;
 DROP FUNCTION IF EXISTS temporary_balance_changed_to_delta_1() CASCADE;
 
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
+DROP FUNCTION IF EXISTS rfqhub_offramp_pre_1(ADDRESS, ADDRESS, BIGINT);
 DROP FUNCTION IF EXISTS rfqhub_mark_winner_as_offramped_1;
 DROP VIEW IF EXISTS rfqhub_takers_to_conclude_1;
 DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;

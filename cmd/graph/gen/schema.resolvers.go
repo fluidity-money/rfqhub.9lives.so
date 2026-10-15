@@ -486,7 +486,7 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 }
 
 // Offramp is the resolver for the offramp field.
-func (r *mutationResolver) Offramp(ctx context.Context, minAmt string) (string, error) {
+func (r *mutationResolver) Offramp(ctx context.Context, minAmt string) (*model.Offramp, error) {
 	panic(fmt.Errorf("not implemented: Offramp - offramp"))
 }
 

@@ -70,6 +70,11 @@ type ComplexityRoot struct {
 		SubmitBundleMakerServerSig func(childComplexity int, bundleTakerID int, minAmount string, maxAmount string) int
 	}
 
+	Offramp struct {
+		Cd  func(childComplexity int) int
+		Ids func(childComplexity int) int
+	}
+
 	OpenAuction struct {
 		AccAddr       func(childComplexity int) int
 		BundleTakerID func(childComplexity int) int
@@ -102,7 +107,7 @@ type MutationResolver interface {
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
 	CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer *string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
-	Offramp(ctx context.Context, minAmt string) (string, error)
+	Offramp(ctx context.Context, minAmt string) (*model.Offramp, error)
 	CancelAuction(ctx context.Context, bundleTakerID int) (bool, error)
 	SubmitBundleMakerServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error)
 }
@@ -282,6 +287,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SubmitBundleMakerServerSig(childComplexity, args["bundleTakerId"].(int), args["minAmount"].(string), args["maxAmount"].(string)), true
+
+	case "Offramp.cd":
+		if e.ComplexityRoot.Offramp.Cd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Offramp.Cd(childComplexity), true
+	case "Offramp.ids":
+		if e.ComplexityRoot.Offramp.Ids == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Offramp.Ids(childComplexity), true
 
 	case "OpenAuction.accAddr":
 		if e.ComplexityRoot.OpenAuction.AccAddr == nil {
@@ -509,6 +527,18 @@ type OpenAuctions {
   openAuctions: [OpenAuction!]!
 }
 
+type Offramp {
+  """
+  Calldata that needs to be provided on-chain to get withdraw open positions.
+  """
+  cd: String!,
+
+  """
+  Bundles that need to be confirmed to prevent the UI from displaying them for claiming.
+  """
+  ids: [Int!]!
+}
+
 type Query {
   """
   Get the balance that can be spent after it was onramped.
@@ -664,7 +694,7 @@ type Mutation {
   bundles included here as being consumed. Needs a call to ` + "`" + `offrampMarkDone` + "`" + ` to not
   return some bundled calldata anymore.
   """
-  offramp(minAmt: String!): String!
+  offramp(minAmt: String!): Offramp!
 
   """
   Cancel an auction, using the taker id to do so. Only possible to be invoked by the
@@ -738,6 +768,16 @@ func (ec *executionContext) childFields_BundleTakerOwnerStatus(ctx context.Conte
 		return ec.fieldContext_BundleTakerOwnerStatus_earned(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type BundleTakerOwnerStatus", field.Name)
+}
+
+func (ec *executionContext) childFields_Offramp(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "cd":
+		return ec.fieldContext_Offramp_cd(ctx, field)
+	case "ids":
+		return ec.fieldContext_Offramp_ids(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Offramp", field.Name)
 }
 
 func (ec *executionContext) childFields_OpenAuction(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -1653,8 +1693,8 @@ func (ec *executionContext) _Mutation_offramp(ctx context.Context, field graphql
 			return ec.Resolvers.Mutation().Offramp(ctx, fc.Args["minAmt"].(string))
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
-			return ec.marshalNString2string(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Offramp) graphql.Marshaler {
+			return ec.marshalNOfframp2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOfframp(ctx, selections, v)
 		},
 		true,
 		true,
@@ -1667,7 +1707,7 @@ func (ec *executionContext) fieldContext_Mutation_offramp(ctx context.Context, f
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return ec.childFields_Offramp(ctx, field)
 		},
 	}
 	defer func() {
@@ -1770,6 +1810,52 @@ func (ec *executionContext) fieldContext_Mutation_submitBundleMakerServerSig(ctx
 		return fc, err
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _Offramp_cd(ctx context.Context, field graphql.CollectedField, obj *model.Offramp) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Offramp_cd(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Cd, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Offramp_cd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Offramp", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _Offramp_ids(ctx context.Context, field graphql.CollectedField, obj *model.Offramp) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Offramp_ids(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ids, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []int) graphql.Marshaler {
+			return ec.marshalNInt2ᚕintᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Offramp_ids(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Offramp", field, false, false, errors.New("field of type Int does not have child fields"))
 }
 
 func (ec *executionContext) _OpenAuction_id(ctx context.Context, field graphql.CollectedField, obj *model.OpenAuction) (ret graphql.Marshaler) {
@@ -3644,6 +3730,49 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 	return out
 }
 
+var offrampImplementors = []string{"Offramp"}
+
+func (ec *executionContext) _Offramp(ctx context.Context, sel ast.SelectionSet, obj *model.Offramp) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, offrampImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Offramp")
+		case "cd":
+			out.Values[i] = ec._Offramp_cd(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ids":
+			out.Values[i] = ec._Offramp_ids(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
 var openAuctionImplementors = []string{"OpenAuction"}
 
 func (ec *executionContext) _OpenAuction(ctx context.Context, sel ast.SelectionSet, obj *model.OpenAuction) graphql.Marshaler {
@@ -4349,6 +4478,49 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]int, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNInt2int(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNInt2ᚕintᚄ(ctx context.Context, sel ast.SelectionSet, v []int) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNInt2int(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOfframp2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOfframp(ctx context.Context, sel ast.SelectionSet, v model.Offramp) graphql.Marshaler {
+	return ec._Offramp(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOfframp2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOfframp(ctx context.Context, sel ast.SelectionSet, v *model.Offramp) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Offramp(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNOpenAuction2ᚕᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐOpenAuctionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.OpenAuction) graphql.Marshaler {
