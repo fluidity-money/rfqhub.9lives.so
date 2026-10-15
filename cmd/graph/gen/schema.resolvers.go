@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -22,8 +21,6 @@ import (
 	acc_db "github.com/fluidity-money/accounts.superposition.so/lib/db"
 	acc_types "github.com/fluidity-money/accounts.superposition.so/lib/types"
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
-	"github.com/fluidity-money/rfqhub.9lives.so/lib/chainlink_proxy"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
@@ -488,198 +485,9 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 	panic("todo")
 }
 
-// Conclude is the resolver for the conclude field.
-func (r *mutationResolver) Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error) {
-	snowflake, _ := ctx.Value("snowflake").(int)
-	var expiry time.Time
-	err := r.Db.QueryRow(`
-SELECT expiry FROM rfqhub_bundles_taker_1
-WHERE id = $1`,
-		bundleTakerID,
-	).Scan(&expiry)
-	if err != nil {
-		slog.Error("Error scanning bundle taker for expiry when resolving",
-			"err", err,
-			"snowflake", snowflake,
-			"bundle taker id", bundleTakerID,
-		)
-		return nil, fmt.Errorf("scan bundle taker")
-	}
-	roundId, err := chainlink_proxy.GetOutcomePrice(
-		ctx,
-		r.Client,
-		types.OutcomeBitcoinPrice,
-		expiry,
-	)
-	if err != nil {
-		slog.Error("Error getting outcome price",
-			"outcome", types.OutcomeBitcoinPrice,
-			"err", err,
-			"snowflake", snowflake,
-		)
-		return nil, fmt.Errorf("get outcome price")
-	}
-	slog.Info("Resolving market for expiry",
-		"snowflake", snowflake,
-		"round id", roundId,
-		"outcome", types.OutcomeBitcoinPrice,
-		"expiry", expiry,
-	)
-	// TODO: hardcoded for Bitcoin to get us to 1e6 as the price delta:
-	exp := new(big.Int).SetInt64(10)
-	exp.Exp(exp, new(big.Int).SetInt64(12), nil)
-	answer := roundId.Answer
-	answer.Div(answer, exp)
-	if !answer.IsUint64() {
-		slog.Error("Answer too large to be represented as a uint64",
-			"snowflake", snowflake,
-			"answer", answer,
-			"outcome", types.OutcomeBitcoinPrice,
-		)
-		return nil, fmt.Errorf("answer too large from chainlink")
-	}
-	timestampletVal := answer.Uint64()
-	row := r.Db.QueryRow(`
-SELECT
-	bundle_maker_id,
-	taker_was_correct,
-	taker_amt,
-	maker_amt,
-	structure
-FROM rfqhub_conclude_aggregate_1($1, $2)`,
-		bundleTakerID,
-		timestampletVal,
-	)
-	var (
-		bundleMakerId      int
-		takerWon           bool
-		takerAmt, makerAmt uint64
-		makerStructure     types.BundleMaker
-	)
-	err = row.Scan(
-		&bundleMakerId,
-		&takerWon,
-		&takerAmt,
-		&makerAmt,
-		&makerStructure,
-	)
-	if err != nil {
-		slog.Error("Error scanning a concluded blob",
-			"err", err,
-			"snowflake", snowflake,
-		)
-		return nil, fmt.Errorf("error concluding")
-	}
-	wonAmt := takerAmt + makerAmt
-	amountWon := strconv.FormatUint(wonAmt, 10)
-	slog.Debug("Recorded as winning",
-		"snowflake", snowflake,
-		"amount won", amountWon,
-		"did taker win?", takerWon,
-	)
-	return &model.Aggregate{
-		TakerWon:      takerWon,
-		WinningAmount: amountWon,
-	}, nil
-}
-
-// ConcludedCalldata is the resolver for the concludedCalldata field.
-func (r *mutationResolver) ConcludedCalldata(ctx context.Context, bundleTakerID int, isTaker bool) (string, error) {
-	snowflake, _ := ctx.Value("snowflake").(int)
-	if authed, _ := ctx.Value("authed").(bool); !authed {
-		return "", fmt.Errorf("not authed in the handler")
-	}
-	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
-	if !ok {
-		return "", fmt.Errorf("bad eoa address")
-	}
-	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
-	accAddrStr := strings.ToLower(accAddr.String())
-	slog.Debug("Derived the accounts address",
-		"snowflake", snowflake,
-		"acc addr", accAddrStr,
-		"eoa", eoa,
-	)
-	var (
-		maker                types.BundleMaker
-		timestampletVal      uint64
-		timestampletTime     time.Time
-		timestampletOutcomeS string
-	)
-	row := r.Db.QueryRow(`
-SELECT
-	bundle_maker_structure,
-	timestamplet_end_value,
-	timestamplet_time,
-	timestamplet_outcome
-FROM rfqhub_mark_winner_as_offramped_1($1, $2, $3)`,
-		accAddrStr,
-		isTaker,
-		bundleTakerID,
-	)
-	err := row.Scan(
-		&maker,
-		&timestampletVal,
-		&timestampletTime,
-		&timestampletOutcomeS,
-	)
-	if err != nil {
-		slog.Error("Error marking a side of the result as offramped",
-			"err", err,
-			"snowflake", snowflake,
-			"bundle taker id", bundleTakerID,
-			"is taker?", isTaker,
-			"acc addr str", accAddrStr,
-		)
-		return "", fmt.Errorf("marking winner as offramped")
-	}
-	timestampletOutcome := modelOutcomeToOutcome(model.Outcome(timestampletOutcomeS))
-	aggArgs := types.AggregateArgs{
-		Maker: maker,
-		Timestamplet: types.Timestamplet{
-			TimestampletTime:    uint32(timestampletTime.Unix()),
-			TimestampletOutcome: timestampletOutcome,
-			TimestampletVal:     timestampletVal,
-		},
-	}
-	// It's safe for us to just redo this ourselves, since things won't change:
-	serverArgs := types.ServerSigningArgs{Aggregate: &aggArgs}
-	serverSig, err := signer.ServerSignAggregate(serverArgs)
-	if err != nil {
-		slog.Error("Error signing aggregate args",
-			"err", err,
-			"snowflake", snowflake,
-			"args", serverArgs,
-		)
-		return "", fmt.Errorf("server sign aggregate")
-	}
-	args := types.Args{
-		AggregateToOfframp: &types.AggregateToOfframpArgs{
-			Args: types.AggregateEnum{
-				Args: &types.Aggregate{
-					Args:      aggArgs,
-					ServerSig: serverSig,
-				},
-			},
-			IsTaker: isTaker,
-		},
-	}
-	slog.Debug("Generating borsh for the args",
-		"snowflake", snowflake,
-		"args", args,
-		"is taker", isTaker,
-	)
-	cd, err := borsh.Encode(args)
-	if err != nil {
-		slog.Error("Error creating aggregate args calldata",
-			"err", err,
-			"snowflake", snowflake,
-			"args", args,
-			"sig", serverSig,
-		)
-		return "", fmt.Errorf("server cd aggregate")
-	}
-	return hex.EncodeToString(cd), nil
+// Offramp is the resolver for the offramp field.
+func (r *mutationResolver) Offramp(ctx context.Context, minAmt string) (string, error) {
+	panic(fmt.Errorf("not implemented: Offramp - offramp"))
 }
 
 // CancelAuction is the resolver for the cancelAuction field.

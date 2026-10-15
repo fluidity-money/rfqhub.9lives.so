@@ -62,11 +62,10 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		CancelAuction              func(childComplexity int, bundleTakerID int) int
-		Conclude                   func(childComplexity int, bundleTakerID int) int
-		ConcludedCalldata          func(childComplexity int, bundleTakerID int, isTaker bool) int
 		CreateAccountExec          func(childComplexity int, createAccount model.CreateAccount, permit *model.Permit, amt string, isDryrun *bool) int
 		CreateAuctionServerSig     func(childComplexity int, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer *string) int
 		InspectBundleTakerID       func(childComplexity int, bundleTakerID int) int
+		Offramp                    func(childComplexity int, minAmt string) int
 		OnrampAmount               func(childComplexity int, amt string, permit *model.Permit, isDryrun *bool) int
 		SubmitBundleMakerServerSig func(childComplexity int, bundleTakerID int, minAmount string, maxAmount string) int
 	}
@@ -103,8 +102,7 @@ type MutationResolver interface {
 	OnrampAmount(ctx context.Context, amt string, permit *model.Permit, isDryrun *bool) (string, error)
 	CreateAuctionServerSig(ctx context.Context, minAmount string, maxAmount string, isUp bool, priceTarget string, outcome model.Outcome, expiry int, deadline int, minOffer *string) (*model.AuctionCreatedResult, error)
 	InspectBundleTakerID(ctx context.Context, bundleTakerID int) (*model.BundleTakerOwnerStatus, error)
-	Conclude(ctx context.Context, bundleTakerID int) (*model.Aggregate, error)
-	ConcludedCalldata(ctx context.Context, bundleTakerID int, isTaker bool) (string, error)
+	Offramp(ctx context.Context, minAmt string) (string, error)
 	CancelAuction(ctx context.Context, bundleTakerID int) (bool, error)
 	SubmitBundleMakerServerSig(ctx context.Context, bundleTakerID int, minAmount string, maxAmount string) (*model.BundleMakerInfo, error)
 }
@@ -218,28 +216,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CancelAuction(childComplexity, args["bundleTakerId"].(int)), true
-	case "Mutation.conclude":
-		if e.ComplexityRoot.Mutation.Conclude == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_conclude_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.Conclude(childComplexity, args["bundleTakerId"].(int)), true
-	case "Mutation.concludedCalldata":
-		if e.ComplexityRoot.Mutation.ConcludedCalldata == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_concludedCalldata_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.ConcludedCalldata(childComplexity, args["bundleTakerId"].(int), args["isTaker"].(bool)), true
 	case "Mutation.createAccountExec":
 		if e.ComplexityRoot.Mutation.CreateAccountExec == nil {
 			break
@@ -273,6 +249,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.InspectBundleTakerID(childComplexity, args["bundleTakerId"].(int)), true
+	case "Mutation.offramp":
+		if e.ComplexityRoot.Mutation.Offramp == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_offramp_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.Offramp(childComplexity, args["minAmt"].(string)), true
 	case "Mutation.onrampAmount":
 		if e.ComplexityRoot.Mutation.OnrampAmount == nil {
 			break
@@ -673,18 +660,11 @@ type Mutation {
   inspectBundleTakerId(bundleTakerId: Int!): BundleTakerOwnerStatus!
 
   """
-  Conclude a bundle that's been outstanding to be resolved (the expiry date has passed).
-  Anyone can call this. ` + "`" + `produceOfframpCdTaker` + "`" + ` needs to be called by the taker and
-  ` + "`" + `produceOfframpCdMaker` + "`" + ` needs to be called by the maker to get calldata to offramp,
-  and also to offramp.
-  """
-  conclude(bundleTakerId: Int!): Aggregate!
-
-  """
   Get the calldata to perform an offramping from the Rfqhub engine. Marks the aggregate
-  bundle as being unable to be consumed.
+  bundles included here as being consumed. Needs a call to ` + "`" + `offrampMarkDone` + "`" + ` to not
+  return some bundled calldata anymore.
   """
-  concludedCalldata(bundleTakerId: Int!, isTaker: Boolean!): String!
+  offramp(minAmt: String!): String!
 
   """
   Cancel an auction, using the taker id to do so. Only possible to be invoked by the
@@ -723,18 +703,6 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // childFields_* functions provide shared child field context lookups.
 // Each function is generated once per unique object type, deduplicating the
 // switch statements that were previously inlined in every fieldContext_* function.
-
-func (ec *executionContext) childFields_Aggregate(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-	switch field.Name {
-	case "id":
-		return ec.fieldContext_Aggregate_id(ctx, field)
-	case "takerWon":
-		return ec.fieldContext_Aggregate_takerWon(ctx, field)
-	case "winningAmount":
-		return ec.fieldContext_Aggregate_winningAmount(ctx, field)
-	}
-	return nil, fmt.Errorf("no field named %q was found under type Aggregate", field.Name)
-}
 
 func (ec *executionContext) childFields_AuctionCreatedResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
@@ -936,42 +904,6 @@ func (ec *executionContext) field_Mutation_cancelAuction_args(ctx context.Contex
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_conclude_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
-		func(ctx context.Context, v any) (int, error) {
-			return ec.unmarshalNInt2int(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["bundleTakerId"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_concludedCalldata_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "bundleTakerId",
-		func(ctx context.Context, v any) (int, error) {
-			return ec.unmarshalNInt2int(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["bundleTakerId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "isTaker",
-		func(ctx context.Context, v any) (bool, error) {
-			return ec.unmarshalNBoolean2bool(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["isTaker"] = arg1
-	return args, nil
-}
-
 func (ec *executionContext) field_Mutation_createAccountExec_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1091,6 +1023,20 @@ func (ec *executionContext) field_Mutation_inspectBundleTakerId_args(ctx context
 		return nil, err
 	}
 	args["bundleTakerId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_offramp_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "minAmt",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["minAmt"] = arg0
 	return args, nil
 }
 
@@ -1694,61 +1640,17 @@ func (ec *executionContext) fieldContext_Mutation_inspectBundleTakerId(ctx conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_conclude(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_offramp(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
 		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_conclude(ctx, field)
+			return ec.fieldContext_Mutation_offramp(ctx, field)
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().Conclude(ctx, fc.Args["bundleTakerId"].(int))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *model.Aggregate) graphql.Marshaler {
-			return ec.marshalNAggregate2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregate(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Mutation_conclude(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_Aggregate(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_conclude_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_concludedCalldata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_concludedCalldata(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().ConcludedCalldata(ctx, fc.Args["bundleTakerId"].(int), fc.Args["isTaker"].(bool))
+			return ec.Resolvers.Mutation().Offramp(ctx, fc.Args["minAmt"].(string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
@@ -1758,7 +1660,7 @@ func (ec *executionContext) _Mutation_concludedCalldata(ctx context.Context, fie
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_Mutation_concludedCalldata(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_offramp(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -1775,7 +1677,7 @@ func (ec *executionContext) fieldContext_Mutation_concludedCalldata(ctx context.
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_concludedCalldata_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_offramp_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3700,16 +3602,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "conclude":
+		case "offramp":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_conclude(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "concludedCalldata":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_concludedCalldata(ctx, field)
+				return ec._Mutation_offramp(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -4360,20 +4255,6 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 // endregion **************************** object.gotpl ****************************
 
 // region    ***************************** type.gotpl *****************************
-
-func (ec *executionContext) marshalNAggregate2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregate(ctx context.Context, sel ast.SelectionSet, v model.Aggregate) graphql.Marshaler {
-	return ec._Aggregate(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNAggregate2ᚖgithubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAggregate(ctx context.Context, sel ast.SelectionSet, v *model.Aggregate) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._Aggregate(ctx, sel, v)
-}
 
 func (ec *executionContext) marshalNAuctionCreatedResult2githubᚗcomᚋfluidityᚑmoneyᚋrfqhubᚗ9livesᚗsoᚋcmdᚋgraphᚋgenᚋmodelᚐAuctionCreatedResult(ctx context.Context, sel ast.SelectionSet, v model.AuctionCreatedResult) graphql.Marshaler {
 	return ec._AuctionCreatedResult(ctx, sel, &v)

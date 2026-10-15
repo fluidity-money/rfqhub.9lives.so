@@ -148,6 +148,10 @@ CREATE INDEX rfqhub_bundles_taker_open_balance_idx
 	INCLUDE (id, pot_funded_amt, deadline)
 	WHERE pot_funded_amt > 0;
 
+CREATE INDEX rfqhub_bundles_taker_pending_conclusion_idx
+	ON rfqhub_bundles_taker_1 (expiry, id)
+	WHERE structure IS NOT NULL AND end_source_amt IS NULL;
+
 CREATE TABLE rfqhub_bundles_maker_user_count_1 (
 	id SERIAL PRIMARY KEY,
 	addr ADDRESS NOT NULL UNIQUE,
@@ -1036,6 +1040,26 @@ BEGIN
 END;
 $$;
 
+-- Poll for work without claiming it. Rows remain visible until conclusion commits;
+-- overlapping workers may see the same taker.
+CREATE VIEW rfqhub_takers_to_conclude_1 AS
+	SELECT t.id AS bundle_taker_id, t.outcome, t.expiry
+	FROM rfqhub_bundles_taker_1 AS t
+	WHERE t.structure IS NOT NULL
+		AND t.end_source_amt IS NULL
+		AND t.expiry <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - INTERVAL '5 seconds'
+		AND EXISTS (
+			SELECT 1
+			FROM rfqhub_bundles_maker_1 AS m
+			WHERE m.bundle_taker_id = t.id
+				AND m.structure IS NOT NULL
+				AND (
+					(t.maker_id IS NULL AND m.was_chosen IS DISTINCT FROM FALSE)
+					OR m.id = t.maker_id
+				)
+		)
+	ORDER BY t.expiry, t.id;
+
 -- Select the largest signed maker offer for a taker, record the supplied
 -- timestamplet at the taker's expiry, and resolve the pair in place: the maker's
 -- was_correct and both end_source_amt values are set from the outcome. Returns
@@ -1249,6 +1273,7 @@ DROP FUNCTION IF EXISTS temporary_balance_changed_to_delta_1() CASCADE;
 
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_winner_as_offramped_1;
+DROP VIEW IF EXISTS rfqhub_takers_to_conclude_1;
 DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_resolve_aggregate_1;
 DROP FUNCTION IF EXISTS rfqhub_pick_maker_1;
