@@ -184,9 +184,13 @@ type OfframpVariantArgs struct {
 	ServerSig Sig         `json:"server_sig"`
 }
 
-type AggregateToOfframpArgs struct {
+type AggregateToOfframpArg struct {
 	Args    AggregateEnum `json:"args"`
 	IsTaker bool          `json:"is_taker"`
+}
+
+type AggregateToOfframpArgs struct {
+	Args []AggregateToOfframpArg `json:"args"`
 }
 
 type Args struct {

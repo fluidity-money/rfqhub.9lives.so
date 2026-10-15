@@ -1,6 +1,7 @@
 use crate::{
-    AggregateArgs, AggregateEnum, AggregatedResultArgs, BundleMaker, BundleMakerArgs, BundleTaker,
-    BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig, Timestamplet, call_eip20,
+    AggregateArgs, AggregateEnum, AggregateToOfframpArg, AggregatedResultArgs, BundleMaker,
+    BundleMakerArgs, BundleTaker, BundleTakerArgs, Imm, OnchainPotArgs, OnrampingSource, Sig,
+    Timestamplet, call_eip20,
     error::{Dis, Error, ErrorData},
     events::event_emit_bal_update,
     signable::{Hash, SignableAggregateArgs, SignableOnrampingSource},
@@ -449,34 +450,39 @@ pub fn entry_recurse_aggregate_enum(
 }
 
 #[bobcat_trace]
-pub fn entry_aggregate_to_offramp(imm: &Imm, args: AggregateEnum, is_taker: bool) -> usize {
+pub fn entry_aggregate_to_offramp(imm: &Imm, args: &[AggregateToOfframpArg]) -> usize {
     // This code recursively descends inside the aggregate args, finding the
     // correct winning amount for the maker and takers, crediting the winning
     // addresses correctly. The amounts are then sent to the users.
-    let EntryRecurseAggregateEnum {
-        sender,
-        asset,
-        taker_leftover,
-        maker_leftover,
-    } = entry_recurse_aggregate_enum(imm, &args, is_taker).unwrap();
-    let hash = match &args {
-        AggregateEnum::Args(agg) => SignableAggregateArgs::from(&agg.args).hash.into(),
-        AggregateEnum::Hash(hash) => *hash,
-    };
-    let acc_addr: [u8; 20] = if is_taker {
-        storage::hash_taker_addr::get(&hash).into()
-    } else {
-        storage::hash_maker_addr::get(&hash).into()
-    };
-    let asset_u = U::from(asset);
-    let leftover_u = U::from(taker_leftover) + U::from(maker_leftover);
-    let global_bal =
-        storage::global_bal::checked_sub_res(&asset_u, &leftover_u, "aggregate offramp").unwrap();
-    event_emit_bal_update(acc_addr, asset, U::ZERO, global_bal);
-    assert!(
-        call_eip20::transfer(asset, sender, &leftover_u),
-        "eip20 transfer err"
-    );
+    let mut new_bal = U::ZERO;
+    for AggregateToOfframpArg { args, is_taker } in args {
+        let EntryRecurseAggregateEnum {
+            sender,
+            asset,
+            taker_leftover,
+            maker_leftover,
+        } = entry_recurse_aggregate_enum(imm, args, *is_taker).unwrap();
+        let hash = match args {
+            AggregateEnum::Args(agg) => SignableAggregateArgs::from(&agg.args).hash.into(),
+            AggregateEnum::Hash(hash) => *hash,
+        };
+        let acc_addr: [u8; 20] = if *is_taker {
+            storage::hash_taker_addr::get(&hash).into()
+        } else {
+            storage::hash_maker_addr::get(&hash).into()
+        };
+        let asset_u = U::from(asset);
+        let leftover_u = U::from(taker_leftover) + U::from(maker_leftover);
+        new_bal = new_bal.checked_add(&leftover_u);
+        let global_bal =
+            storage::global_bal::checked_sub_res(&asset_u, &leftover_u, "aggregate offramp")
+                .unwrap();
+        event_emit_bal_update(acc_addr, asset, U::ZERO, global_bal);
+        assert!(
+            call_eip20::transfer(asset, sender, &leftover_u),
+            "eip20 transfer err"
+        );
+    }
     0
 }
 

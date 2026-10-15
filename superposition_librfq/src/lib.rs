@@ -217,6 +217,14 @@ pub enum AggregateEnum {
 #[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 #[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
+pub struct AggregateToOfframpArg {
+    pub args: AggregateEnum,
+    pub is_taker: bool,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
+#[cfg_attr(feature = "serde", derive(SerdeDeserialize, SerdeSerialize))]
 pub enum Args {
     Version,
     /// Dumps the source code of the contract using the bobcat-create harness.
@@ -245,8 +253,7 @@ pub enum Args {
     /// Superposition aggregator. Offramps the taker that was involved
     /// in the submission of the data.
     AggregateToOfframp {
-        args: AggregateEnum,
-        is_taker: bool,
+        args: Vec<AggregateToOfframpArg>,
     },
 }
 
@@ -266,8 +273,6 @@ pub fn entry(imm: &Imm, op: Args) -> usize {
         Args::Balance { asset, addr } => entry_balance(asset, addr),
         Args::OnrampingFromBal { asset, amt } => entry_onramping_from_bal(asset, amt),
         Args::Offramp { args, server_sig } => entry_offramp(imm, args, server_sig),
-        Args::AggregateToOfframp { args, is_taker } => {
-            entry_aggregate_to_offramp(imm, args, is_taker)
-        }
+        Args::AggregateToOfframp { args } => entry_aggregate_to_offramp(imm, &args),
     }
 }
