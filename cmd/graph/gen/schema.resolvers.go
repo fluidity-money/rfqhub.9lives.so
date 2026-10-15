@@ -23,6 +23,7 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen/model"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/convertor"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/signer"
+	"github.com/fluidity-money/rfqhub.9lives.so/lib/borsh"
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 )
 
@@ -487,7 +488,114 @@ FROM rfqhub_inspect_bundle_taker_1($1, $2)`,
 
 // Offramp is the resolver for the offramp field.
 func (r *mutationResolver) Offramp(ctx context.Context, minAmt string) (*model.Offramp, error) {
-	panic(fmt.Errorf("not implemented: Offramp - offramp"))
+	snowflake, _ := ctx.Value("snowflake").(int)
+	if authed, _ := ctx.Value("authed").(bool); !authed {
+		return nil, fmt.Errorf("not authed in the handler")
+	}
+	eoa, ok := ctx.Value("eoa").(ethCommon.Address)
+	if !ok {
+		return nil, fmt.Errorf("bad eoa address")
+	}
+	accAddr := acc_types.GetClientAddr(r.AccountsFactoryAddr, eoa)
+	accAddrS := strings.ToLower(accAddr.String())
+	minAmt_, err := strconv.ParseUint(minAmt, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parsing minimum amount: %v", err)
+	}
+	rows, err := r.Db.QueryContext(ctx, `
+SELECT
+	bundle_taker_id,
+	bundle_maker_structure,
+	timestamplet_end_value,
+	timestamplet_time,
+	timestamplet_outcome,
+	is_taker
+FROM rfqhub_offramp_pre_1($1, $2, $3)`,
+		accAddrS,
+		minAmt_,
+		usdcAddr(),
+	)
+	if err != nil {
+		slog.Error("Error scanning bundle taker structure",
+			"err", err,
+			"acc addr", accAddrS,
+			"min amt", minAmt_,
+		)
+		return nil, fmt.Errorf("scan outstanding bundles to claim: %v", err)
+	}
+	defer rows.Close()
+	var (
+		sources []types.AggregateToOfframpArg
+		ids []int
+	)
+	for rows.Next() {
+		var (
+			bundleTakerId int
+			makerStruct types.BundleMaker
+			timestampletEndValue uint64
+			timestampletTime time.Time
+			timestampletOutcome model.Outcome
+			isTaker bool
+		)
+		err = rows.Scan(
+			&bundleTakerId,
+			&makerStruct,
+			&timestampletEndValue,
+			&timestampletTime,
+			&timestampletOutcome,
+			&isTaker,
+		)
+		if err != nil {
+			slog.Error("Failed to scan bundle taker ids and maker structures",
+				"err", err,
+				"bundle taker id", bundleTakerId,
+			)
+			return nil, fmt.Errorf("scan bundle taker id and maker structure")
+		}
+		aggArgs := types.AggregateArgs{
+			Maker: makerStruct,
+			Timestamplet: types.Timestamplet{
+				TimestampletTime: uint32(timestampletTime.Unix()),
+				TimestampletOutcome: modelOutcomeToOutcome(timestampletOutcome),
+				TimestampletVal: timestampletEndValue,
+			},
+		}
+		serverSig, err := signer.ServerSignAggregate(types.ServerSigningArgs{
+			Aggregate: &aggArgs,
+		})
+		if err != nil {
+			slog.Error("Error signing aggregate",
+				"err", err,
+				"snowflake", snowflake,
+				"agg args", aggArgs,
+			)
+			return nil, fmt.Errorf("error signing aggregate: %v", err)
+		}
+		sources = append(sources, types.AggregateToOfframpArg{
+			Args: types.AggregateEnum {
+				Args: &types.Aggregate{
+					Args: aggArgs,
+					ServerSig: serverSig,
+				},
+			},
+		})
+		ids = append(ids, bundleTakerId)
+	}
+	offrampArgs := types.AggregateToOfframpArgs{ Args: sources }
+	cd, err := borsh.Encode(types.Args{
+		AggregateToOfframp: &offrampArgs,
+	})
+	if err != nil {
+		slog.Error("Error encoding borsh arguments",
+			"err", err,
+			"snowflake", snowflake,
+		)
+		return nil, fmt.Errorf("error encoding")
+	}
+	return &model.Offramp{
+		Cd: hex.EncodeToString(cd),
+		Ids: ids,
+	}, nil
 }
 
 // CancelAuction is the resolver for the cancelAuction field.

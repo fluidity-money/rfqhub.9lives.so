@@ -538,7 +538,9 @@ impl proptest::arbitrary::Arbitrary for Args {
             (any::<OfframpArgs>(), sig())
                 .prop_map(|(args, server_sig)| Args::Offramp { args, server_sig }),
             (any::<AggregateEnum>(), any::<bool>())
-                .prop_map(|(args, is_taker)| { Args::AggregateToOfframp { args, is_taker } }),
+                .prop_map(|(args, is_taker)| Args::AggregateToOfframp {
+                    args: alloc::vec![AggregateToOfframpArg { args, is_taker }],
+                }),
         ]
         .boxed()
     }

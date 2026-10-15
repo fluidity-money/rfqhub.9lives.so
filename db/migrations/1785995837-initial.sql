@@ -1148,9 +1148,9 @@ BEGIN
 END;
 $$;
 
--- Prepare whole winning bundles without reserving or marking them. Callers must
--- supply the aggregate timestamplet/server signature separately and confirm chain
--- execution before marking withdrawal. This snapshot can become stale after return.
+-- Prepare whole winning bundles and mark the winning side as offramped atomically.
+-- This consumes database eligibility when calldata is issued, not on chain confirmation.
+-- Insufficient funds roll back every mark. Callers supply aggregate signing separately.
 CREATE FUNCTION rfqhub_offramp_pre_1 (
 	p_acc_addr ADDRESS,
 	p_asset ADDRESS,
@@ -1158,10 +1158,13 @@ CREATE FUNCTION rfqhub_offramp_pre_1 (
 )
 RETURNS TABLE (
 	bundle_taker_id INTEGER,
-	bundle_maker_id INTEGER,
-	bundle_maker_structure JSON
+	bundle_maker_structure JSON,
+	timestamplet_end_value BIGINT,
+	timestamplet_time TIMESTAMP,
+	timestamplet_outcome RFQHUB_OUTCOME,
+	is_taker BOOLEAN
 )
-LANGUAGE plpgsql STABLE
+LANGUAGE plpgsql VOLATILE
 AS $$
 DECLARE
 	v_candidate RECORD;
@@ -1174,8 +1177,11 @@ BEGIN
 		RAISE EXCEPTION 'offramp amount must be positive: %', p_amt;
 	END IF;
 
+	-- Match funding constructors and winner withdrawal: account before row locks.
+	PERFORM pg_advisory_xact_lock(hashtextextended(p_acc_addr::TEXT, 1785995837));
 	FOR v_candidate IN
-		SELECT t.id AS taker_id, m.id AS maker_id, m.structure,
+		SELECT t.id AS taker_id, m.structure, m.was_correct,
+			ts.timestamplet_val, ts.timestamplet_time, ts.timestamplet_outcome,
 			CASE WHEN m.was_correct THEN m.end_source_amt ELSE t.end_source_amt END AS amt
 		FROM rfqhub_bundles_taker_1 AS t
 		JOIN rfqhub_bundles_maker_1 AS m
@@ -1191,9 +1197,17 @@ BEGIN
 			AND NOT rfqhub_taker_source_reserved_1(t.id)
 		ORDER BY amt ASC, t.id ASC
 	LOOP
+		-- The helper locks parent then maker, rechecks ownership/resolution and
+		-- source reservations, and marks only the winning side.
+		PERFORM rfqhub_mark_winner_as_offramped_1(
+			p_acc_addr, NOT v_candidate.was_correct, v_candidate.taker_id
+		);
 		bundle_taker_id := v_candidate.taker_id;
-		bundle_maker_id := v_candidate.maker_id;
 		bundle_maker_structure := v_candidate.structure;
+		timestamplet_end_value := v_candidate.timestamplet_val;
+		timestamplet_time := v_candidate.timestamplet_time;
+		timestamplet_outcome := v_candidate.timestamplet_outcome;
+		is_taker := NOT v_candidate.was_correct;
 		RETURN NEXT;
 		v_total := v_total + v_candidate.amt;
 		EXIT WHEN v_total >= p_amt;
@@ -1316,7 +1330,7 @@ $$;
 DROP FUNCTION IF EXISTS temporary_balance_changed_to_delta_1() CASCADE;
 
 DROP FUNCTION IF EXISTS rfqhub_mark_as_offramped_1;
-DROP FUNCTION IF EXISTS rfqhub_offramp_pre_1(ADDRESS, ADDRESS, BIGINT);
+DROP FUNCTION IF EXISTS rfqhub_offramp_pre_1;
 DROP FUNCTION IF EXISTS rfqhub_mark_winner_as_offramped_1;
 DROP VIEW IF EXISTS rfqhub_takers_to_conclude_1;
 DROP FUNCTION IF EXISTS rfqhub_conclude_aggregate_1;
@@ -1327,10 +1341,10 @@ DROP FUNCTION IF EXISTS rfqhub_create_bundle_maker_1;
 DROP FUNCTION IF EXISTS rfqhub_set_bundle_taker_structure_1;
 DROP FUNCTION IF EXISTS rfqhub_create_bundle_taker_1;
 DROP FUNCTION IF EXISTS rfqhub_get_or_create_timestamplet_1;
-DROP FUNCTION IF EXISTS rfqhub_get_available_balance_1(ADDRESS, ADDRESS);
-DROP FUNCTION IF EXISTS rfqhub_release_taker_source_1(INTEGER);
-DROP FUNCTION IF EXISTS rfqhub_taker_source_reserved_1(INTEGER);
-DROP FUNCTION IF EXISTS rfqhub_taker_sources_releasable_1(INTEGER);
+DROP FUNCTION IF EXISTS rfqhub_get_available_balance_1;
+DROP FUNCTION IF EXISTS rfqhub_release_taker_source_1;
+DROP FUNCTION IF EXISTS rfqhub_taker_source_reserved_1;
+DROP FUNCTION IF EXISTS rfqhub_taker_sources_releasable_1;
 DROP FUNCTION IF EXISTS rfqhub_get_spendable_1;
 DROP FUNCTION IF EXISTS rfqhub_inspect_bundle_taker_1;
 

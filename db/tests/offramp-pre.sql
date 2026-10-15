@@ -40,17 +40,36 @@ BEGIN
  excluded := pg_temp.offramp_fixture(a,asset,2,TRUE);
  UPDATE rfqhub_bundles_maker_1 SET was_offramped=TRUE WHERE bundle_taker_id=excluded;
 
- FOR r IN SELECT * FROM rfqhub_offramp_pre_1(a,asset,11) LOOP
-  ids := array_append(ids,r.bundle_taker_id);
-  ASSERT r.bundle_maker_structure::JSONB='{"maker":true}'::JSONB;
-  ASSERT (SELECT maker_id=r.bundle_maker_id FROM rfqhub_bundles_taker_1 WHERE id=r.bundle_taker_id);
- END LOOP;
- ASSERT ids=ARRAY[small,large], 'must cover amount with whole smallest-first winners from either side';
- ASSERT (SELECT count(*)=1 FROM rfqhub_offramp_pre_1(a,asset,10)), 'exact match must stop';
- ASSERT (SELECT count(*)=2 FROM rfqhub_offramp_pre_1(a,asset,11)), 'preparation must not consume winners';
  BEGIN
   PERFORM * FROM rfqhub_offramp_pre_1(a,asset,31);
   ASSERT FALSE, 'insufficient balance must fail';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM NOT LIKE '%insufficient offramp winnings%' THEN RAISE; END IF;
+ END;
+ ASSERT (SELECT NOT was_offramped FROM rfqhub_bundles_taker_1 WHERE id=small), 'failure must roll back taker mark';
+ ASSERT (SELECT NOT was_offramped FROM rfqhub_bundles_maker_1 WHERE bundle_taker_id=large), 'failure must roll back maker mark';
+ -- A selected signed offer without a timestamplet must not be eligible.
+ excluded := pg_temp.offramp_fixture(a,asset,2,FALSE);
+ UPDATE rfqhub_bundles_maker_1 SET timestamplet_id=NULL WHERE bundle_taker_id=excluded;
+ FOR r IN SELECT * FROM rfqhub_offramp_pre_1(a,asset,11) LOOP
+  ids := array_append(ids,r.bundle_taker_id);
+  ASSERT r.bundle_maker_structure::JSONB='{"maker":true}'::JSONB;
+  ASSERT r.timestamplet_end_value=200;
+  ASSERT r.timestamplet_time='2026-01-01'::TIMESTAMP;
+  ASSERT r.timestamplet_outcome='BitcoinPrice';
+  ASSERT r.is_taker IS NOT DISTINCT FROM (r.bundle_taker_id=small), 'winner side must match requesting account';
+  ASSERT (SELECT m.structure::JSONB=r.bundle_maker_structure::JSONB
+   FROM rfqhub_bundles_taker_1 t JOIN rfqhub_bundles_maker_1 m ON m.id=t.maker_id
+   WHERE t.id=r.bundle_taker_id);
+ END LOOP;
+ ASSERT ids=ARRAY[small,large], 'must cover amount with whole smallest-first winners from either side';
+ ASSERT (SELECT was_offramped FROM rfqhub_bundles_taker_1 WHERE id=small), 'taker winner must be consumed';
+ ASSERT (SELECT was_offramped FROM rfqhub_bundles_maker_1 WHERE bundle_taker_id=large), 'maker winner must be consumed';
+ ASSERT (SELECT NOT was_offramped FROM rfqhub_bundles_maker_1 WHERE bundle_taker_id=small), 'losing maker must not be marked';
+ ASSERT (SELECT NOT was_offramped FROM rfqhub_bundles_taker_1 WHERE id=large), 'losing taker must not be marked';
+ BEGIN
+  PERFORM * FROM rfqhub_offramp_pre_1(a,asset,1);
+  ASSERT FALSE, 'consumed winners must not be returned again';
  EXCEPTION WHEN raise_exception THEN
   IF SQLERRM NOT LIKE '%insufficient offramp winnings%' THEN RAISE; END IF;
  END;

@@ -294,8 +294,10 @@ mod test {
                                         set_msg_sender(owner);
                                         entry_aggregate_to_offramp::entry_aggregate_to_offramp(
                                             &Imm::default(),
-                                            AggregateEnum::Args(Box::new(third)),
-                                            !new_is_taker,
+                                            &[AggregateToOfframpArg {
+                                                args: AggregateEnum::Args(Box::new(third)),
+                                                is_taker: !new_is_taker,
+                                            }],
                                         );
                                     }
                                     #[cfg(not(feature = "arbos"))]
@@ -453,7 +455,7 @@ mod test {
                         );
                         // Host Err does not roll back earlier recursive writes. Each
                         // rejection has fresh storage; this is not an atomicity test.
-                        assert_eq!(eip20_balance(Asset::USDC.addr(), CONTRACT), U::from(50));
+                        assert_eq!(eip20_balance(Asset::USDC.addr(), CONTRACT), U::from(50u64));
                         std_eip20::reset_balances();
                     });
                 }
@@ -507,10 +509,12 @@ mod test {
                 set_msg_sender(owner);
                 entry_aggregate_to_offramp::entry_aggregate_to_offramp(
                     &Imm::default(),
-                    from,
-                    taker_wins,
+                    &[AggregateToOfframpArg {
+                        args: from,
+                        is_taker: taker_wins,
+                    }],
                 );
-                assert_eq!(eip20_balance(Asset::USDC.addr(), owner), U::from(50));
+                assert_eq!(eip20_balance(Asset::USDC.addr(), owner), U::from(50u64));
                 assert_eq!(storage::global_bal::get(&Asset::USDC.u()), U::ZERO);
                 assert_leftovers(hash(&first), Asset::USDC, 0, 0);
                 std_eip20::reset_balances();
