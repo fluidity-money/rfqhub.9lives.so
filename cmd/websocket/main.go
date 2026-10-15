@@ -77,6 +77,7 @@ type BundleTaker struct {
 	Amt         int64             `json:"amt"`
 	MinOffer    *int64            `json:"min_offer"`
 	DecayRate   json.Number       `json:"decay_rate"`
+	CreatedBy   time.Time         `json:"created_by"`
 	IsUp        bool              `json:"is_up"`
 	PriceTarget int64             `json:"price_target"`
 	Outcome     string            `json:"outcome"`
@@ -141,6 +142,7 @@ SELECT json_build_object(
 			'amt', t.amt,
 			'min_offer', t.min_offer,
 			'decay_rate', t.decay_rate,
+			'created_by', to_char(t.created_by, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
 			'is_up', t.is_up,
 			'price_target', t.price_target,
 			'outcome', t.outcome,
