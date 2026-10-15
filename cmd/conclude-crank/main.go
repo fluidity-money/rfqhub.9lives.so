@@ -81,7 +81,7 @@ SELECT rfqhub_conclude_aggregate_1($1, $2)`,
 			}(bundleTakerId)
 		}
 		if count == 0 {
-			slog.Info("No takers that need resolution")
+			slog.Debug("No takers that need resolution")
 			continue
 		}
 		i := 0
@@ -92,4 +92,29 @@ SELECT rfqhub_conclude_aggregate_1($1, $2)`,
 			}
 		}
 	}
+}
+
+func init() {
+	logLevel := slog.LevelInfo
+	if os.Getenv("SPN_DEBUG") != "" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	var revision string
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" {
+				revision = setting.Value
+				break
+			}
+		}
+	}
+	logger.
+		With("revision", revision).
+		With("environment", "backend").
+		With("command line", strings.Join(os.Args, ",")).
+		With("is debug", logLevel == slog.LevelDebug)
+	slog.SetDefault(logger)
 }
