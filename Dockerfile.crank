@@ -19,4 +19,4 @@ COPY --from=build-go \
 	/usr/src/rfqhub.9lives.so/rfqhub-conclude-crank \
 	/bin/rfqhub-conclude-crank
 
-ENTRYPOINT ["/bin/rfqhub-websocket"]
+ENTRYPOINT ["/bin/rfqhub-conclude-crank"]
