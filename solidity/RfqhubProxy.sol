@@ -1,32 +1,22 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL
 pragma solidity 0.8.30;
 
-contract UpgradeableProxy {
+contract RfqhubProxy {
     event Upgraded(address indexed implementation);
     event AdminChanged(address previousAdmin, address newAdmin);
 
     bytes32 constant SLOT_IMPL = bytes32(uint256(keccak256('eip1967.proxy.implementation')) - 1);
     bytes32 constant SLOT_ADMIN = bytes32(uint256(keccak256('eip1967.proxy.admin')) - 1);
 
-    /* Slots below are copied from ../src/storage.rs: */
+    /* Slots below are copied from superposition_librfq/src/storage.rs */
 
-    /// @dev wasCreated this contract?
-    bool private wasCreated;
-    /// @dev ed25519Count of the amount of public keys we use.
-    uint256 private ed25519Count;
-    /// @dev ed25519Slots that we use for public keys. The ed25519 public key.
-    mapping(uint256 => bytes32) private ed25519Slot;
-    /// @dev EOA owner of this account that we use. Will be the admin.
-    address private ethereumOwner;
+    bool paused;
 
-    mapping(uint256 => uint256) private timestamps;
-
-    uint256 private version;
+    uint256 version;
 
     constructor(
         address _impl,
-        address _admin,
-        bytes32 _publicKey
+        address _admin
     ) {
         bytes32 slotImpl = SLOT_IMPL;
         bytes32 slotAdmin = SLOT_ADMIN;
@@ -36,16 +26,7 @@ contract UpgradeableProxy {
         }
         emit Upgraded(_impl);
         emit AdminChanged(address(0), _admin);
-        wasCreated = true;
-        ed25519Count = 1;
-        // The accounts system has a bug where the operation for slot_map is
-        // flipped. This code sets the correct field:
-        bytes32 correctEdSlot = keccak256(abi.encode(uint256(2), uint256(0)));
-        assembly {
-            sstore(correctEdSlot, _publicKey)
-        }
-        ethereumOwner = _admin;
-        version = 2;
+        version = 1;
     }
 
     fallback() external payable {
@@ -69,6 +50,7 @@ contract UpgradeableProxy {
                 require(rc, "delegatecall failed");
             }
         } else {
+            require(!paused, "contract paused");
             assembly {
                 let impl := sload(slotImpl)
                 calldatacopy(0, 0, calldatasize())
