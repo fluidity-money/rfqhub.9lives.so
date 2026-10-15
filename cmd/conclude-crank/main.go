@@ -29,6 +29,7 @@ func main() {
 	}
 	chanConcluded := make(chan bool)
 	for {
+		time.Sleep(time.Second)
 		// TODO: this assumes every outcome is the Bitcoin price!
 		rows, err := db.Query(`
 SELECT bundle_taker_id FROM rfqhub_takers_to_conclude_1`,
@@ -90,6 +91,5 @@ SELECT rfqhub_conclude_aggregate_1($1, $2)`,
 				break
 			}
 		}
-		time.Sleep(time.Second)
 	}
 }
