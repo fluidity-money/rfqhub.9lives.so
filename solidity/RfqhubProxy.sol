@@ -1,22 +1,32 @@
-// SPDX-License-Identifier: BUSL
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-contract RfqhubProxy {
+contract UpgradeableProxy {
     event Upgraded(address indexed implementation);
     event AdminChanged(address previousAdmin, address newAdmin);
 
     bytes32 constant SLOT_IMPL = bytes32(uint256(keccak256('eip1967.proxy.implementation')) - 1);
     bytes32 constant SLOT_ADMIN = bytes32(uint256(keccak256('eip1967.proxy.admin')) - 1);
 
-    /* Slots below are copied from superposition_librfq/src/storage.rs */
+    /* Slots below are copied from ../src/storage.rs: */
 
-    bool paused;
+    /// @dev wasCreated this contract?
+    bool private wasCreated;
+    /// @dev ed25519Count of the amount of public keys we use.
+    uint256 private ed25519Count;
+    /// @dev ed25519Slots that we use for public keys. The ed25519 public key.
+    mapping(uint256 => bytes32) private ed25519Slot;
+    /// @dev EOA owner of this account that we use. Will be the admin.
+    address private ethereumOwner;
 
-    uint256 version;
+    mapping(uint256 => uint256) private timestamps;
+
+    uint256 private version;
 
     constructor(
         address _impl,
-        address _admin
+        address _admin,
+        bytes32 _publicKey
     ) {
         bytes32 slotImpl = SLOT_IMPL;
         bytes32 slotAdmin = SLOT_ADMIN;
@@ -26,7 +36,16 @@ contract RfqhubProxy {
         }
         emit Upgraded(_impl);
         emit AdminChanged(address(0), _admin);
-        version = 1;
+        wasCreated = true;
+        ed25519Count = 1;
+        // The accounts system has a bug where the operation for slot_map is
+        // flipped. This code sets the correct field:
+        bytes32 correctEdSlot = keccak256(abi.encode(uint256(2), uint256(0)));
+        assembly {
+            sstore(correctEdSlot, _publicKey)
+        }
+        ethereumOwner = _admin;
+        version = 2;
     }
 
     fallback() external payable {
@@ -42,17 +61,14 @@ contract RfqhubProxy {
             }
             (address newImpl, bytes memory data) = abi.decode(msg.data[4:], (address, bytes));
             emit Upgraded(newImpl);
-            uint256 rdlen;
             assembly {
                 sstore(slotImpl, newImpl)
-                rdlen := returndatasize()
             }
-            if (rdlen > 0) {
+            if (data.length > 0) {
                 (bool rc,) = newImpl.delegatecall(data);
                 require(rc, "delegatecall failed");
             }
         } else {
-            require(!paused, "contract paused");
             assembly {
                 let impl := sload(slotImpl)
                 calldatacopy(0, 0, calldatasize())
