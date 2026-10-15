@@ -68,7 +68,7 @@ SELECT bundle_taker_id FROM rfqhub_takers_to_conclude_1`,
 					log.Fatalf("answer too large from chainlink: %v", err)
 				}
 				timestampletVal := answer.Uint64()
-				_, err := db.Exec(`
+				_, err = db.Exec(`
 SELECT rfqhub_conclude_aggregate_1($1, $2)`,
 					bundleTakerId,
 					timestampletVal,
