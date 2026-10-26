@@ -7,7 +7,7 @@ SocketGroup=www-data
 SocketMode=0660
 DirectoryMode=0755
 RemoveOnStop=yes
-ListenStream=/run/www/rfqhub.sock
+ListenStream=/run/www/rfqhub.9lives.sock
 
 [Install]
 WantedBy=sockets.target
