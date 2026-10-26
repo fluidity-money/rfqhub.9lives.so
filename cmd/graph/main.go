@@ -15,7 +15,6 @@ import (
 	"log/slog"
 	"math/big"
 	"math/rand"
-	"net"
 	"net/http"
 	"os"
 	"runtime/debug"

@@ -37,9 +37,13 @@ CLIS := \
 	rfqhub-cli-server-signing \
 	rfqhub-cli-client-signing \
 	rfqhub-cli-borsh \
-	rfqhub-ed25519-dalek-ph
+	rfqhub-ed25519-dalek-ph \
+	rfqhub-graph \
+	rfqhub-websocket
 
 UNITS := rfqhub-graph.service rfqhub-graph.socket
+
+GO_FILES := $(shell find cmd/graph go.mod go.sum -type f)
 
 cli: ${CLIS}
 
@@ -55,8 +59,11 @@ rfqhub-ed25519-dalek-ph: ${OUT_CLI_ED25519_DALEK_PH}
 rfqhub-cli-borsh: ${OUT_CLI_SERVER_SIGNING}
 	@cp ${OUT_CLI_BORSH} rfqhub-cli-borsh
 
-rfqhub-graph: $(shell find cmd/graph go.mod go.sum -type f)
-	@cd cmd/graph && go build -o ../../rfqhub-graph
+rfqhub-graph: ${GO_FILES}
+	@go build -o rfqhub-graph ./cmd/graph
+
+rfqhub-websocket: ${GO_FILES}
+	@go build -o rfqhub-websocket ./cmd/websocket
 
 install: cli
 	@mkdir -p ${DESTDIR}${PREFIX}/bin

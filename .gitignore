@@ -8,6 +8,7 @@ rfqhub-cli-borsh
 rfqhub-cli-client-signing
 cache
 rfqhub-graph
+rfqhub-websocket
 db/db/schema.sql
 rfqhub-websocket
 rfqhub-ed25519-dalek-ph
