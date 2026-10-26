@@ -7,6 +7,7 @@ tool github.com/99designs/gqlgen
 require (
 	github.com/99designs/gqlgen v0.17.94
 	github.com/Trendyol/go-pq-cdc v1.12.15
+	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/ethereum/go-ethereum v1.17.5
 	github.com/fluidity-money/accounts.superposition.so v0.0.0-20260821044049-7d9a26be0685
 	github.com/fluidity-money/superposition-assets v0.0.0-20260916122515-dc035d5c17dc
@@ -26,7 +27,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/consensys/gnark-crypto v0.19.2 // indirect
-	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.5.0 // indirect
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect

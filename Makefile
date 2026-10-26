@@ -73,4 +73,4 @@ install: cli
 
 clean:
 	@cargo clean
-	@rm -f ${OUT_CLI} ${OUT_WASM} rfqhub-graph
+	@rm -f ${OUT_CLI} ${OUT_WASM} ${CLIS} rfqhub-graph
