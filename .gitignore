@@ -10,3 +10,4 @@ cache
 rfqhub-graph
 db/db/schema.sql
 rfqhub-websocket
+rfqhub-ed25519-dalek-ph

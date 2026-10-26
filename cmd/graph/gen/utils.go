@@ -21,7 +21,7 @@ import (
 	"github.com/fluidity-money/rfqhub.9lives.so/lib/types"
 )
 
-const ProgDalek = "/bin/rfqhub-ed25519-dalek-ph"
+const ProgDalek = "/usr/local/bin/rfqhub-ed25519-dalek-ph"
 
 const DefaultDecayRate = 0
 
