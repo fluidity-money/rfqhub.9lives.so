@@ -1,0 +1,22 @@
+[Unit]
+Description=Rfqhub GraphQL API
+Requires=rfqhub-graph.socket
+After=network-online.target rfqhub-graph.socket
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rfqhub
+Group=database-users
+EnvironmentFile=/etc/rfqhub.9lives.so/config
+ExecStart=/usr/local/bin/rfqhub-graph
+Restart=on-failure
+RestartSec=3s
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

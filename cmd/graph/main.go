@@ -20,6 +20,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/fluidity-money/rfqhub.9lives.so/cmd/graph/gen"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 
+	"github.com/coreos/go-systemd/v22/activation"
+
 	"github.com/vektah/gqlparser/v2/ast"
 
 	ethCommon "github.com/ethereum/go-ethereum/common"
@@ -39,9 +42,6 @@ import (
 
 // ChainId to correspond to Arbitrum.
 var ChainId = new(big.Int).SetInt64(42161)
-
-// HttpUnixSocket that we listen on using a socket.
-const HttpUnixSocket = "/run/rfqhub.9lives.so/http.sock"
 
 const (
 	// EnvDebug to print logs.
@@ -201,14 +201,17 @@ func main() {
 	})
 	http.Handle("/playground", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/", authMiddleware{db, srv})
-	_ = os.Remove(HttpUnixSocket)
-	l, err := net.Listen("unix", HttpUnixSocket)
+	l, err := activation.Listeners()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("listeners: %v", err)
 	}
-	defer l.Close()
-	_ = os.Chmod(HttpUnixSocket, 0o0777)
-	panic(http.Serve(l, nil))
+	var wg sync.WaitGroup
+	for _, l := range l {
+		wg.Go(func() {
+			panic(http.Serve(l, nil))
+		})
+	}
+	wg.Wait()
 }
 
 func writeUnauthorised(w http.ResponseWriter) {
