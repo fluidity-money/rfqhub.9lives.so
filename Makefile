@@ -65,7 +65,7 @@ rfqhub-graph: ${GO_FILES}
 rfqhub-websocket: ${GO_FILES}
 	@go build -o rfqhub-websocket ./cmd/websocket
 
-install: cli
+install:
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
 	@install -m755 ${CLIS} ${DESTDIR}${PREFIX}/bin/
 	@chmod +x ${DESTDIR}${PREFIX}/bin/${CLIS}
