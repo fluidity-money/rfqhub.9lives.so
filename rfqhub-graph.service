@@ -1,5 +1,5 @@
 [Unit]
-Description=Rfqhub GraphQL API
+Description=Rfqhub GraphQL
 Requires=rfqhub-graph.socket
 After=network-online.target rfqhub-graph.socket
 Wants=network-online.target
