@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=rfqhub
-Group=database-users
+Group=fluidity_apps
 EnvironmentFile=/etc/fluidity-apps/arbitrum.conf
 ExecStart=/usr/local/bin/rfqhub-graph
 Restart=on-failure
